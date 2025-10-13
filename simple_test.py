@@ -1,4 +1,7 @@
 # EchoVerse.py
+import install_package as ip
+ip.install_package(["pygame"])
+
 import pygame
 import sys
 import json
