@@ -1,6 +1,6 @@
 # EchoVerse.py
 import install_package as ip
-ip.install_package(["pygame"])
+ip.install_package(["setuptools","pygame"])
 
 import pygame
 import sys
@@ -8,7 +8,8 @@ import json
 import os
 import math
 # =============== CONFIGURATION ===============
-WIDTH, HEIGHT = 960, 640
+default_WIDTH, default_HEIGHT = 960, 640
+
 FPS = 60
 
 WHITE = (255,255,255)
@@ -25,7 +26,7 @@ CTRL_FILE = "controls.json"
 MAX_SLOTS = 3
 
 pygame.init()
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
+screen = pygame.display.set_mode((default_WIDTH, default_HEIGHT))
 pygame.display.set_caption("EchoVerse — Premier aperçu")
 clock = pygame.time.Clock()
 
@@ -121,7 +122,7 @@ class Shard(pygame.sprite.Sprite):
 
 class ExitZone(pygame.sprite.Sprite):
     def __init__(self,x,y,w,h): self.rect = pygame.Rect(x,y,w,h)
-    def draw(self,surface): pygame.draw.rect(surface, EXIT_COLOR, self.rect, width=3)
+    def draw(self,surface): pygame.draw.rect(surface, EXIT_COLOR, self.rect, default_WIDTH=3)
 
 # =============== SCÈNES DE JEU ===============
 def show_text_block(lines, wait=0):
@@ -131,19 +132,19 @@ def show_text_block(lines, wait=0):
             if e.type == pygame.QUIT: pygame.quit(); sys.exit()
             if e.type == pygame.KEYDOWN and (wait==0 or e.key==pygame.K_RETURN): return
         screen.fill(BG_COLOR)
-        y = HEIGHT//2 - len(lines)*18
+        y = default_HEIGHT//2 - len(lines)*18
         for i,l in enumerate(lines):
             surf = font.render(l, True, WHITE)
-            screen.blit(surf,(WIDTH//2-surf.get_width()//2,y+i*30))
+            screen.blit(surf,(default_WIDTH//2-surf.get_default_WIDTH()//2,y+i*30))
         pygame.display.flip()
         if wait>0 and pygame.time.get_ticks()-t0>wait*1000: return
         clock.tick(FPS)
 
 def run_level(slot_index):
-    player = Player(WIDTH//4, HEIGHT//2)
-    enemy = Enemy(WIDTH-120, HEIGHT//2, player)
-    shard = Shard(WIDTH//2+100, HEIGHT//2-120)
-    exit_zone = ExitZone(WIDTH-120, HEIGHT//2-60, 100,120)
+    player = Player(default_WIDTH//4, default_HEIGHT//2)
+    enemy = Enemy(default_WIDTH-120, default_HEIGHT//2, player)
+    shard = Shard(default_WIDTH//2+100, default_HEIGHT//2-120)
+    exit_zone = ExitZone(default_WIDTH-120, default_HEIGHT//2-60, 100,120)
     all_sprites = pygame.sprite.Group(player, enemy, shard)
 
     while True:
@@ -155,7 +156,7 @@ def run_level(slot_index):
         enemy.update(); shard.update()
 
         if pygame.sprite.collide_rect(player, enemy):
-            player.rect.center = (WIDTH//4, HEIGHT//2)
+            player.rect.center = (default_WIDTH//4, default_HEIGHT//2)
             show_text_block(["L'ombre t'a touché..."], wait=1)
 
         if not player.collected_shard and player.rect.colliderect(shard.rect):
@@ -180,14 +181,14 @@ def true_ending(): show_text_block(["Vraie fin.","Tu te découvres enfin..."], w
 # =============== MENUS ===============
 def draw_text_center(text,font,color,y):
     surf = font.render(text,True,color)
-    screen.blit(surf,(WIDTH//2-surf.get_width()//2,y))
+    screen.blit(surf,(default_WIDTH//2-surf.get_default_WIDTH()//2,y))
 
 def show_message(lines):
     while True:
         screen.fill(BG_COLOR)
         for i,l in enumerate(lines):
             surf = font.render(l,True,WHITE)
-            screen.blit(surf,(WIDTH//2-surf.get_width()//2,HEIGHT//2+i*40-20))
+            screen.blit(surf,(default_WIDTH//2-surf.get_default_WIDTH()//2,default_HEIGHT//2+i*40-20))
         pygame.display.flip()
         for e in pygame.event.get():
             if e.type==pygame.KEYDOWN or e.type==pygame.QUIT: return
@@ -205,7 +206,7 @@ def control_menu():
             color = HIGHLIGHT if i==index else WHITE
             keyname = pygame.key.name(controls[a])
             draw_text_center(f"{a.capitalize()} : {keyname}", font, color, 220+i*50)
-        draw_text_center("Entrée = changer | Échap = retour", small_font, WHITE, HEIGHT-40)
+        draw_text_center("Entrée = changer | Échap = retour", small_font, WHITE, default_HEIGHT-40)
 
         for e in pygame.event.get():
             if e.type==pygame.QUIT: pygame.quit(); sys.exit()
@@ -220,7 +221,7 @@ def control_menu():
                     if e.key in [pygame.K_DOWN,pygame.K_s]: index=(index+1)%len(actions)
                     if e.key==pygame.K_RETURN: waiting=actions[index]
                     if e.key==pygame.K_ESCAPE: return
-        if waiting: draw_text_center("Appuyez sur une touche...", small_font, HIGHLIGHT, HEIGHT-80)
+        if waiting: draw_text_center("Appuyez sur une touche...", small_font, HIGHLIGHT, default_HEIGHT-80)
         pygame.display.flip(); clock.tick(FPS)
 
 def settings_menu():
@@ -264,7 +265,7 @@ def new_game_menu():
             txt = f"Slot {i+1}: {'VIDE' if not slot['exists'] else f'Progression {slot['progress']}%'}"
             color = HIGHLIGHT if i==index else WHITE
             draw_text_center(txt,font,color,240+i*60)
-        draw_text_center("Entrée = jouer | Échap = retour", small_font, WHITE, HEIGHT-40)
+        draw_text_center("Entrée = jouer | Échap = retour", small_font, WHITE, default_HEIGHT-40)
 
         for e in pygame.event.get():
             if e.type==pygame.QUIT: pygame.quit(); sys.exit()
@@ -292,7 +293,7 @@ def continue_menu():
             s=saves[slot]
             color = HIGHLIGHT if i==index else WHITE
             draw_text_center(f"Slot {slot+1}: progression {s['progress']}%", font, color, 240+i*60)
-        draw_text_center("Entrée = charger | Échap = retour", small_font, WHITE, HEIGHT-40)
+        draw_text_center("Entrée = charger | Échap = retour", small_font, WHITE, default_HEIGHT-40)
 
         for e in pygame.event.get():
             if e.type==pygame.QUIT: pygame.quit(); sys.exit()
