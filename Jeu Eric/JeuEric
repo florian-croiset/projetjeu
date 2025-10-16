@@ -1,0 +1,269 @@
+import pygame
+import sys
+import time
+import math
+import os
+
+# --- PARAMÈTRES DU JEU ---
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+MAP_WIDTH = 1600
+MAP_HEIGHT = 1200
+FPS = 60
+
+PLAYER_SPEED = 5
+ANIM_FPS = 8
+FRAME_W, FRAME_H = 24, 24
+REVEAL_RADIUS = 200
+REVEAL_DURATION = 2
+COOLDOWN = 10
+
+BG_COLOR = (20, 20, 20)
+WALL_COLOR = (70, 70, 70)
+WHITE = (255, 255, 255)
+GREEN = (0, 255, 100)
+
+# --- INITIALISATION ---
+pygame.init()
+pygame.display.set_caption("Human Explorer")
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+font = pygame.font.SysFont("cambria", 25)
+clock = pygame.time.Clock()
+
+# --- FONCTIONS UTILES ---
+
+def load_frames_from_sheet(filename, frame_w, frame_h):
+    base_path = os.path.dirname(__file__)  # répertoire du script
+    sheet_path = os.path.join(base_path, filename)
+
+    if not os.path.exists(sheet_path):
+        raise FileNotFoundError(f"Sprite sheet non trouvé : {sheet_path}")
+
+    sheet = pygame.image.load(sheet_path).convert_alpha()
+    sheet_rect = sheet.get_rect()
+    print(f"[DEBUG] Sprite sheet chargée ({sheet_rect.w}x{sheet_rect.h}) depuis : {sheet_path}")
+
+    frames = []
+    for i in range(sheet_rect.w // frame_w):
+        frame = sheet.subsurface((i * frame_w, 0, frame_w, frame_h))
+        frames.append(frame)
+    return frames
+
+
+def draw_reveal_wave(surface, player, walls, elapsed, reveal_start, camera_x, camera_y):
+    """Dessine l`onde de révélation."""
+    radius = int((elapsed / REVEAL_DURATION) * REVEAL_RADIUS)
+    overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 200))
+    cx, cy = player.rect.centerx - camera_x, player.rect.centery - camera_y
+
+    for angle in range(0, 360, 3):
+        for r in range(radius):
+            x = int(cx + math.cos(math.radians(angle)) * r)
+            y = int(cy + math.sin(math.radians(angle)) * r)
+            hit = False
+            for wall in walls:
+                if wall.collidepoint(player.rect.centerx + math.cos(math.radians(angle)) * r,
+                                     player.rect.centery + math.sin(math.radians(angle)) * r):
+                    hit = True
+                    break
+            if hit:
+                break
+            if 0 <= x < SCREEN_WIDTH and 0 <= y < SCREEN_HEIGHT:
+                overlay.set_at((x, y), (0, 0, 0, 0))
+
+    surface.blit(overlay, (0, 0))
+
+# --- CLASSE JOUEUR ---
+class AnimatedPlayer(pygame.sprite.Sprite):
+    def __init__(self, x, y, frames):
+        super().__init__()
+        self.frames = {
+            "right": frames,
+            "left": [pygame.transform.flip(f, True, False) for f in frames],
+        }
+        self.direction = "right"
+        self.frame_index = 0
+        self.image = self.frames[self.direction][self.frame_index]
+        self.rect = self.image.get_rect(center=(x, y))
+        self.speed = PLAYER_SPEED
+        self.last_update = time.time()
+        self.last_reveal = 0
+        self.cooldown = COOLDOWN
+
+    def handle_input(self, walls):
+        keys = pygame.key.get_pressed()
+        dx, dy = 0, 0
+
+        if keys[pygame.K_UP]:
+            dy = -self.speed
+        elif keys[pygame.K_DOWN]:
+            dy = self.speed
+        elif keys[pygame.K_LEFT]:
+            dx = -self.speed
+            self.direction = "left"
+        elif keys[pygame.K_RIGHT]:
+            dx = self.speed
+            self.direction = "right"
+
+        self.move_and_collide(dx, dy, walls)
+
+    def move_and_collide(self, dx, dy, walls):
+        # Déplacement horizontal
+        self.rect.x += dx
+        for wall in walls:
+            if self.rect.colliderect(wall):
+                if dx > 0:
+                    self.rect.right = wall.left
+                elif dx < 0:
+                    self.rect.left = wall.right
+
+        # Déplacement vertical
+        self.rect.y += dy
+        for wall in walls:
+            if self.rect.colliderect(wall):
+                if dy > 0:
+                    self.rect.bottom = wall.top
+                elif dy < 0:
+                    self.rect.top = wall.bottom
+
+        # Limites de map
+        self.rect.left = max(0, self.rect.left)
+        self.rect.top = max(0, self.rect.top)
+        self.rect.right = min(MAP_WIDTH, self.rect.right)
+        self.rect.bottom = min(MAP_HEIGHT, self.rect.bottom)
+
+    def update_animation(self):
+        keys = pygame.key.get_pressed()
+        moving = any([keys[pygame.K_UP], keys[pygame.K_DOWN], keys[pygame.K_LEFT], keys[pygame.K_RIGHT]])
+
+        now = time.time()
+        if moving and now - self.last_update > 0.1:
+            self.frame_index = (self.frame_index + 1) % len(self.frames[self.direction])
+            self.image = self.frames[self.direction][self.frame_index]
+            self.last_update = now
+        elif not moving:
+            self.frame_index = 0
+            self.image = self.frames[self.direction][self.frame_index]
+
+    def can_reveal(self):
+        return (time.time() - self.last_reveal) >= self.cooldown
+
+    def reveal(self):
+        self.last_reveal = time.time()
+
+    def draw(self, surface, camera_x=0, camera_y=0):
+        surface.blit(self.image, (self.rect.x - camera_x, self.rect.y - camera_y))
+
+# --- CLASSE BOUTON POUR MENU ---
+class Button():
+    def __init__(self, text, y, action):
+        self.text = text
+        self.action = action
+        self.image = pygame.Surface((250, 70))
+        self.image.fill((50, 50, 50))
+        self.rect = self.image.get_rect(center=(SCREEN_WIDTH // 2, y))
+        self.font = pygame.font.SysFont("cambria", 32)
+
+    def draw(self, surface):
+        mouse = pygame.mouse.get_pos()
+        if self.rect.collidepoint(mouse):
+            color = GREEN
+        else:
+            color = WHITE
+        text = self.font.render(self.text, True, color)
+        text_rect = text.get_rect(center=self.rect.center)
+        surface.blit(self.image, self.rect)
+        surface.blit(text, text_rect)
+
+    def click(self):
+        if self.rect.collidepoint(pygame.mouse.get_pos()):
+            self.action()
+
+# --- MAP / MURS ---
+walls = [
+    pygame.Rect(300, 200, 300, 20),
+    pygame.Rect(700, 100, 20, 300),
+    pygame.Rect(500, 500, 400, 20),
+    pygame.Rect(1000, 400, 20, 300),
+    pygame.Rect(800, 800, 200, 20),
+]
+
+# --- BOUCLE DU JEU PRINCIPAL ---
+def run_game():
+    frames = load_frames_from_sheet("DinoSprites - vita.png", FRAME_W, FRAME_H)
+    player = AnimatedPlayer(MAP_WIDTH // 2, MAP_HEIGHT // 2, frames)
+    revealing = False
+    reveal_start = 0
+    running = True
+
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE and player.can_reveal():
+                revealing = True
+                reveal_start = time.time()
+                player.reveal()
+
+        player.handle_input(walls)
+        player.update_animation()
+
+        camera_x = player.rect.centerx - SCREEN_WIDTH // 2
+        camera_y = player.rect.centery - SCREEN_HEIGHT // 2
+        camera_x = max(0, min(MAP_WIDTH - SCREEN_WIDTH, camera_x))
+        camera_y = max(0, min(MAP_HEIGHT - SCREEN_HEIGHT, camera_y))
+
+        screen.fill(BG_COLOR)
+
+        for wall in walls:
+            rect = pygame.Rect(wall.x - camera_x, wall.y - camera_y, wall.width, wall.height)
+            pygame.draw.rect(screen, WALL_COLOR, rect)
+
+        if revealing:
+            elapsed = time.time() - reveal_start
+            if elapsed > REVEAL_DURATION:
+                revealing = False
+            else:
+                draw_reveal_wave(screen, player, walls, elapsed, reveal_start, camera_x, camera_y)
+
+        player.draw(screen, camera_x, camera_y)
+
+        remaining = max(0, int(COOLDOWN - (time.time() - player.last_reveal)))
+        text = font.render(f"Reveal dans : {remaining}s", True, WHITE)
+        screen.blit(text, (10, 10))
+
+        pygame.display.flip()
+        clock.tick(FPS)
+
+# --- MENU ---
+def run_menu():
+    play_button = Button("PLAY", 300, run_game)
+    settings_button = Button("SETTINGS", 400, lambda: print("→ Paramètres (non implémenté)"))
+    quit_button = Button("QUIT", 500, lambda: sys.exit())
+    buttons = [play_button, settings_button, quit_button]
+
+    while True:
+        screen.fill((25, 25, 25))
+        title_font = pygame.font.SysFont("cambria", 50, True)
+        title_text = title_font.render("HUMAN EXPLORER", True, (255, 255, 255))
+        screen.blit(title_text, (SCREEN_WIDTH // 2 - title_text.get_width() // 2, 150))
+
+        for button in buttons:
+            button.draw(screen)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                for button in buttons:
+                    button.click()
+
+        pygame.display.flip()
+        clock.tick(60)
+
+# --- LANCEMENT ---
+if __name__ == "__main__":
+    run_menu()
