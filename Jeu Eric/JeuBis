@@ -13,10 +13,13 @@ FPS = 60
 
 PLAYER_SPEED = 5
 ANIM_FPS = 8
-FRAME_W, FRAME_H = 24, 24
+FRAME_W, FRAME_H = 48, 48
 REVEAL_RADIUS = 200
 REVEAL_DURATION = 2
 COOLDOWN = 10
+
+GRAVITY = 0.5
+JUMP_SPEED = -10
 
 BG_COLOR = (20, 20, 20)
 WALL_COLOR = (70, 70, 70)
@@ -31,32 +34,32 @@ font = pygame.font.SysFont("cambria", 25)
 clock = pygame.time.Clock()
 
 # --- FONCTIONS UTILES ---
-
 def load_frames_from_sheet(filename, frame_w, frame_h):
-    base_path = os.path.dirname(__file__)  # répertoire du script
+    base_path = os.path.dirname(__file__)
     sheet_path = os.path.join(base_path, filename)
-
     if not os.path.exists(sheet_path):
         raise FileNotFoundError(f"Sprite sheet non trouvé : {sheet_path}")
-
     sheet = pygame.image.load(sheet_path).convert_alpha()
     sheet_rect = sheet.get_rect()
-    print(f"[DEBUG] Sprite sheet chargée ({sheet_rect.w}x{sheet_rect.h}) depuis : {sheet_path}")
-
     frames = []
     for i in range(sheet_rect.w // frame_w):
         frame = sheet.subsurface((i * frame_w, 0, frame_w, frame_h))
         frames.append(frame)
     return frames
 
+def safe_load_frames(filename, frame_w, frame_h):
+    """Crée des sprites factices si le fichier est absent."""
+    try:
+        return load_frames_from_sheet(filename, frame_w, frame_h)
+    except Exception as e:
+        surf = pygame.Surface((frame_w, frame_h), pygame.SRCALPHA)
+        return [surf] * 4
 
 def draw_reveal_wave(surface, player, walls, elapsed, reveal_start, camera_x, camera_y):
-    """Dessine l`onde de révélation."""
     radius = int((elapsed / REVEAL_DURATION) * REVEAL_RADIUS)
     overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
     overlay.fill((0, 0, 0, 200))
     cx, cy = player.rect.centerx - camera_x, player.rect.centery - camera_y
-
     for angle in range(0, 360, 3):
         for r in range(radius):
             x = int(cx + math.cos(math.radians(angle)) * r)
@@ -71,45 +74,93 @@ def draw_reveal_wave(surface, player, walls, elapsed, reveal_start, camera_x, ca
                 break
             if 0 <= x < SCREEN_WIDTH and 0 <= y < SCREEN_HEIGHT:
                 overlay.set_at((x, y), (0, 0, 0, 0))
-
     surface.blit(overlay, (0, 0))
 
 # --- CLASSE JOUEUR ---
 class AnimatedPlayer(pygame.sprite.Sprite):
-    def __init__(self, x, y, frames):
+    def __init__(self, x, y):
         super().__init__()
-        self.frames = {
-            "right": frames,
-            "left": [pygame.transform.flip(f, True, False) for f in frames],
+        # Charge toutes les animations
+        self.animations = {
+            "run": safe_load_frames("RUN.png", 48, 48,),
+            "idle": safe_load_frames("IDLE.png", 48, 48),
+            "jump": safe_load_frames("JUMP.png", 48, 48),
+            "attack1": safe_load_frames("ATTACK 1.png", 64, 48),
+            "attack2": safe_load_frames("ATTACK 2.png", 80, 48),
+            "attack3": safe_load_frames("ATTACK 3.png", 80, 64),
         }
+        # Flip gauche
+        for key in list(self.animations.keys()):
+            self.animations[key + "_left"] = [pygame.transform.flip(f, True, False) for f in self.animations[key]]
+
+        self.state = "run"
         self.direction = "right"
         self.frame_index = 0
-        self.image = self.frames[self.direction][self.frame_index]
-        self.rect = self.image.get_rect(center=(x, y))
+        self.image = self.animations["run"][0]
+        self.rect = self.image.get_rect(midbottom=(x, y))
         self.speed = PLAYER_SPEED
         self.last_update = time.time()
         self.last_reveal = 0
         self.cooldown = COOLDOWN
 
+        # Gravité
+        self.vy = 0
+        self.on_ground = False
+
+        # Attaque
+        self.attacking = False
+        self.attack_start = 0
+        self.attack_duration = 0.5
+        self.attack_type = None
+
+    def set_image(self, new_image):
+        bottom_center = self.rect.midbottom
+        self.image = new_image
+        self.rect = self.image.get_rect()
+        self.rect.midbottom = bottom_center
+
     def handle_input(self, walls):
         keys = pygame.key.get_pressed()
         dx, dy = 0, 0
 
-        if keys[pygame.K_UP]:
-            dy = -self.speed
-        elif keys[pygame.K_DOWN]:
-            dy = self.speed
-        elif keys[pygame.K_LEFT]:
-            dx = -self.speed
-            self.direction = "left"
-        elif keys[pygame.K_RIGHT]:
-            dx = self.speed
-            self.direction = "right"
+        if not self.attacking:
+            if keys[pygame.K_UP]:
+                dy = -self.speed
+            elif keys[pygame.K_DOWN]:
+                dy = self.speed
+            if keys[pygame.K_LEFT]:
+                dx = -self.speed
+                self.direction = "left"
+            elif keys[pygame.K_RIGHT]:
+                dx = self.speed
+                self.direction = "right"
+
+            # Saut
+            if keys[pygame.K_SPACE] and self.on_ground:
+                self.vy = JUMP_SPEED
+
+            # Attaques
+            if keys[pygame.K_a]:
+                self.start_attack("attack1")
+            elif keys[pygame.K_z]:
+                self.start_attack("attack2")
+            elif keys[pygame.K_e]:
+                self.start_attack("attack3")
+
+            # Reveal avec la touche R
+            if keys[pygame.K_r] and self.can_reveal():
+                self.reveal()
 
         self.move_and_collide(dx, dy, walls)
 
+    def start_attack(self, attack_type):
+        self.attacking = True
+        self.attack_start = time.time()
+        self.attack_type = attack_type
+        self.frame_index = 0
+        self.state = attack_type
+
     def move_and_collide(self, dx, dy, walls):
-        # Déplacement horizontal
         self.rect.x += dx
         for wall in walls:
             if self.rect.colliderect(wall):
@@ -118,7 +169,6 @@ class AnimatedPlayer(pygame.sprite.Sprite):
                 elif dx < 0:
                     self.rect.left = wall.right
 
-        # Déplacement vertical
         self.rect.y += dy
         for wall in walls:
             if self.rect.colliderect(wall):
@@ -127,24 +177,54 @@ class AnimatedPlayer(pygame.sprite.Sprite):
                 elif dy < 0:
                     self.rect.top = wall.bottom
 
-        # Limites de map
         self.rect.left = max(0, self.rect.left)
         self.rect.top = max(0, self.rect.top)
         self.rect.right = min(MAP_WIDTH, self.rect.right)
         self.rect.bottom = min(MAP_HEIGHT, self.rect.bottom)
 
-    def update_animation(self):
-        keys = pygame.key.get_pressed()
-        moving = any([keys[pygame.K_UP], keys[pygame.K_DOWN], keys[pygame.K_LEFT], keys[pygame.K_RIGHT]])
+    def apply_gravity(self, walls):
+        self.vy += GRAVITY
+        self.rect.y += self.vy
+        self.on_ground = False
+        for wall in walls:
+            if self.rect.colliderect(wall):
+                if self.vy > 0:  # tombe sur le sol
+                    self.rect.bottom = wall.top
+                    self.vy = 0
+                    self.on_ground = True
+                elif self.vy < 0:  # touche plafond
+                    self.rect.top = wall.bottom
+                    self.vy = 0
 
+    def update_animation(self):
         now = time.time()
-        if moving and now - self.last_update > 0.1:
-            self.frame_index = (self.frame_index + 1) % len(self.frames[self.direction])
-            self.image = self.frames[self.direction][self.frame_index]
+
+        # Si en attaque
+        if self.attacking:
+            # Vérifie si la durée est passée
+            if now - self.attack_start >= self.attack_duration:
+                self.attacking = False
+                self.state = "run"
+                self.frame_index = 0  # reset
+            anim_key = self.state  # attaque en cours
+        # Si en l'air
+        elif not self.on_ground:
+            anim_key = "jump"
+        # Sinon idle / run
+        else:
+            keys = pygame.key.get_pressed()
+            moving = any([keys[pygame.K_UP], keys[pygame.K_DOWN], keys[pygame.K_LEFT], keys[pygame.K_RIGHT]])
+            anim_key = "run" if moving else "idle"
+
+        # Version gauche
+        anim_key += "_left" if self.direction == "left" else ""
+        frames = self.animations[anim_key]
+
+        # Mise à jour des frames
+        if now - self.last_update > 0.1:
+            self.frame_index = (self.frame_index + 1) % len(frames)
+            self.set_image(frames[self.frame_index])
             self.last_update = now
-        elif not moving:
-            self.frame_index = 0
-            self.image = self.frames[self.direction][self.frame_index]
 
     def can_reveal(self):
         return (time.time() - self.last_reveal) >= self.cooldown
@@ -155,7 +235,7 @@ class AnimatedPlayer(pygame.sprite.Sprite):
     def draw(self, surface, camera_x=0, camera_y=0):
         surface.blit(self.image, (self.rect.x - camera_x, self.rect.y - camera_y))
 
-# --- CLASSE BOUTON POUR MENU ---
+# --- CLASSE BOUTON ---
 class Button():
     def __init__(self, text, y, action):
         self.text = text
@@ -167,10 +247,7 @@ class Button():
 
     def draw(self, surface):
         mouse = pygame.mouse.get_pos()
-        if self.rect.collidepoint(mouse):
-            color = GREEN
-        else:
-            color = WHITE
+        color = GREEN if self.rect.collidepoint(mouse) else WHITE
         text = self.font.render(self.text, True, color)
         text_rect = text.get_rect(center=self.rect.center)
         surface.blit(self.image, self.rect)
@@ -189,10 +266,9 @@ walls = [
     pygame.Rect(800, 800, 200, 20),
 ]
 
-# --- BOUCLE DU JEU PRINCIPAL ---
+# --- BOUCLE DU JEU ---
 def run_game():
-    frames = load_frames_from_sheet("DinoSprites - vita.png", FRAME_W, FRAME_H)
-    player = AnimatedPlayer(MAP_WIDTH // 2, MAP_HEIGHT // 2, frames)
+    player = AnimatedPlayer(MAP_WIDTH // 2, MAP_HEIGHT // 2)
     revealing = False
     reveal_start = 0
     running = True
@@ -202,16 +278,17 @@ def run_game():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE and player.can_reveal():
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_r and player.can_reveal():
                 revealing = True
                 reveal_start = time.time()
                 player.reveal()
 
         player.handle_input(walls)
+        player.apply_gravity(walls)
         player.update_animation()
 
         camera_x = player.rect.centerx - SCREEN_WIDTH // 2
-        camera_y = player.rect.centery - SCREEN_HEIGHT // 2
+        camera_y = player.rect.bottom - SCREEN_HEIGHT // 2
         camera_x = max(0, min(MAP_WIDTH - SCREEN_WIDTH, camera_x))
         camera_y = max(0, min(MAP_HEIGHT - SCREEN_HEIGHT, camera_y))
 
@@ -240,14 +317,14 @@ def run_game():
 # --- MENU ---
 def run_menu():
     play_button = Button("PLAY", 300, run_game)
-    settings_button = Button("SETTINGS", 400, lambda: print("→ Paramètres (non implémenté)"))
+    settings_button = Button("SETTINGS", 400, lambda: print("→ Paramètres non implémentés"))
     quit_button = Button("QUIT", 500, lambda: sys.exit())
     buttons = [play_button, settings_button, quit_button]
 
     while True:
         screen.fill((25, 25, 25))
         title_font = pygame.font.SysFont("cambria", 50, True)
-        title_text = title_font.render("HUMAN EXPLORER", True, (255, 255, 255))
+        title_text = title_font.render("HUMAN EXPLORER", True, WHITE)
         screen.blit(title_text, (SCREEN_WIDTH // 2 - title_text.get_width() // 2, 150))
 
         for button in buttons:
