@@ -1,35 +1,101 @@
+from install_package import install_package
+install_package(["pygame", "pywin32"])
 import pygame
 import sys
 import time
 import math
 import os
+import json
+import win32api
 
 # --- PARAMÈTRES DU JEU ---
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
 MAP_WIDTH = 1600
 MAP_HEIGHT = 1200
 FPS = 60
 
-PLAYER_SPEED = 5
+PLAYER_SPEED = 400
 ANIM_FPS = 8
 FRAME_W, FRAME_H = 48, 48
 REVEAL_RADIUS = 200
 REVEAL_DURATION = 2
 COOLDOWN = 10
 
-GRAVITY = 0.5
-JUMP_SPEED = -10
+GRAVITY = 0.01
+JUMP_SPEED = -750
 
 BG_COLOR = (20, 20, 20)
 WALL_COLOR = (70, 70, 70)
 WHITE = (255, 255, 255)
 GREEN = (0, 255, 100)
+SAVE_FILE = "save_slots.json"
+CTRL_FILE = "controls.json"
+SET_FILE = "settings.json"
+MAX_SLOTS = 3
 
+#recupperation de la frecuence d'affichage
+def get_real_screen_size():
+    # Retourne (largeur, hauteur) de l'écran principal
+    width = win32api.GetSystemMetrics(0)
+    height = win32api.GetSystemMetrics(1)
+    return width, height
+SCREEN_WIDTH, SCREEN_HEIGHT = get_real_screen_size()
+def get_screen_refresh_rate_windows_fixed():
+    if sys.platform != "win32":
+        print("Cette fonction n'est compatible qu'avec Windows.")
+        return 0.0
+    
+    try:
+        # 1. Obtenir les informations du périphérique d'affichage (Moniteur principal : index 0)
+        device = win32api.EnumDisplayDevices(None, 0)
+        
+        # 2. Obtenir les paramètres d'affichage actuels
+        #    -> La constante ENUM_CURRENT_SETTINGS est dans win32con
+        settings = win32api.EnumDisplaySettings(device.DeviceName, win32con.ENUM_CURRENT_SETTINGS)
+        
+        # 3. Le taux de rafraîchissement est dans l'attribut DisplayFrequency
+        refresh_rate = settings.DisplayFrequency
+        
+        # win32api retourne un int pour la fréquence (ex: 60, 144)
+        return float(refresh_rate)
+        
+    except Exception as e:
+        print(f"Erreur API Windows lors de la récupération du taux de rafraîchissement : {e}")
+        return 0.0
+#sauvegarde
+default_controls = {"touches_attaque1": pygame.K_a, "touches_attaque2": pygame.K_z, "touches_attaque3": pygame.K_e,
+                     "touches_reveal": pygame.K_r, "touches_droite": pygame.K_RIGHT, "touches_gauche": pygame.K_LEFT}
+default_settings = {
+    "fps": get_screen_refresh_rate_windows_fixed(),
+    "vsync": True,
+    "display_mode": "fullscreen",  # windowed | borderless | fullscreen
+    "screen_width": SCREEN_WIDTH,
+    "screen_height": SCREEN_HEIGHT
+}
+
+def load_json(file, default):
+    if not os.path.exists(file):
+        with open(file, "w") as f: json.dump(default, f, indent=2)
+        return default
+    with open(file, "r") as f:
+        try: return json.load(f)
+        except: return default
+
+def save_json(file, data):
+    with open(file, "w") as f: json.dump(data, f, indent=2)
+
+def load_saves(): return load_json(SAVE_FILE, [{"exists": False, "progress": 0} for _ in range(MAX_SLOTS)])
+def save_saves(saves): save_json(SAVE_FILE, saves)
+def load_controls(): return load_json(CTRL_FILE, default_controls)
+def save_controls(ctrls): save_json(CTRL_FILE, ctrls)
+def load_settings(): return load_json(SET_FILE, default_settings)
+def save_settings(s): save_json(SET_FILE, s)
+
+controls = load_controls()
+settings = load_settings()
 # --- INITIALISATION ---
 pygame.init()
 pygame.display.set_caption("Human Explorer")
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+screen = pygame.display.set_mode((settings["screen_width"], settings["screen_height"]))
 font = pygame.font.SysFont("cambria", 25)
 clock = pygame.time.Clock()
 
@@ -57,7 +123,7 @@ def safe_load_frames(filename, frame_w, frame_h):
 
 def draw_reveal_wave(surface, player, walls, elapsed, reveal_start, camera_x, camera_y):
     radius = int((elapsed / REVEAL_DURATION) * REVEAL_RADIUS)
-    overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    overlay = pygame.Surface((settings["screen_width"], settings["screen_height"]), pygame.SRCALPHA)
     overlay.fill((0, 0, 0, 200))
     cx, cy = player.rect.centerx - camera_x, player.rect.centery - camera_y
     for angle in range(0, 360, 3):
@@ -72,9 +138,26 @@ def draw_reveal_wave(surface, player, walls, elapsed, reveal_start, camera_x, ca
                     break
             if hit:
                 break
-            if 0 <= x < SCREEN_WIDTH and 0 <= y < SCREEN_HEIGHT:
+            if 0 <= x < settings["screen_width"] and 0 <= y < settings["screen_height"]:
                 overlay.set_at((x, y), (0, 0, 0, 0))
     surface.blit(overlay, (0, 0))
+
+# ================= FENÊTRE / VIDÉO =================
+def apply_display_settings():
+    global screen, clock
+    flags = 0
+    if settings["display_mode"] == "borderless":
+        flags = pygame.NOFRAME
+        screen = pygame.display.set_mode((settings["screen_width"], settings["screen_height"]), flags, vsync=settings["vsync"])
+    elif settings["display_mode"] == "fullscreen":
+        flags = pygame.FULLSCREEN
+        screen = pygame.display.set_mode((settings["screen_width"], settings["screen_height"]), flags, vsync=settings["vsync"])
+    else:
+        screen = pygame.display.set_mode((settings["screen_width"], settings["screen_height"]), vsync=settings["vsync"])
+    clock = pygame.time.Clock()
+    pygame.display.set_caption("EchoVerse — Premier aperçu")
+
+apply_display_settings()
 
 # --- CLASSE JOUEUR ---
 class AnimatedPlayer(pygame.sprite.Sprite):
@@ -119,36 +202,36 @@ class AnimatedPlayer(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.midbottom = bottom_center
 
-    def handle_input(self, walls):
+    def handle_input(self, walls, dt):
         keys = pygame.key.get_pressed()
         dx, dy = 0, 0
 
         if not self.attacking:
             if keys[pygame.K_UP]:
-                dy = -self.speed
+                dy = -(self.speed*dt)
             elif keys[pygame.K_DOWN]:
-                dy = self.speed
-            if keys[pygame.K_LEFT]:
-                dx = -self.speed
+                dy = (self.speed*dt)
+            if keys[controls["touches_gauche"]]:
+                dx = -(self.speed*dt)
                 self.direction = "left"
-            elif keys[pygame.K_RIGHT]:
-                dx = self.speed
+            elif keys[controls["touches_droite"]]:
+                dx = (self.speed*dt)
                 self.direction = "right"
 
             # Saut
             if keys[pygame.K_SPACE] and self.on_ground:
-                self.vy = JUMP_SPEED
+                self.vy = JUMP_SPEED*dt
 
             # Attaques
-            if keys[pygame.K_a]:
+            if keys[controls["touches_attaque1"]]:
                 self.start_attack("attack1")
-            elif keys[pygame.K_z]:
+            elif keys[controls["touches_attaque2"]]:
                 self.start_attack("attack2")
-            elif keys[pygame.K_e]:
+            elif keys[controls["touches_attaque3"]]:
                 self.start_attack("attack3")
 
             # Reveal avec la touche R
-            if keys[pygame.K_r] and self.can_reveal():
+            if keys[controls["touches_reveal"]] and self.can_reveal():
                 self.reveal()
 
         self.move_and_collide(dx, dy, walls)
@@ -242,7 +325,7 @@ class Button():
         self.action = action
         self.image = pygame.Surface((250, 70))
         self.image.fill((50, 50, 50))
-        self.rect = self.image.get_rect(center=(SCREEN_WIDTH // 2, y))
+        self.rect = self.image.get_rect(center=(settings["screen_width"] // 2, y))
         self.font = pygame.font.SysFont("cambria", 32)
 
     def draw(self, surface):
@@ -283,14 +366,14 @@ def run_game():
                 reveal_start = time.time()
                 player.reveal()
 
-        player.handle_input(walls)
+        player.handle_input(walls, dt=clock.get_time()/1000)
         player.apply_gravity(walls)
         player.update_animation()
 
-        camera_x = player.rect.centerx - SCREEN_WIDTH // 2
-        camera_y = player.rect.bottom - SCREEN_HEIGHT // 2
-        camera_x = max(0, min(MAP_WIDTH - SCREEN_WIDTH, camera_x))
-        camera_y = max(0, min(MAP_HEIGHT - SCREEN_HEIGHT, camera_y))
+        camera_x = player.rect.centerx - settings["screen_width"] // 2
+        camera_y = player.rect.bottom - settings["screen_height"] // 2
+        camera_x = max(0, min(MAP_WIDTH - settings["screen_width"], camera_x))
+        camera_y = max(0, min(MAP_HEIGHT - settings["screen_height"], camera_y))
 
         screen.fill(BG_COLOR)
 
@@ -312,12 +395,40 @@ def run_game():
         screen.blit(text, (10, 10))
 
         pygame.display.flip()
-        clock.tick(FPS)
+        clock.tick(settings["fps"])
 
+#Video settings
+def video_settings():
+    pass
+    
+# --- PARAMÈTRES ---   
+def run_settings():
+    screen_settings_button = Button("SCREEN", 300, video_settings)
+    controls_settings_button = Button("CONTROLS", 400, lambda: print("→ Contrôles non implémentés"))
+    exit_settings_button = Button("BACK", 500, run_menu)
+    buttons = [screen_settings_button, controls_settings_button, exit_settings_button]
+    while True:
+        screen.fill((25, 25, 25))
+        title_font = pygame.font.SysFont("cambria", 50, True)
+        title_text = title_font.render("HUMAN EXPLORER", True, WHITE)
+        screen.blit(title_text, (settings["screen_width"] // 2 - title_text.get_width() // 2, 150))
+        for button in buttons:
+            button.draw(screen)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                for button in buttons:
+                    button.click()
+
+    pygame.display.flip()  
+    clock.tick(60)
 # --- MENU ---
 def run_menu():
     play_button = Button("PLAY", 300, run_game)
-    settings_button = Button("SETTINGS", 400, lambda: print("→ Paramètres non implémentés"))
+    settings_button = Button("SETTINGS", 400, run_settings)
     quit_button = Button("QUIT", 500, lambda: sys.exit())
     buttons = [play_button, settings_button, quit_button]
 
@@ -325,7 +436,7 @@ def run_menu():
         screen.fill((25, 25, 25))
         title_font = pygame.font.SysFont("cambria", 50, True)
         title_text = title_font.render("HUMAN EXPLORER", True, WHITE)
-        screen.blit(title_text, (SCREEN_WIDTH // 2 - title_text.get_width() // 2, 150))
+        screen.blit(title_text, (settings["screen_width"] // 2 - title_text.get_width() // 2, 150))
 
         for button in buttons:
             button.draw(screen)
