@@ -135,7 +135,7 @@ def show_text_block(lines, wait=0):
         y = default_HEIGHT//2 - len(lines)*18
         for i,l in enumerate(lines):
             surf = font.render(l, True, WHITE)
-            screen.blit(surf,(default_WIDTH//2-surf.get_default_WIDTH()//2,y+i*30))
+            screen.blit(surf,(default_WIDTH//2-surf.get_width()//2,y+i*30))
         pygame.display.flip()
         if wait>0 and pygame.time.get_ticks()-t0>wait*1000: return
         clock.tick(FPS)
@@ -181,7 +181,7 @@ def true_ending(): show_text_block(["Vraie fin.","Tu te découvres enfin..."], w
 # =============== MENUS ===============
 def draw_text_center(text,font,color,y):
     surf = font.render(text,True,color)
-    screen.blit(surf,(default_WIDTH//2-surf.get_default_WIDTH()//2,y))
+    screen.blit(surf,(default_WIDTH//2-surf.get_width()//2,y))
 
 def show_message(lines):
     while True:
