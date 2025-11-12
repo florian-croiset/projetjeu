@@ -6,7 +6,7 @@ import time
 import math
 import os
 import json
-import win32api
+import win32api, win32con
 
 # --- PARAMÈTRES DU JEU ---
 MAP_WIDTH = 1600
@@ -31,7 +31,6 @@ SAVE_FILE = "save_slots.json"
 CTRL_FILE = "controls.json"
 SET_FILE = "settings.json"
 MAX_SLOTS = 3
-
 #recupperation de la frecuence d'affichage
 def get_real_screen_size():
     # Retourne (largeur, hauteur) de l'écran principal
@@ -55,7 +54,8 @@ def get_screen_refresh_rate_windows_fixed():
         # 3. Le taux de rafraîchissement est dans l'attribut DisplayFrequency
         refresh_rate = settings.DisplayFrequency
         
-        # win32api retourne un int pour la fréquence (ex: 60, 144)
+        # win32api retourne un int pour la fréquence
+        print(f"Taux de rafraîchissement détecté : {refresh_rate} Hz")
         return float(refresh_rate)
         
     except Exception as e:
@@ -67,7 +67,7 @@ default_controls = {"touches_attaque1": pygame.K_a, "touches_attaque2": pygame.K
 default_settings = {
     "fps": get_screen_refresh_rate_windows_fixed(),
     "vsync": True,
-    "display_mode": "fullscreen",  # windowed | borderless | fullscreen
+    "display_mode": ["fullscreen", "borderless", "windowed"],  # windowed | borderless | fullscreen
     "screen_width": SCREEN_WIDTH,
     "screen_height": SCREEN_HEIGHT
 }
@@ -208,11 +208,11 @@ class AnimatedPlayer(pygame.sprite.Sprite):
 
         if not self.attacking:
             if keys[pygame.K_UP]:
-                dy = -self.speed
+                dy = -self.speed*dt
             elif keys[pygame.K_DOWN]:
-                dy = self.speed
+                dy = self.speed*dt
             if keys[pygame.K_LEFT]:
-                dx = -self.speed
+                dx = -self.speed*dt
                 self.direction = "left"
             elif keys[controls["touches_droite"]]:
                 dx = (self.speed*dt)
@@ -357,11 +357,10 @@ def run_game():
     player = AnimatedPlayer(MAP_WIDTH // 2, MAP_HEIGHT // 2)
     revealing = False
     reveal_start = 0
-    running = True
-
+    running=True
     while running:
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r and player.can_reveal():
@@ -426,8 +425,8 @@ def run_settings():
                 for button in buttons:
                     button.click()
 
-    pygame.display.flip()  
-    clock.tick(60)
+        pygame.display.flip()  
+        clock.tick(60)
 # --- MENU ---
 def run_menu():
     play_button = Button("PLAY", 300, run_game)
