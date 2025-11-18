@@ -1,6 +1,5 @@
 from install_package import install_package
-install_package(["pygame","multiprocessing","math","numpy","pywin32",
-                 "sys","subprocess","time","os","json","screeninfo"])
+install_package(["pygame","multiprocessing","math","numpy","pywin32","sys","subprocess","time","os","json","screeninfo"])
 import pygame
 import multiprocessing
 import math

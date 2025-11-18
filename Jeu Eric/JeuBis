@@ -20,8 +20,8 @@ REVEAL_RADIUS = 200
 REVEAL_DURATION = 2
 COOLDOWN = 10
 
-GRAVITY = 0.01
-JUMP_SPEED = -750
+GRAVITY = 1
+JUMP_SPEED = -800
 
 BG_COLOR = (20, 20, 20)
 WALL_COLOR = (70, 70, 70)
@@ -207,9 +207,7 @@ class AnimatedPlayer(pygame.sprite.Sprite):
         dx, dy = 0, 0
 
         if not self.attacking:
-            if keys[pygame.K_UP]:
-                dy = -self.speed*dt
-            elif keys[pygame.K_DOWN]:
+            if keys[pygame.K_DOWN]:
                 dy = self.speed*dt
             if keys[pygame.K_LEFT]:
                 dx = -self.speed*dt
@@ -220,6 +218,9 @@ class AnimatedPlayer(pygame.sprite.Sprite):
 
             # Saut
             if keys[pygame.K_SPACE] and self.on_ground:
+                self.vy = JUMP_SPEED*dt
+
+            if keys[pygame.K_UP] and self.on_ground:
                 self.vy = JUMP_SPEED*dt
 
             # Attaques
