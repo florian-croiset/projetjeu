@@ -413,7 +413,7 @@ def run_settings():
     while True:
         screen.fill((25, 25, 25))
         title_font = pygame.font.SysFont("cambria", 50, True)
-        title_text = title_font.render("HUMAN EXPLORER", True, WHITE)
+        title_text = title_font.render("ECHO", True, WHITE)
         screen.blit(title_text, (settings["screen_width"] // 2 - title_text.get_width() // 2, 150))
         for button in buttons:
             button.draw(screen)
