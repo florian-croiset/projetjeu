@@ -299,7 +299,7 @@ class Client:
 
     def dessiner_menu_principal(self):
         """Dessine le menu principal."""
-        self.ecran.fill(COULEUR_FOND)
+        self.ecran.fill(COULEUR_FOND) # Corrigé: COUL_FOND -> COULEUR_FOND
         titre_surface = self.police_titre.render(langue.get_texte("titre_jeu"), True, COULEUR_TITRE)
         titre_rect = titre_surface.get_rect(center=(self.largeur_ecran // 2, 120)) # Remonté
         self.ecran.blit(titre_surface, titre_rect)
@@ -411,7 +411,7 @@ class Client:
                     self.appliquer_parametres_video()
                     self.actualiser_langues_widgets() # Met à jour tous les textes
                     # 3. Quitter le menu
-                    self.parametres_temp = {}
+                    # self.parametres_temp = {} # <--- ERREUR SUPPRIMÉE
                     self.touche_a_modifier = None
                     self.etat_jeu = self.etat_jeu_precedent # Retourne d'où on vient
 
@@ -570,7 +570,13 @@ class Client:
         """
         Gère les entrées (clavier/souris) pendant que le jeu tourne.
         Renvoie les commandes à envoyer au serveur.
+        
+        CORRECTION: Cette fonction était cassée. Voici la version complète et correcte.
         """
+        # Initialiser les commandes et l'indicateur d'écho pour éviter les références avant affectation
+        commandes_clavier = {'gauche': False, 'droite': False, 'saut': False}
+        declencher_echo = False
+        
         # Récupérer les codes de touches depuis les paramètres
         try:
             touche_gauche = pygame.key.key_code(self.parametres['controles']['gauche'])
@@ -582,9 +588,6 @@ class Client:
             # Fallback (au cas où les noms dans le JSON sont mauvais)
             touche_gauche, touche_droite, touche_saut, touche_echo = pygame.K_q, pygame.K_d, pygame.K_SPACE, pygame.K_e
 
-        # Initialiser les commandes et l'indicateur d'écho pour éviter les références avant affectation
-        commandes_clavier = {'gauche': False, 'droite': False, 'saut': False}
-        declencher_echo = False
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -799,6 +802,9 @@ class Client:
                 self.etat_jeu = "MENU_PRINCIPAL" # Revenir au menu
 
             # Le flip est maintenant géré ici, car le dessin est complexe
+            pygame.display.flip()
+            self.horloge.tick(FPS)
+
 # --- Point d'entrée ---
 if __name__ == "__main__":
     client_jeu = Client()
