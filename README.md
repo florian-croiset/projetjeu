@@ -4,9 +4,9 @@
 | Non modifiable |
 | Echap+Down | Quit |
 | Modifiable |
-| A | Attaque1 |
-| Z | Attaque2 |
-| E | Attaque3 |
+| A | Attaque1(droit) |
+| Z | Attaque2(revers) |
+| E | Attaque3(smash) |
 | R | Reveal |
 |  |  |
 |  |  |
