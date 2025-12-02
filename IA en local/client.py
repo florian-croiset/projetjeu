@@ -14,6 +14,7 @@ from parametres import *
 from carte import Carte
 from joueur import Joueur # Utilisé seulement pour créer des "fantômes"
 from ennemi import Ennemi # Import pour créer les "fantômes" ennemis
+from ame_perdue import AmePerdue # Import de la nouvelle classe
 import gestion_parametres
 import langue # Notre nouveau module de langue
 from bouton import Bouton
@@ -54,6 +55,7 @@ class Client:
         self.vis_map_locale = None
         self.joueurs_locaux = {}
         self.ennemis_locaux = {} # Dico {id: objet Ennemi}
+        self.ames_perdues_locales = {} # Dico {id: objet AmePerdue}
 
         # 5. Éléments des Menus
         self.police_titre = pygame.font.Font(None, 72)
@@ -160,6 +162,8 @@ class Client:
         
         # Surface pour l'effet d'assombrissement
         self.surface_fond_pause = pygame.Surface((self.largeur_ecran, self.hauteur_ecran), pygame.SRCALPHA)
+        self.surface_fond_pause.fill(COULEUR_FOND_PAUSE)
+
     def creer_widgets_menu_slots(self):
         """Crée les widgets réutilisables pour les menus Nouvelle/Continuer."""
         self.infos_slots = []
@@ -204,16 +208,15 @@ class Client:
                 self.dessiner_menu_parametres()
                 
             elif self.etat_jeu == "LANCEMENT_SERVEUR":
-                self.lancer_serveur_local() # Lance le serveur
-                # Tente de se connecter en tant qu'hôte (localhost)
-                if self.connecter("localhost"):
-                    self.etat_jeu = "EN_JEU"
-                else:
-                    print("[CLIENT] Erreur: Le serveur local n'a pas pu être rejoint.")
-                    self.etat_jeu = "MENU_PRINCIPAL" # Retour au menu
+                # Cet état n'est plus utilisé, voir lancer_partie_locale
+                print("ERREUR: Etat LANCEMENT_SERVEUR ne devrait pas être atteint.")
+                self.etat_jeu = "MENU_PRINCIPAL"
 
             elif self.etat_jeu == "EN_JEU":
-                self.etat_jeu_interne = "JEU" # On commence en mode "jeu"
+                # Si on n'est pas en "pause", on commence en mode "jeu"
+                if self.etat_jeu_interne != "PAUSE":
+                    self.etat_jeu_interne = "JEU" 
+                
                 self.boucle_jeu_reseau() # Lance la boucle de jeu
                 
                 # La boucle_jeu_reseau s'est terminée. Vérifions pourquoi.
@@ -234,9 +237,9 @@ class Client:
                     # L'utilisateur a quitté (déco, ou bouton "Quitter")
                     # On nettoie tout et on retourne au menu principal
                     self.etat_jeu = "MENU_PRINCIPAL"
-                self.nettoyer_connexion()
-                # On réinitialise les widgets au cas où la langue a changé
-                self.actualiser_langues_widgets()
+                    self.nettoyer_connexion()
+                    # On réinitialise les widgets au cas où la langue a changé
+                    self.actualiser_langues_widgets()
 
             elif self.etat_jeu == "QUITTER":
                 self.running = False
@@ -252,6 +255,7 @@ class Client:
         langue.set_langue(self.parametres['jouabilite']['langue'])
         pygame.display.set_caption(langue.get_texte("titre_jeu"))
 
+        # Menu Principal
         self.btn_nouvelle_partie.texte = langue.get_texte("menu_nouvelle_partie")
         self.btn_continuer.texte = langue.get_texte("menu_continuer")
         self.btn_rejoindre.texte = langue.get_texte("menu_rejoindre")
@@ -299,13 +303,72 @@ class Client:
 
     def dessiner_menu_principal(self):
         """Dessine le menu principal."""
-        self.ecran.fill(COULEUR_FOND) # Corrigé: COUL_FOND -> COULEUR_FOND
+        self.ecran.fill(COULEUR_FOND)
         titre_surface = self.police_titre.render(langue.get_texte("titre_jeu"), True, COULEUR_TITRE)
         titre_rect = titre_surface.get_rect(center=(self.largeur_ecran // 2, 120)) # Remonté
         self.ecran.blit(titre_surface, titre_rect)
         
         for bouton in self.boutons_menu_principal:
             bouton.dessiner(self.ecran)
+
+    def gerer_menu_rejoindre(self, pos_souris):
+        """Gère les événements du menu rejoindre (saisie IP)."""
+        self.btn_connecter.verifier_survol(pos_souris)
+        self.btn_retour_rejoindre.verifier_survol(pos_souris)
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.etat_jeu = "QUITTER"
+            
+            if self.btn_retour_rejoindre.verifier_clic(event):
+                self.etat_jeu = "MENU_PRINCIPAL"
+                
+            if self.btn_connecter.verifier_clic(event):
+                hote = self.input_ip_texte if self.input_ip_texte else "localhost"
+                if self.connecter(hote):
+                    self.etat_jeu = "EN_JEU"
+                else:
+                    print(f"[CLIENT] Échec de la connexion à {hote}")
+                    # On pourrait afficher un message d'erreur ici
+            
+            # Gestion de la saisie au clavier pour l'IP
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                self.input_ip_actif = self.input_box_ip.collidepoint(event.pos)
+            
+            if event.type == pygame.KEYDOWN and self.input_ip_actif:
+                if event.key == pygame.K_RETURN:
+                    hote = self.input_ip_texte if self.input_ip_texte else "localhost"
+                    if self.connecter(hote):
+                        self.etat_jeu = "EN_JEU"
+                elif event.key == pygame.K_BACKSPACE:
+                    self.input_ip_texte = self.input_ip_texte[:-1]
+                else:
+                    self.input_ip_texte += event.unicode
+
+    def dessiner_menu_rejoindre(self):
+        """Dessine le menu pour rejoindre une partie."""
+        self.ecran.fill(COULEUR_FOND)
+        
+        # Titre
+        titre_surface = self.police_titre.render(langue.get_texte("rejoindre_titre"), True, COULEUR_TITRE)
+        self.ecran.blit(titre_surface, titre_surface.get_rect(center=(self.largeur_ecran // 2, 150)))
+        
+        # Label
+        label_surface = self.police_texte.render(langue.get_texte("rejoindre_label_ip"), True, COULEUR_TEXTE)
+        self.ecran.blit(label_surface, label_surface.get_rect(center=(self.largeur_ecran // 2, 250)))
+
+        # Input Box
+        pygame.draw.rect(self.ecran, COULEUR_INPUT_BOX, self.input_box_ip, border_radius=5)
+        texte_ip_surface = self.police_texte.render(self.input_ip_texte, True, COULEUR_TEXTE)
+        self.ecran.blit(texte_ip_surface, (self.input_box_ip.x + 10, self.input_box_ip.y + 10))
+        # Curseur simple
+        if self.input_ip_actif and int(time.time() * 2) % 2 == 0:
+            curseur_rect = pygame.Rect(self.input_box_ip.x + 12 + texte_ip_surface.get_width(), self.input_box_ip.y + 10, 3, self.police_texte.get_height() - 10)
+            pygame.draw.rect(self.ecran, COULEUR_TEXTE, curseur_rect)
+
+        # Boutons
+        self.btn_connecter.dessiner(self.ecran)
+        self.btn_retour_rejoindre.dessiner(self.ecran)
 
     def gerer_menu_slots(self, pos_souris):
         """Gère les clics dans les menus Nouvelle Partie et Continuer."""
@@ -394,7 +457,7 @@ class Client:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         self.parametres_temp = {} # Annuler les changements
-                        self.etat_jeu = "MENU_PRINCIPAL"
+                        self.etat_jeu = self.etat_jeu_precedent # Retourne d'où on vient
                 
                 # Clic sur "Retour"
                 if self.btn_retour_params.verifier_clic(event):
@@ -411,7 +474,6 @@ class Client:
                     self.appliquer_parametres_video()
                     self.actualiser_langues_widgets() # Met à jour tous les textes
                     # 3. Quitter le menu
-                    # self.parametres_temp = {} # <--- ERREUR SUPPRIMÉE
                     self.touche_a_modifier = None
                     self.etat_jeu = self.etat_jeu_precedent # Retourne d'où on vient
 
@@ -447,7 +509,10 @@ class Client:
         label_plein_ecran = self.police_texte.render(langue.get_texte("param_plein_ecran"), True, COULEUR_TEXTE)
         self.ecran.blit(label_plein_ecran, (120, y_offset + 5))
         
-        texte_btn_plein_ecran = langue.get_texte("param_oui") if self.parametres_temp['video']['plein_ecran'] else langue.get_texte("param_non")
+        # Sécurité au cas où on quitte et parametres_temp est vidé
+        params = self.parametres_temp if self.parametres_temp else self.parametres
+        
+        texte_btn_plein_ecran = langue.get_texte("param_oui") if params['video']['plein_ecran'] else langue.get_texte("param_non")
         self.btn_toggle_plein_ecran.texte = texte_btn_plein_ecran
         self.btn_toggle_plein_ecran.dessiner(self.ecran)
 
@@ -460,7 +525,7 @@ class Client:
         # Touche Gauche
         label_gauche = self.police_texte.render(langue.get_texte("param_gauche"), True, COULEUR_TEXTE)
         self.ecran.blit(label_gauche, (120, y_offset + 5))
-        texte_btn_gauche = self.parametres_temp['controles']['gauche'].upper()
+        texte_btn_gauche = params['controles']['gauche'].upper()
         if self.touche_a_modifier == "gauche":
             texte_btn_gauche = langue.get_texte("param_attente_touche")
         self.btn_changer_gauche.texte = texte_btn_gauche
@@ -470,7 +535,7 @@ class Client:
         # Touche Droite
         label_droite = self.police_texte.render(langue.get_texte("param_droite"), True, COULEUR_TEXTE)
         self.ecran.blit(label_droite, (120, y_offset + 5))
-        texte_btn_droite = self.parametres_temp['controles']['droite'].upper()
+        texte_btn_droite = params['controles']['droite'].upper()
         if self.touche_a_modifier == "droite":
             texte_btn_droite = langue.get_texte("param_attente_touche")
         self.btn_changer_droite.texte = texte_btn_droite
@@ -480,7 +545,7 @@ class Client:
         # Touche Saut
         label_saut = self.police_texte.render(langue.get_texte("param_saut"), True, COULEUR_TEXTE)
         self.ecran.blit(label_saut, (120, y_offset + 5))
-        texte_btn_saut = self.parametres_temp['controles']['saut'].upper()
+        texte_btn_saut = params['controles']['saut'].upper()
         if self.touche_a_modifier == "saut":
             texte_btn_saut = langue.get_texte("param_attente_touche")
         self.btn_changer_saut.texte = texte_btn_saut
@@ -490,7 +555,7 @@ class Client:
         # Touche Écho
         label_echo = self.police_texte.render(langue.get_texte("param_echo"), True, COULEUR_TEXTE)
         self.ecran.blit(label_echo, (120, y_offset + 5))
-        texte_btn_echo = self.parametres_temp['controles']['echo'].upper()
+        texte_btn_echo = params['controles']['echo'].upper()
         if self.touche_a_modifier == "echo":
             texte_btn_echo = langue.get_texte("param_attente_touche")
         self.btn_changer_echo.texte = texte_btn_echo
@@ -510,7 +575,7 @@ class Client:
         print(f"[CLIENT] Lancement du serveur local (Slot {id_slot}, Type: {type_lancement})...")
         try:
             # 'sys.executable' est le chemin vers l'interpréteur Python actuel
-            subprocess.Popen([sys.executable, 'serveur.py', str(id_slot), type_lancement])
+            self.processus_serveur = subprocess.Popen([sys.executable, 'serveur.py', str(id_slot), type_lancement])
             print("[CLIENT] Serveur démarré en arrière-plan.")
             time.sleep(2) # Laisse 2 secondes au serveur pour démarrer
         except Exception as e:
@@ -527,8 +592,7 @@ class Client:
 
     def lancer_serveur_local(self):
         """DEPRECATED - Remplacé par lancer_partie_locale"""
-        # Cette fonction n'est plus appelée directement,
-        # mais on la garde au cas où on voudrait un mode "serveur dédié" plus tard.
+        # Cette fonction n'est plus appelée directement.
         print("Erreur: lancer_serveur_local() ne doit plus être utilisé.")
         pass
 
@@ -547,6 +611,8 @@ class Client:
             self.carte = Carte()
             self.vis_map_locale = self.carte.creer_carte_visibilite_vierge()
             self.joueurs_locaux = {}
+            self.ennemis_locaux = {}
+            self.ames_perdues_locales = {}
             
             return True
         except socket.error as e:
@@ -562,16 +628,22 @@ class Client:
         self.mon_id = -1
         self.joueurs_locaux = {}
         self.ennemis_locaux = {} # Nettoyer aussi les ennemis
+        self.ames_perdues_locales = {} # Nettoyer aussi les âmes
         self.carte = None
         self.vis_map_locale = None
+        
+        # Si on était l'hôte, on tente d'arrêter le serveur
+        if hasattr(self, 'processus_serveur') and self.processus_serveur:
+            print("[CLIENT] Tentative d'arrêt du serveur local...")
+            self.processus_serveur.terminate()
+            self.processus_serveur = None
+            
         print("[CLIENT] Connexion nettoyée.")
 
     def gerer_evenements_jeu(self):
         """
         Gère les entrées (clavier/souris) pendant que le jeu tourne.
         Renvoie les commandes à envoyer au serveur.
-        
-        CORRECTION: Cette fonction était cassée. Voici la version complète et correcte.
         """
         # Initialiser les commandes et l'indicateur d'écho pour éviter les références avant affectation
         commandes_clavier = {'gauche': False, 'droite': False, 'saut': False}
@@ -674,9 +746,38 @@ class Client:
         # 3. Dessiner tous les ennemis
         for ennemi in self.ennemis_locaux.values():
             ennemi.dessiner(self.ecran)
+            
+        # 4. Dessiner toutes les âmes perdues
+        for ame in self.ames_perdues_locales.values():
+            ame.dessiner(self.ecran)
+            
+        # 5. Dessiner l'interface (HUD) - Ex: Barre de vie
+        self.dessiner_hud()
 
-        # Pas de pygame.display.flip() ici, il est dans la boucle principale
+    def dessiner_hud(self):
+        """Dessine les informations du joueur (PV, etc.)"""
+        mon_joueur = self.joueurs_locaux.get(self.mon_id)
         
+        if mon_joueur:
+            # Barre de vie
+            pv = mon_joueur.pv
+            pv_max = mon_joueur.pv_max
+            
+            x_barre = 20
+            y_barre = 20
+            largeur_coeur = 30
+            padding = 5
+            
+            for i in range(pv_max):
+                rect_fond = pygame.Rect(x_barre + i * (largeur_coeur + padding), y_barre, largeur_coeur, 30)
+                pygame.draw.rect(self.ecran, COULEUR_PV_PERDU, rect_fond, border_radius=4)
+                
+            for i in range(pv):
+                rect_plein = pygame.Rect(x_barre + i * (largeur_coeur + padding), y_barre, largeur_coeur, 30)
+                pygame.draw.rect(self.ecran, COULEUR_PV, rect_plein, border_radius=4)
+
+        # TODO: Dessiner le cooldown de l'écho
+
     def dessiner_menu_pause(self):
         """Dessine le menu pause par-dessus l'écran de jeu."""
         
@@ -706,6 +807,7 @@ class Client:
         # 4. Gérer le bouton "Activer Multi"
         if est_hote:
             self.btn_pause_activer_multi.couleur_fond = COULEUR_BOUTON # Actif
+            self.btn_pause_activer_multi.couleur_texte = COULEUR_TEXTE
         else:
             self.btn_pause_activer_multi.couleur_fond = (30, 30, 30) # Grisé
             self.btn_pause_activer_multi.couleur_texte = (100, 100, 100)
@@ -718,9 +820,6 @@ class Client:
     def boucle_jeu_reseau(self):
         """
         Boucle principale du jeu (envoi commandes, réception état, dessin).
-        
-        CORRECTION: Remplacement complet pour s'assurer que les boucles
-        et l'indentation sont correctes, ce qui corrige l'erreur de 'id_j'.
         """
         
         # La connexion doit déjà être établie
@@ -758,6 +857,7 @@ class Client:
                 self.vis_map_locale = donnees_recues['vis_map']
                 etat_joueurs_serveur = donnees_recues['joueurs']
                 etat_ennemis_serveur = donnees_recues['ennemis']
+                etat_ames_serveur = donnees_recues.get('ames_perdues', []) # .get pour compatibilité
                 
                 # --- Mettre à jour les joueurs ---
                 ids_serveur = {j['id'] for j in etat_joueurs_serveur}
@@ -786,6 +886,19 @@ class Client:
                     
                     # Met à jour le fantôme
                     self.ennemis_locaux[id_e].set_etat(data_ennemi)
+                
+                # --- Mettre à jour les âmes perdues ---
+                ids_ames_serveur = {a['id'] for a in etat_ames_serveur}
+                for id_local in list(self.ames_perdues_locales.keys()):
+                    if id_local not in ids_ames_serveur:
+                        del self.ames_perdues_locales[id_local] 
+                
+                for data_ame in etat_ames_serveur:
+                    id_a = data_ame['id']
+                    if id_a not in self.ames_perdues_locales:
+                        self.ames_perdues_locales[id_a] = AmePerdue(data_ame['x'], data_ame['y'], data_ame['id_joueur'])
+                    
+                    self.ames_perdues_locales[id_a].set_etat(data_ame)
                 
                 # 5. Dessiner la scène
                 self.dessiner_jeu()

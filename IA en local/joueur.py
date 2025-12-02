@@ -14,6 +14,15 @@ class Joueur:
         self.vel_y = 0
         self.sur_le_sol = False
         
+        # Santé
+        self.pv = PV_JOUEUR_MAX
+        self.pv_max = PV_JOUEUR_MAX
+        self.dernier_degat_temps = 0 # Timestamp pour l'invincibilité
+        
+        # Mécaniques
+        self.dernier_echo_temps = 0 # Timestamp pour le cooldown de l'écho
+        self.ame_perdue = None # Stocke l'objet AmePerdue
+        
         # Commandes (sera mis à jour par le réseau)
         self.commandes = {'gauche': False, 'droite': False, 'saut': False}
 
@@ -69,6 +78,24 @@ class Joueur:
                     self.rect.top = mur.bottom
                     self.vel_y = 0 # Stoppe la montée
 
+    def prendre_degat(self, montant, temps_actuel):
+        """Tente d'infliger des dégâts au joueur."""
+        # Vérifie si le joueur est invincible (cooldown après un coup)
+        if temps_actuel - self.dernier_degat_temps > TEMPS_INVINCIBILITE:
+            self.pv -= montant
+            self.dernier_degat_temps = temps_actuel
+            print(f"[JOUEUR {self.id}] A pris {montant} dégât. PV restants: {self.pv}")
+            return True # Dégât infligé
+        return False # Invincible
+
+    def respawn(self, coords_spawn):
+        """Réinitialise le joueur à un point de spawn."""
+        print(f"[JOUEUR {self.id}] Respawn à {coords_spawn}")
+        self.pv = self.pv_max
+        self.rect.topleft = coords_spawn
+        self.vel_y = 0
+        self.sur_le_sol = False
+
     def dessiner(self, surface):
         """Dessine le joueur sur l'écran (côté CLIENT)."""
         pygame.draw.rect(surface, self.couleur, self.rect)
@@ -79,7 +106,9 @@ class Joueur:
             'id': self.id,
             'x': self.rect.x,
             'y': self.rect.y,
-            'couleur': self.couleur
+            'couleur': self.couleur,
+            'pv': self.pv, # Envoi des PV
+            'pv_max': self.pv_max # Envoi des PV max
         }
 
     def set_etat(self, data):
@@ -87,3 +116,5 @@ class Joueur:
         self.rect.x = data['x']
         self.rect.y = data['y']
         self.couleur = data['couleur']
+        self.pv = data['pv']
+        self.pv_max = data['pv_max']

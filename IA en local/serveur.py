@@ -7,14 +7,15 @@ import threading
 import pickle # Pour sérialiser (convertir) les objets Python pour le réseau
 import time
 import sys # Pour lire les arguments de la ligne de commande
-import pygame
+import pygame # <--- AJOUT IMPORTANT (pour l'horloge et get_ticks)
 
 from joueur import Joueur
 from carte import Carte
 from parametres import *
 import gestion_sauvegarde
 import points_sauvegarde
-from ennemi import Ennemi # Import de la nouvelle classe
+from ennemi import Ennemi
+from ame_perdue import AmePerdue # Import de la nouvelle classe
 
 class Serveur:
     def __init__(self, id_slot, est_nouvelle_partie):
@@ -24,9 +25,13 @@ class Serveur:
         self.joueurs = {} # Dictionnaire {id_joueur: objet Joueur}
         self.cartes_visibilite = {} # Dictionnaire {id_joueur: vis_map}
         self.ennemis = {} # Dictionnaire {id_ennemi: objet Ennemi}
+        self.ames_perdues = {} # Dictionnaire {id_ame: objet AmePerdue}
         
         self.carte_jeu = Carte()
         self.rects_collision = self.carte_jeu.get_rects_collisions()
+        
+        # Scan de la carte pour trouver les points de sauvegarde
+        self.points_sauvegarde_map = self.scanner_points_sauvegarde()
         
         # --- Chargement de la Sauvegarde ---
         self.id_slot = id_slot
@@ -49,26 +54,40 @@ class Serveur:
         id_checkpoint = self.donnees_partie["id_dernier_checkpoint"]
         self.spawn_point = points_sauvegarde.get_coords_par_id(id_checkpoint)
         
+        # --- Fin Chargement Sauvegarde ---
+        
         # --- Création des ennemis ---
         self.creer_ennemis()
-        
-        # --- Fin Chargement Sauvegarde ---
         
         self.prochain_id_joueur = 0
         self.running = True
         
         print(f"[SERVEUR] Démarré sur le port {PORT_SERVEUR}")
         
+    def scanner_points_sauvegarde(self):
+        """Scanne la carte et renvoie un dico {id_str: rect} des checkpoints."""
+        points = {}
+        for y, rangee in enumerate(self.carte_jeu.map_data):
+            for x, tuile in enumerate(rangee):
+                if tuile == 3: # 3 = Point de Sauvegarde
+                    id_str = f"{x}_{y}"
+                    rect = pygame.Rect(x * TAILLE_TUILE, y * TAILLE_TUILE, TAILLE_TUILE, TAILLE_TUILE)
+                    points[id_str] = rect
+                    print(f"[SERVEUR] Point de sauvegarde trouvé à {id_str}")
+        return points
+
     def creer_ennemis(self):
         """Place les ennemis sur la carte."""
-        # Pour l'instant, on en ajoute un en dur pour tester
         # On le place sur la plateforme au-dessus du spawn
         ennemi_1 = Ennemi(x=200, y=680, id=0)
         self.ennemis[0] = ennemi_1
         
-        ennemi_2 = Ennemi(x=500, y=420, id=1) # Sur la plateforme du milieu
+        ennemi_2 = Ennemi(x=500, y=420, id=1) # Sur la plateforme du milieu (abaissée)
         self.ennemis[1] = ennemi_2
-
+        
+        ennemi_3 = Ennemi(x=800, y=260, id=2) # Sur la plateforme haute
+        self.ennemis[2] = ennemi_3
+        
     def gerer_client(self, connexion_client, id_joueur):
         """Gère la connexion pour un client unique (dans un thread séparé)."""
         print(f"[SERVEUR] Nouveau client connecté, ID: {id_joueur}")
@@ -108,12 +127,20 @@ class Serveur:
                 # Mettre à jour les commandes du joueur
                 self.joueurs[id_joueur].commandes = commandes['clavier']
                 
-                # Gérer l'écho
+                # Gérer l'écho (AVEC COOLDOWN)
                 if commandes['echo']:
-                    print(f"[SERVEUR] Joueur {id_joueur} utilise l'écho.")
-                    centre_x = self.joueurs[id_joueur].rect.centerx
-                    centre_y = self.joueurs[id_joueur].rect.centery
-                    self.carte_jeu.reveler_par_echo(centre_x, centre_y, self.cartes_visibilite[id_joueur])
+                    temps_actuel = pygame.time.get_ticks()
+                    joueur = self.joueurs[id_joueur]
+                    
+                    if temps_actuel - joueur.dernier_echo_temps > COOLDOWN_ECHO:
+                        print(f"[SERVEUR] Joueur {id_joueur} utilise l'écho.")
+                        joueur.dernier_echo_temps = temps_actuel # Met à jour le timestamp
+                        
+                        centre_x = joueur.rect.centerx
+                        centre_y = joueur.rect.centery
+                        self.carte_jeu.reveler_par_echo(centre_x, centre_y, self.cartes_visibilite[id_joueur])
+                    # else:
+                        # print(f"[SERVEUR] Joueur {id_joueur} écho en cooldown.")
 
                 # 4. Préparer l'état du jeu à renvoyer
                 
@@ -121,12 +148,15 @@ class Serveur:
                 etat_joueurs = [j.get_etat() for j in self.joueurs.values()]
                 # Obtenir l'état de tous les ennemis
                 etat_ennemis = [e.get_etat() for e in self.ennemis.values()]
+                # Obtenir l'état de toutes les âmes
+                etat_ames = [a.get_etat() for a in self.ames_perdues.values()]
                 
                 # Préparer les données spécifiques à CE client
                 donnees_pour_client = {
                     'joueurs': etat_joueurs,
                     'vis_map': self.cartes_visibilite[id_joueur], # N'envoie que SA carte
-                    'ennemis': etat_ennemis
+                    'ennemis': etat_ennemis,
+                    'ames_perdues': etat_ames # Envoi des âmes
                 }
 
                 # 5. Envoyer l'état du jeu au client
@@ -141,6 +171,13 @@ class Serveur:
             del self.clients[connexion_client]
             del self.joueurs[id_joueur]
             del self.cartes_visibilite[id_joueur]
+            # Si le joueur qui part avait une âme, on la supprime
+            if id_joueur in [ame.id_joueur for ame in self.ames_perdues.values()]:
+                try:
+                    id_ame_a_suppr = next(ame.id for ame in self.ames_perdues.values() if ame.id_joueur == id_joueur)
+                    del self.ames_perdues[id_ame_a_suppr]
+                except StopIteration:
+                    pass # L'âme n'existait plus
 
     def boucle_jeu_serveur(self):
         """
@@ -149,13 +186,62 @@ class Serveur:
         """
         horloge = pygame.time.Clock()
         while self.running:
-            # Mettre à jour la physique de chaque joueur
-            for id_joueur, joueur in list(self.joueurs.items()):
-                joueur.appliquer_physique(self.rects_collision)
+            temps_actuel = pygame.time.get_ticks()
             
             # Mettre à jour la logique de chaque ennemi
             for id_ennemi, ennemi in list(self.ennemis.items()):
                 ennemi.appliquer_logique(self.rects_collision, self.carte_jeu)
+
+            # Mettre à jour les joueurs (physique, dégâts, mort, sauvegarde)
+            for id_joueur, joueur in list(self.joueurs.items()):
+                joueur.appliquer_physique(self.rects_collision)
+                
+                # --- 1. Gestion des Dégâts ---
+                for id_ennemi, ennemi in list(self.ennemis.items()):
+                    if joueur.rect.colliderect(ennemi.rect):
+                        joueur.prendre_degat(1, temps_actuel)
+                        # (On pourrait ajouter un recul ici)
+                
+                # --- 2. Gestion de la Mort et Respawn ---
+                if joueur.pv <= 0:
+                    # a. Gérer l'âme (Ghost)
+                    # Si le joueur a déjà une âme, elle est perdue
+                    if joueur.ame_perdue:
+                        if joueur.ame_perdue.id in self.ames_perdues:
+                            del self.ames_perdues[joueur.ame_perdue.id]
+                            print(f"[SERVEUR] Ame {joueur.ame_perdue.id} (Joueur {id_joueur}) perdue.")
+                    
+                    # b. Créer une nouvelle âme
+                    argent_perdu = 0 # TODO: Implémenter l'argent
+                    nouvelle_ame = AmePerdue(joueur.rect.centerx, joueur.rect.centery, id_joueur, argent_perdu)
+                    self.ames_perdues[nouvelle_ame.id] = nouvelle_ame
+                    joueur.ame_perdue = nouvelle_ame # Le joueur se souvient de sa nouvelle âme
+                    
+                    # c. Récupérer le point de spawn
+                    # L'hôte (0) utilise sa sauvegarde
+                    # Les clients (autres) utilisent le spawn de base
+                    id_checkpoint = ""
+                    if id_joueur == 0:
+                        id_checkpoint = self.donnees_partie["id_dernier_checkpoint"]
+                    else:
+                        id_checkpoint = points_sauvegarde.get_point_depart()[0] # Spawn de base
+                    
+                    coords_spawn = points_sauvegarde.get_coords_par_id(id_checkpoint)
+                    joueur.respawn(coords_spawn)
+                    
+                    # d. TODO: Gérer la perte de visibilité de la zone
+
+                # --- 3. Gestion de la Sauvegarde (Hôte uniquement) ---
+                if id_joueur == 0: # Seul l'hôte sauvegarde
+                    for id_save, rect_save in self.points_sauvegarde_map.items():
+                        if joueur.rect.colliderect(rect_save):
+                            # On vérifie si c'est un *nouveau* checkpoint
+                            if self.donnees_partie["id_dernier_checkpoint"] != id_save:
+                                print(f"[SERVEUR] Hôte a atteint un nouveau checkpoint: {id_save}")
+                                self.donnees_partie["id_dernier_checkpoint"] = id_save
+                                self.donnees_partie["vis_map"] = self.cartes_visibilite[id_joueur]
+                                gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
+                                # TODO: Ajouter un effet visuel/sonore
             
             # Limiter la boucle (ticks du serveur)
             horloge.tick(FPS)

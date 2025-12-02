@@ -2,13 +2,13 @@
 # Gère la tilemap du niveau et la carte de visibilité pour chaque joueur.
 
 import pygame
-import math
 from parametres import *
 
 class Carte:
     def __init__(self):
         # Pour ce prototype, la carte est codée en dur.
-        # 0 = Vide, 1 = Mur, 2 = Point de repère visible
+        # 0 = Vide, 1 = Mur, 2 = Point de repère, 3 = Point de Sauvegarde
+        # J'ai abaissé certaines plateformes comme demandé.
         self.map_data = [
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
@@ -16,13 +16,14 @@ class Carte:
             [1, 2, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 2, 0, 0, 0, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1],
+            [1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 1],
+            [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 2, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 1],
@@ -30,9 +31,8 @@ class Carte:
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 1],
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
         ]
         
@@ -68,9 +68,13 @@ class Carte:
         return True # Considérer l'extérieur de la carte comme un mur
 
     def est_solide(self, tuile_x, tuile_y):
-        """Vérifie si une tuile aux coordonnées DE TUILE (pas pixels) est un mur."""
+        """
+        Vérifie si une tuile aux coordonnées DE TUILE (pas pixels) est un mur.
+        Utilisé par l'ennemi pour la détection de vide.
+        Les murs (1) et les save points (3) sont solides.
+        """
         if 0 <= tuile_x < self.largeur_map and 0 <= tuile_y < self.hauteur_map:
-            return self.map_data[tuile_y][tuile_x] == 1
+            return self.map_data[tuile_y][tuile_x] in [1, 3]
         return False # Considérer l'extérieur (haut/bas/côtés) comme non solide
 
     def reveler_par_echo(self, centre_x, centre_y, vis_map):
@@ -92,9 +96,9 @@ class Carte:
                 if not (0 <= tuile_x < self.largeur_map and 0 <= tuile_y < self.hauteur_map):
                     break # Sort de la boucle 'dist' si hors carte
 
-                # Si le rayon touche un mur
-                if self.map_data[tuile_y][tuile_x] == 1:
-                    vis_map[tuile_y][tuile_x] = True # Révèle le mur
+                # Si le rayon touche un mur ou un point de sauvegarde
+                if self.map_data[tuile_y][tuile_x] in [1, 3]:
+                    vis_map[tuile_y][tuile_x] = True # Révèle
                     break # Arrête ce rayon
                 else:
                     # Optionnel : révéler aussi le sol traversé ?
@@ -102,8 +106,6 @@ class Carte:
                     pass
         
         # La visibilité est permanente, donc on ne fait que mettre à True.
-        # Pour la rendre temporaire, il faudrait stocker un "timestamp"
-        # et une autre fonction devrait repasser les True à False.
 
     def dessiner_carte(self, surface, vis_map):
         """
@@ -124,9 +126,14 @@ class Carte:
                         pygame.draw.rect(surface, COULEUR_MUR_VISIBLE, rect)
                     elif tuile_type == 2:
                         pygame.draw.rect(surface, COULEUR_GUIDE, rect)
+                    elif tuile_type == 3:
+                        pygame.draw.rect(surface, COULEUR_SAUVEGARDE, rect)
 
     def get_rects_collisions(self):
-        """Renvoie une liste de Rect pour tous les murs."""
+        """
+        Renvoie une liste de Rect pour tous les murs (type 1).
+        Les save points (3) ne bloquent PAS le joueur.
+        """
         rects = []
         for y in range(self.hauteur_map):
             for x in range(self.largeur_map):
