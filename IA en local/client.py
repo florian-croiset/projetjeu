@@ -9,6 +9,7 @@ import sys
 import subprocess # Pour lancer le serveur en sous-processus
 import time
 import copy # Pour copier les dictionnaires de paramètres
+import os # <-- AJOUTÉ POUR TROUVER LE CHEMIN ABSOLU
 
 from parametres import *
 from carte import Carte
@@ -573,13 +574,34 @@ class Client:
         # 1. Lancer le serveur en arrière-plan avec les bons arguments
         type_lancement = "nouvelle" if est_nouvelle_partie else "charger"
         print(f"[CLIENT] Lancement du serveur local (Slot {id_slot}, Type: {type_lancement})...")
+        
         try:
+            # --- CORRECTION [Errno 2] ---
+            # On construit le chemin absolu vers le script serveur
+            # __file__ est le chemin de ce script (client.py)
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            serveur_path = os.path.join(script_dir, 'serveur.py')
+            
             # 'sys.executable' est le chemin vers l'interpréteur Python actuel
-            self.processus_serveur = subprocess.Popen([sys.executable, 'serveur.py', str(id_slot), type_lancement])
+            # On utilise maintenant le chemin absolu vers 'serveur.py'
+            commande_lancement = [sys.executable, serveur_path, str(id_slot), type_lancement]
+            print(f"[CLIENT] Exécution de: {' '.join(commande_lancement)}")
+            
+            self.processus_serveur = subprocess.Popen(commande_lancement)
+            # --- FIN CORRECTION ---
+            
             print("[CLIENT] Serveur démarré en arrière-plan.")
             time.sleep(2) # Laisse 2 secondes au serveur pour démarrer
+        
+        except FileNotFoundError as e: # Erreur spécifique
+            print(f"[CLIENT] ERREUR CRITIQUE: Impossible de lancer 'serveur.py' ou 'python'.")
+            print(f"Erreur: {e}")
+            if 'serveur_path' in locals():
+                print(f"Tentative de lancement: {sys.executable} {serveur_path}")
+            self.etat_jeu = "MENU_PRINCIPAL"
+            return
         except Exception as e:
-            print(f"[CLIENT] Erreur lors du lancement du serveur: {e}")
+            print(f"[CLIENT] Erreur inconnue lors du lancement du serveur: {e}")
             self.etat_jeu = "MENU_PRINCIPAL"
             return
             
@@ -588,6 +610,7 @@ class Client:
             self.etat_jeu = "EN_JEU"
         else:
             print("[CLIENT] Erreur: Le serveur local n'a pas pu être rejoint.")
+            print("[CLIENT] Assurez-vous que le serveur n'est pas bloqué par un pare-feu.")
             self.etat_jeu = "MENU_PRINCIPAL" # Retour au menu
 
     def lancer_serveur_local(self):
@@ -636,6 +659,7 @@ class Client:
         if hasattr(self, 'processus_serveur') and self.processus_serveur:
             print("[CLIENT] Tentative d'arrêt du serveur local...")
             self.processus_serveur.terminate()
+            self.processus_serveur.poll() # Attendre que le processus se termine
             self.processus_serveur = None
             
         print("[CLIENT] Connexion nettoyée.")
@@ -913,6 +937,10 @@ class Client:
             except EOFError:
                 print("[CLIENT] Connexion perdue avec le serveur.")
                 self.etat_jeu = "MENU_PRINCIPAL" # Revenir au menu
+            except pickle.UnpicklingError:
+                print("[CLIENT] Erreur de désérialisation. Données corrompues.")
+                # Gérer le cas où les données reçues sont incomplètes ou mal formées
+                pass
 
             # Le flip est maintenant géré ici, car le dessin est complexe
             pygame.display.flip()
