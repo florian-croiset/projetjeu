@@ -1,14 +1,15 @@
 # carte.py
 # Gère la tilemap du niveau et la carte de visibilité pour chaque joueur.
+# CORRECTION : Ajout de l'import math.
 
 import pygame
+import math # <-- AJOUTÉ (Indispensable pour cos/sin)
 from parametres import *
-import math
+
 class Carte:
     def __init__(self):
         # Pour ce prototype, la carte est codée en dur.
         # 0 = Vide, 1 = Mur, 2 = Point de repère, 3 = Point de Sauvegarde
-        # J'ai abaissé certaines plateformes comme demandé.
         self.map_data = [
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
@@ -17,10 +18,10 @@ class Carte:
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 1],
             [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -39,9 +40,6 @@ class Carte:
         self.largeur_map = len(self.map_data[0])
         self.hauteur_map = len(self.map_data)
         
-        # Le serveur stockera une carte de visibilité PAR joueur.
-        # Ici, on crée juste la structure. Le serveur la remplira.
-        # False = non visible, True = visible
         self.visibility_map = self.creer_carte_visibilite_vierge()
 
     def creer_carte_visibilite_vierge(self):
@@ -51,37 +49,28 @@ class Carte:
             vis_map.append([])
             for x, tuile in enumerate(rangee):
                 if tuile == 2:
-                    vis_map[y].append(True) # Les points de repère sont visibles
+                    vis_map[y].append(True) 
                 else:
                     vis_map[y].append(False)
         return vis_map
 
     def est_mur(self, x, y):
         """Vérifie si une tuile aux coordonnées (x, y) est un mur."""
-        # Convertit les coordonnées en pixels en coordonnées de tuile
         tuile_x = int(x // TAILLE_TUILE)
         tuile_y = int(y // TAILLE_TUILE)
         
-        # Vérifie les limites de la carte
         if 0 <= tuile_x < self.largeur_map and 0 <= tuile_y < self.hauteur_map:
             return self.map_data[tuile_y][tuile_x] == 1
-        return True # Considérer l'extérieur de la carte comme un mur
+        return True 
 
     def est_solide(self, tuile_x, tuile_y):
-        """
-        Vérifie si une tuile aux coordonnées DE TUILE (pas pixels) est un mur.
-        Utilisé par l'ennemi pour la détection de vide.
-        Les murs (1) et les save points (3) sont solides.
-        """
+        """Vérifie si une tuile est solide (pour l'ennemi)."""
         if 0 <= tuile_x < self.largeur_map and 0 <= tuile_y < self.hauteur_map:
             return self.map_data[tuile_y][tuile_x] in [1, 3]
-        return False # Considérer l'extérieur (haut/bas/côtés) comme non solide
+        return False 
 
     def reveler_par_echo(self, centre_x, centre_y, vis_map):
-        """
-        Lance des rayons depuis le centre et met à jour la carte de visibilité (vis_map).
-        Cette fonction est appelée par le SERVEUR.
-        """
+        """Lance des rayons depuis le centre et met à jour la carte de visibilité."""
         for i in range(NB_RAYONS_ECHO):
             angle = (i / NB_RAYONS_ECHO) * 2 * math.pi
             
@@ -92,32 +81,22 @@ class Carte:
                 tuile_x = int(x // TAILLE_TUILE)
                 tuile_y = int(y // TAILLE_TUILE)
 
-                # Vérifie les limites
                 if not (0 <= tuile_x < self.largeur_map and 0 <= tuile_y < self.hauteur_map):
-                    break # Sort de la boucle 'dist' si hors carte
+                    break 
 
-                # Si le rayon touche un mur ou un point de sauvegarde
                 if self.map_data[tuile_y][tuile_x] in [1, 3]:
-                    vis_map[tuile_y][tuile_x] = True # Révèle
-                    break # Arrête ce rayon
+                    vis_map[tuile_y][tuile_x] = True 
+                    break 
                 else:
-                    # Optionnel : révéler aussi le sol traversé ?
-                    # Pour l'instant, on ne révèle que le mur touché.
                     pass
-        
-        # La visibilité est permanente, donc on ne fait que mettre à True.
 
     def dessiner_carte(self, surface, vis_map):
-        """
-        Dessine la carte sur la surface (écran).
-        Cette fonction est appelée par le CLIENT.
-        Elle ne dessine QUE les tuiles visibles (True dans vis_map).
-        """
-        surface.fill(COULEUR_FOND) # Remplit le fond
+        """Dessine la carte sur la surface (écran)."""
+        surface.fill(COULEUR_FOND) 
         
         for y in range(self.hauteur_map):
             for x in range(self.largeur_map):
-                if vis_map[y][x]: # Si la tuile est visible
+                if vis_map[y][x]: 
                     rect = pygame.Rect(x * TAILLE_TUILE, y * TAILLE_TUILE, TAILLE_TUILE, TAILLE_TUILE)
                     
                     tuile_type = self.map_data[y][x]
@@ -130,10 +109,7 @@ class Carte:
                         pygame.draw.rect(surface, COULEUR_SAUVEGARDE, rect)
 
     def get_rects_collisions(self):
-        """
-        Renvoie une liste de Rect pour tous les murs (type 1).
-        Les save points (3) ne bloquent PAS le joueur.
-        """
+        """Renvoie une liste de Rect pour tous les murs (type 1)."""
         rects = []
         for y in range(self.hauteur_map):
             for x in range(self.largeur_map):

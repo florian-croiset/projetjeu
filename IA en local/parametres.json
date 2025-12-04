@@ -1,0 +1,17 @@
+{
+    "jouabilite": {
+        "langue": "fr",
+        "sensibilite_souris": 0.5
+    },
+    "video": {
+        "plein_ecran": true,
+        "vsync": false
+    },
+    "controles": {
+        "gauche": "q",
+        "droite": "d",
+        "saut": "space",
+        "echo": "e",
+        "attaque": "k"
+    }
+}

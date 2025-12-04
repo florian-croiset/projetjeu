@@ -1,5 +1,6 @@
 # parametres.py
 # Fichier pour stocker les constantes et paramètres globaux du jeu.
+# CORRECTION : Ajout de la valeur en âmes des ennemis.
 
 # -- Paramètres de la Fenêtre --
 LARGEUR_ECRAN = 1024
@@ -24,7 +25,7 @@ COULEUR_GUIDE = (30, 30, 30)
 COULEUR_FOND = (10, 10, 10) 
 COULEUR_SAUVEGARDE = (200, 200, 50) 
 COULEUR_AME_PERDUE = (150, 150, 255) 
-COULEUR_ATTAQUE = (255, 255, 200) # Couleur de l'effet d'attaque
+COULEUR_ATTAQUE = (255, 255, 200)
 
 # -- Couleurs pour l'Interface (UI) --
 COULEUR_TITRE = (220, 220, 220)
@@ -45,14 +46,15 @@ TEMPS_INVINCIBILITE = 1000
 ARGENT_DEPART = 0
 
 # -- Paramètres de Combat --
-DUREE_ATTAQUE = 200 # Durée de la hitbox d'attaque en ms
-COOLDOWN_ATTAQUE = 500 # Temps entre deux attaques en ms
-PORTEE_ATTAQUE = 40 # Portée en pixels devant le joueur
+DUREE_ATTAQUE = 200 
+COOLDOWN_ATTAQUE = 500 
+PORTEE_ATTAQUE = 40 
 DEGATS_JOUEUR = 1
 
 # -- Paramètres de l'Ennemi --
 VITESSE_ENNEMI = 1.5
 PV_ENNEMI_BASE = 3
+ARGENT_PAR_ENNEMI = 10 # <-- AJOUT : Un ennemi rapporte 10 âmes
 
 # -- Paramètres de l'Écho (Raycasting) --
 PORTEE_ECHO = 250 
