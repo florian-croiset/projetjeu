@@ -1,11 +1,14 @@
 # gestion_parametres.py
 # S'occupe de lire et écrire le fichier parametres.json
-# Mise à jour : Ajout de la touche 'attaque' par défaut.
+# CORRECTION : Utilise des chemins absolus pour le fichier JSON.
 
 import json
 import os
 
-NOM_FICHIER = "parametres.json"
+def get_chemin_absolu_parametres():
+    """Renvoie le chemin complet vers parametres.json dans le dossier du script."""
+    dossier_script = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(dossier_script, "parametres.json")
 
 def creer_parametres_defaut():
     """Crée un dictionnaire de paramètres par défaut."""
@@ -23,26 +26,25 @@ def creer_parametres_defaut():
             "droite": "d",
             "saut": "space",
             "echo": "e",
-            "attaque": "k" # Nouvelle touche par défaut
+            "attaque": "k" 
         }
     }
 
 def charger_parametres():
-    """
-    Charge les paramètres depuis le fichier JSON.
-    Gère la création par défaut et la mise à jour des clés manquantes.
-    """
-    if not os.path.exists(NOM_FICHIER):
-        print(f"Fichier {NOM_FICHIER} non trouvé, création avec les valeurs par défaut.")
+    """Charge les paramètres depuis le fichier JSON."""
+    chemin_fichier = get_chemin_absolu_parametres()
+    
+    if not os.path.exists(chemin_fichier):
+        print(f"Fichier {chemin_fichier} non trouvé, création.")
         parametres = creer_parametres_defaut()
         sauvegarder_parametres(parametres)
         return parametres
     
     try:
-        with open(NOM_FICHIER, 'r', encoding='utf-8') as f:
+        with open(chemin_fichier, 'r', encoding='utf-8') as f:
             parametres = json.load(f)
             
-            # Vérification de l'intégrité (ajoute les clés manquantes comme 'attaque')
+            # Vérification de l'intégrité
             parametres_defaut = creer_parametres_defaut()
             parametres_modifies = False
             
@@ -62,7 +64,7 @@ def charger_parametres():
                 
             return parametres
     except json.JSONDecodeError:
-        print(f"Erreur en lisant {NOM_FICHIER}. Recréation avec les valeurs par défaut.")
+        print(f"Erreur en lisant {chemin_fichier}. Recréation.")
         parametres = creer_parametres_defaut()
         sauvegarder_parametres(parametres)
         return parametres
@@ -72,8 +74,9 @@ def charger_parametres():
 
 def sauvegarder_parametres(parametres):
     """Sauvegarde le dictionnaire de paramètres dans le fichier JSON."""
+    chemin_fichier = get_chemin_absolu_parametres()
     try:
-        with open(NOM_FICHIER, 'w', encoding='utf-8') as f:
+        with open(chemin_fichier, 'w', encoding='utf-8') as f:
             json.dump(parametres, f, indent=4, ensure_ascii=False)
     except IOError as e:
         print(f"Erreur lors de la sauvegarde des paramètres: {e}")

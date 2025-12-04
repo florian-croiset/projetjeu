@@ -1,5 +1,6 @@
 # langue.py
 # Gère l'internationalisation (i18n) du jeu.
+# CORRECTION : Ajout des textes pour la popup de confirmation et le changement de langue.
 
 # Dictionnaire des textes en Français
 FR = {
@@ -13,7 +14,7 @@ FR = {
     "menu_nouvelle_partie": "Nouvelle Partie",
     "menu_continuer": "Continuer",
 
-    # Menu Slots (Nouvelle Partie / Continuer)
+    # Menu Slots
     "slots_titre_nouvelle": "Choisir un emplacement",
     "slots_titre_continuer": "Charger une partie",
     "slots_lancer": "Lancer",
@@ -35,7 +36,7 @@ FR = {
     # Menu Paramètres
     "param_titre": "Paramètres",
     "param_section_jouabilite": "--- Jouabilité ---",
-    "param_langue": "Langue",
+    "param_langue": "Langue : Français",
     "param_section_video": "--- Vidéo ---",
     "param_plein_ecran": "Plein écran",
     "param_vsync": "VSync (Non implémenté)",
@@ -44,11 +45,18 @@ FR = {
     "param_droite": "Droite",
     "param_saut": "Saut",
     "param_echo": "Écho",
+    "param_attaque": "Attaque",
     "param_appliquer": "Appliquer",
     "param_retour": "Retour",
     "param_attente_touche": "[ ... ]",
     "param_oui": "OUI",
-    "param_non": "NON"
+    "param_non": "NON",
+
+    # Popup Confirmation
+    "popup_titre": "Attention",
+    "popup_message": "Voulez-vous écraser cette sauvegarde ?",
+    "popup_oui": "Oui",
+    "popup_non": "Non"
 }
 
 # Dictionnaire des textes en Anglais
@@ -63,7 +71,7 @@ EN = {
     "menu_nouvelle_partie": "New Game",
     "menu_continuer": "Continue",
 
-    # Menu Slots (New Game / Continue)
+    # Menu Slots
     "slots_titre_nouvelle": "Choose a slot",
     "slots_titre_continuer": "Load a game",
     "slots_lancer": "Launch",
@@ -85,7 +93,7 @@ EN = {
     # Settings Menu
     "param_titre": "Settings",
     "param_section_jouabilite": "--- Gameplay ---",
-    "param_langue": "Language",
+    "param_langue": "Language: English",
     "param_section_video": "--- Video ---",
     "param_plein_ecran": "Fullscreen",
     "param_vsync": "VSync (Not implemented)",
@@ -94,11 +102,18 @@ EN = {
     "param_droite": "Right",
     "param_saut": "Jump",
     "param_echo": "Echo",
+    "param_attaque": "Attack",
     "param_appliquer": "Apply",
     "param_retour": "Back",
     "param_attente_touche": "[ ... ]",
     "param_oui": "YES",
-    "param_non": "NO"
+    "param_non": "NO",
+
+    # Popup Confirmation
+    "popup_titre": "Warning",
+    "popup_message": "Do you want to overwrite this save?",
+    "popup_oui": "Yes",
+    "popup_non": "No"
 }
 
 # Stocke tous les dictionnaires de langue
@@ -113,10 +128,8 @@ langue_actuelle = FR
 def set_langue(code_langue="fr"):
     """Définit la langue globale à utiliser."""
     global langue_actuelle
-    # Si la langue demandée n'existe pas, on garde le français par défaut
     langue_actuelle = LANGUES.get(code_langue, FR)
 
 def get_texte(cle):
     """Récupère un texte par sa clé dans la langue actuelle."""
-    # Si la clé n'est pas trouvée, on la renvoie elle-même pour voir l'erreur
     return langue_actuelle.get(cle, cle)

@@ -1,5 +1,6 @@
 # serveur.py
 # Gestion centrale : Physique, IA, Combat, Sauvegarde.
+# CORRECTION : Ajout du gain d'argent à la mort d'un ennemi.
 
 import socket
 import threading
@@ -75,7 +76,7 @@ class Serveur:
         nouveau_joueur = Joueur(spawn_x, spawn_y, id_joueur)
         # Si c'est l'hôte, on charge aussi son argent
         if id_joueur == 0:
-            nouveau_joueur.argent = self.donnees_partie.get("argent", 0) # TODO: Ajouter argent dans save
+            nouveau_joueur.argent = self.donnees_partie.get("argent", 0) 
             
         self.joueurs[id_joueur] = nouveau_joueur
         
@@ -152,17 +153,17 @@ class Serveur:
                             mort = ennemi.prendre_degat(DEGATS_JOUEUR)
                             if mort:
                                 print(f"[SERVEUR] Ennemi {id_ennemi} tué par Joueur {id_joueur}")
+                                # --- CORRECTION ICI ---
+                                joueur.argent += ARGENT_PAR_ENNEMI 
                                 del self.ennemis[id_ennemi]
-                                # TODO: Drop argent immédiat ?
                                 
                     # Contre les Âmes Perdues (Récupération)
                     for id_ame, ame in list(self.ames_perdues.items()):
-                        # Le joueur ne peut récupérer que SES âmes (ou toutes ? Disons siennes pour l'instant)
                         if ame.id_joueur == id_joueur:
                             if joueur.rect_attaque.colliderect(ame.rect):
                                 print(f"[SERVEUR] Joueur {id_joueur} a récupéré son âme ({ame.argent} argents)")
                                 joueur.argent += ame.argent
-                                joueur.ame_perdue = None # Il a récupéré son âme
+                                joueur.ame_perdue = None 
                                 del self.ames_perdues[id_ame]
 
                 # B. Gestion des Dégâts reçus (Joueur touche Ennemi)
