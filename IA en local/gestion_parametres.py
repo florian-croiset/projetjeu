@@ -1,5 +1,6 @@
 # gestion_parametres.py
 # S'occupe de lire et écrire le fichier parametres.json
+# Mise à jour : Ajout de la touche 'attaque' par défaut.
 
 import json
 import os
@@ -21,14 +22,15 @@ def creer_parametres_defaut():
             "gauche": "q",
             "droite": "d",
             "saut": "space",
-            "echo": "e"
+            "echo": "e",
+            "attaque": "k" # Nouvelle touche par défaut
         }
     }
 
 def charger_parametres():
     """
     Charge les paramètres depuis le fichier JSON.
-    S'il n'existe pas, il le crée avec les valeurs par défaut.
+    Gère la création par défaut et la mise à jour des clés manquantes.
     """
     if not os.path.exists(NOM_FICHIER):
         print(f"Fichier {NOM_FICHIER} non trouvé, création avec les valeurs par défaut.")
@@ -40,9 +42,10 @@ def charger_parametres():
         with open(NOM_FICHIER, 'r', encoding='utf-8') as f:
             parametres = json.load(f)
             
-            # Vérification de l'intégrité (ajoute les clés manquantes)
+            # Vérification de l'intégrité (ajoute les clés manquantes comme 'attaque')
             parametres_defaut = creer_parametres_defaut()
             parametres_modifies = False
+            
             for cle_section, section in parametres_defaut.items():
                 if cle_section not in parametres:
                     parametres[cle_section] = section
@@ -50,11 +53,11 @@ def charger_parametres():
                 else:
                     for cle, valeur in section.items():
                         if cle not in parametres[cle_section]:
+                            print(f"Paramètre manquant ajouté : {cle}")
                             parametres[cle_section][cle] = valeur
                             parametres_modifies = True
             
             if parametres_modifies:
-                print("Paramètres manquants détectés, mise à jour du fichier.")
                 sauvegarder_parametres(parametres)
                 
             return parametres

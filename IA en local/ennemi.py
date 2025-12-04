@@ -1,5 +1,5 @@
 # ennemi.py
-# Classe définissant un ennemi simple (IA de patrouille).
+# Classe définissant un ennemi simple avec PV et gestion des dégâts.
 
 import pygame
 from parametres import *
@@ -10,43 +10,39 @@ class Ennemi:
         self.rect = pygame.Rect(x, y, TAILLE_TUILE - 8, TAILLE_TUILE - 4)
         self.couleur = COULEUR_ENNEMI
         
+        # Stats
+        self.pv = PV_ENNEMI_BASE
+        
         # Mouvement
         self.vel_y = 0
         self.vitesse_patrouille = VITESSE_ENNEMI
         self.sur_le_sol = False
+        
+        # Feedback visuel dégât
+        self.dernier_coup_recu = 0
+        self.clignotement = False
 
     def appliquer_logique(self, rects_collision, carte):
-        """
-        Gère la physique, la patrouille et la détection de vide.
-        Appelé par le SERVEUR.
-        """
+        """Gère la physique et l'IA de patrouille."""
         dx = 0
         dy = 0
 
-        # --- Logique de Patrouille (IA) ---
-        
+        # --- IA Patrouille ---
         # 1. Détection du vide
-        # On vérifie la tuile juste en dessous et devant nous
-        
-        # Coordonnées de la tuile à vérifier (juste devant les pieds)
         tuile_x_verif = 0
-        if self.vitesse_patrouille > 0: # Se déplace à droite
+        if self.vitesse_patrouille > 0:
             tuile_x_verif = (self.rect.right + 2) // TAILLE_TUILE
-        else: # Se déplace à gauche
+        else:
             tuile_x_verif = (self.rect.left - 2) // TAILLE_TUILE
             
         tuile_y_verif = (self.rect.bottom + 1) // TAILLE_TUILE
         
-        # S'il n'y a PAS de sol devant, on fait demi-tour
         if not carte.est_solide(tuile_x_verif, tuile_y_verif):
             self.vitesse_patrouille = -self.vitesse_patrouille
             
-        # 2. Mouvement horizontal
         dx = self.vitesse_patrouille
             
-        # --- Physique (Gravité et Collisions) ---
-        
-        # 3. Mouvement vertical (gravité)
+        # --- Physique ---
         self.vel_y += GRAVITE
         if self.vel_y > 10:
             self.vel_y = 10
@@ -54,20 +50,18 @@ class Ennemi:
         
         self.sur_le_sol = False
         
-        # 4. Vérification des collisions
-        
-        # Axe X
+        # Collisions X
         self.rect.x += dx
         for mur in rects_collision:
             if self.rect.colliderect(mur):
                 if dx > 0:
                     self.rect.right = mur.left
-                    self.vitesse_patrouille = -self.vitesse_patrouille # Demi-tour
+                    self.vitesse_patrouille = -self.vitesse_patrouille
                 elif dx < 0:
                     self.rect.left = mur.right
-                    self.vitesse_patrouille = -self.vitesse_patrouille # Demi-tour
+                    self.vitesse_patrouille = -self.vitesse_patrouille
         
-        # Axe Y
+        # Collisions Y
         self.rect.y += dy
         for mur in rects_collision:
             if self.rect.colliderect(mur):
@@ -79,19 +73,36 @@ class Ennemi:
                     self.rect.top = mur.bottom
                     self.vel_y = 0
 
+    def prendre_degat(self, montant):
+        """Inflige des dégâts à l'ennemi."""
+        self.pv -= montant
+        self.dernier_coup_recu = pygame.time.get_ticks()
+        self.clignotement = True
+        return self.pv <= 0
+
     def dessiner(self, surface):
-        """Dessine l'ennemi sur l'écran (côté CLIENT)."""
-        pygame.draw.rect(surface, self.couleur, self.rect)
+        """Dessine l'ennemi. Clignote blanc si touché récemment."""
+        couleur = self.couleur
+        
+        if self.clignotement:
+            if pygame.time.get_ticks() - self.dernier_coup_recu < 100:
+                couleur = COULEUR_BLANC
+            else:
+                self.clignotement = False
+        
+        pygame.draw.rect(surface, couleur, self.rect)
 
     def get_etat(self):
-        """Pour l'envoi réseau : renvoie les données essentielles."""
         return {
             'id': self.id,
             'x': self.rect.x,
-            'y': self.rect.y
+            'y': self.rect.y,
+            'pv': self.pv,
+            'clignotement': self.clignotement # Pour synchro visuelle
         }
 
     def set_etat(self, data):
-        """Pour la réception réseau : met à jour l'ennemi."""
         self.rect.x = data['x']
         self.rect.y = data['y']
+        self.pv = data['pv']
+        self.clignotement = data.get('clignotement', False)

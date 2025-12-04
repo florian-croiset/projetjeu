@@ -1,13 +1,12 @@
 # serveur.py
-# Le CERVEAU du jeu. À lancer par l'hôte.
-# Gère la logique, la physique, et envoie l'état du jeu aux clients.
+# Gestion centrale : Physique, IA, Combat, Sauvegarde.
 
 import socket
 import threading
-import pickle # Pour sérialiser (convertir) les objets Python pour le réseau
+import pickle
 import time
-import sys # Pour lire les arguments de la ligne de commande
-import pygame # <--- AJOUT IMPORTANT (pour l'horloge et get_ticks)
+import sys
+import pygame
 
 from joueur import Joueur
 from carte import Carte
@@ -15,294 +14,223 @@ from parametres import *
 import gestion_sauvegarde
 import points_sauvegarde
 from ennemi import Ennemi
-from ame_perdue import AmePerdue # Import de la nouvelle classe
+from ame_perdue import AmePerdue
 
 class Serveur:
     def __init__(self, id_slot, est_nouvelle_partie):
         self.serveur_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.serveur_socket.bind(('', PORT_SERVEUR)) # Écoute sur toutes les interfaces
-        self.clients = {} # Dictionnaire {connexion_client: id_joueur}
-        self.joueurs = {} # Dictionnaire {id_joueur: objet Joueur}
-        self.cartes_visibilite = {} # Dictionnaire {id_joueur: vis_map}
-        self.ennemis = {} # Dictionnaire {id_ennemi: objet Ennemi}
-        self.ames_perdues = {} # Dictionnaire {id_ame: objet AmePerdue}
+        self.serveur_socket.bind(('', PORT_SERVEUR))
+        self.clients = {}
+        self.joueurs = {}
+        self.cartes_visibilite = {}
+        self.ennemis = {}
+        self.ames_perdues = {}
         
         self.carte_jeu = Carte()
         self.rects_collision = self.carte_jeu.get_rects_collisions()
-        
-        # Scan de la carte pour trouver les points de sauvegarde
         self.points_sauvegarde_map = self.scanner_points_sauvegarde()
         
-        # --- Chargement de la Sauvegarde ---
+        # --- Chargement Sauvegarde ---
         self.id_slot = id_slot
         self.donnees_partie = None
         self.spawn_point = None
         
         if est_nouvelle_partie:
-            print(f"[SERVEUR] Création d'une nouvelle partie (Slot {id_slot + 1})")
             self.donnees_partie = gestion_sauvegarde.creer_sauvegarde_vierge()
             gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
         else:
-            print(f"[SERVEUR] Chargement de la partie (Slot {id_slot + 1})")
             self.donnees_partie = gestion_sauvegarde.charger_partie(self.id_slot)
             if self.donnees_partie is None:
-                print("[SERVEUR] ERREUR: Slot de sauvegarde non trouvé. Création d'une nouvelle partie.")
                 self.donnees_partie = gestion_sauvegarde.creer_sauvegarde_vierge()
                 gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
 
-        # Définir le point de spawn de l'hôte
         id_checkpoint = self.donnees_partie["id_dernier_checkpoint"]
         self.spawn_point = points_sauvegarde.get_coords_par_id(id_checkpoint)
         
-        # --- Fin Chargement Sauvegarde ---
-        
-        # --- Création des ennemis ---
+        # --- Init ---
         self.creer_ennemis()
-        
         self.prochain_id_joueur = 0
         self.running = True
-        
         print(f"[SERVEUR] Démarré sur le port {PORT_SERVEUR}")
-        
+
     def scanner_points_sauvegarde(self):
-        """Scanne la carte et renvoie un dico {id_str: rect} des checkpoints."""
         points = {}
         for y, rangee in enumerate(self.carte_jeu.map_data):
             for x, tuile in enumerate(rangee):
-                if tuile == 3: # 3 = Point de Sauvegarde
+                if tuile == 3:
                     id_str = f"{x}_{y}"
                     rect = pygame.Rect(x * TAILLE_TUILE, y * TAILLE_TUILE, TAILLE_TUILE, TAILLE_TUILE)
                     points[id_str] = rect
-                    print(f"[SERVEUR] Point de sauvegarde trouvé à {id_str}")
         return points
 
     def creer_ennemis(self):
-        """Place les ennemis sur la carte."""
-        # On le place sur la plateforme au-dessus du spawn
-        ennemi_1 = Ennemi(x=200, y=680, id=0)
-        self.ennemis[0] = ennemi_1
-        
-        ennemi_2 = Ennemi(x=500, y=420, id=1) # Sur la plateforme du milieu (abaissée)
-        self.ennemis[1] = ennemi_2
-        
-        ennemi_3 = Ennemi(x=800, y=260, id=2) # Sur la plateforme haute
-        self.ennemis[2] = ennemi_3
-        
+        # Création de quelques ennemis pour tester
+        self.ennemis[0] = Ennemi(x=200, y=680, id=0)
+        self.ennemis[1] = Ennemi(x=500, y=420, id=1)
+        self.ennemis[2] = Ennemi(x=800, y=260, id=2)
+
     def gerer_client(self, connexion_client, id_joueur):
-        """Gère la connexion pour un client unique (dans un thread séparé)."""
-        print(f"[SERVEUR] Nouveau client connecté, ID: {id_joueur}")
+        spawn_x, spawn_y = self.spawn_point if id_joueur == 0 else points_sauvegarde.get_point_depart()[1]
         
-        # 1. Créer le joueur et sa carte de visibilité
-        
-        # L'hôte (ID 0) apparaît au point de sauvegarde
-        # Les autres joueurs apparaissent au point de spawn initial (pour l'instant)
-        spawn_x, spawn_y = self.spawn_point
-        if id_joueur != 0:
-            spawn_x, spawn_y = points_sauvegarde.get_point_depart()[1] # Spawn de base pour les invités
-            
         nouveau_joueur = Joueur(spawn_x, spawn_y, id_joueur)
+        # Si c'est l'hôte, on charge aussi son argent
+        if id_joueur == 0:
+            nouveau_joueur.argent = self.donnees_partie.get("argent", 0) # TODO: Ajouter argent dans save
+            
         self.joueurs[id_joueur] = nouveau_joueur
         
-        # ATTRIBUTION DE LA CARTE DE VISIBILITÉ
         if id_joueur == 0:
-            # L'hôte (ID 0) récupère la carte de visibilité de la sauvegarde
             self.cartes_visibilite[id_joueur] = self.donnees_partie["vis_map"]
-            print(f"[SERVEUR] Hôte (ID 0) connecté, chargement de la vis_map sauvegardée.")
         else:
-            # Les autres joueurs ont une carte vierge
             self.cartes_visibilite[id_joueur] = self.carte_jeu.creer_carte_visibilite_vierge()
-            print(f"[SERVEUR] Client (ID {id_joueur}) connecté, création d'une vis_map vierge.")
 
-        # 2. Envoyer l'ID au client
         connexion_client.send(pickle.dumps(id_joueur))
         
         try:
             while self.running:
-                # 3. Recevoir les commandes du client
                 try:
                     commandes = pickle.loads(connexion_client.recv(2048))
                 except EOFError:
-                    break # Le client s'est déconnecté
+                    break
                 
-                # Mettre à jour les commandes du joueur
                 self.joueurs[id_joueur].commandes = commandes['clavier']
                 
-                # Gérer l'écho (AVEC COOLDOWN)
+                # Gestion Écho
                 if commandes['echo']:
                     temps_actuel = pygame.time.get_ticks()
                     joueur = self.joueurs[id_joueur]
-                    
                     if temps_actuel - joueur.dernier_echo_temps > COOLDOWN_ECHO:
-                        print(f"[SERVEUR] Joueur {id_joueur} utilise l'écho.")
-                        joueur.dernier_echo_temps = temps_actuel # Met à jour le timestamp
-                        
-                        centre_x = joueur.rect.centerx
-                        centre_y = joueur.rect.centery
-                        self.carte_jeu.reveler_par_echo(centre_x, centre_y, self.cartes_visibilite[id_joueur])
-                    # else:
-                        # print(f"[SERVEUR] Joueur {id_joueur} écho en cooldown.")
+                        joueur.dernier_echo_temps = temps_actuel
+                        self.carte_jeu.reveler_par_echo(joueur.rect.centerx, joueur.rect.centery, self.cartes_visibilite[id_joueur])
 
-                # 4. Préparer l'état du jeu à renvoyer
-                
-                # Obtenir l'état de tous les joueurs
+                # Préparation données
                 etat_joueurs = [j.get_etat() for j in self.joueurs.values()]
-                # Obtenir l'état de tous les ennemis
                 etat_ennemis = [e.get_etat() for e in self.ennemis.values()]
-                # Obtenir l'état de toutes les âmes
                 etat_ames = [a.get_etat() for a in self.ames_perdues.values()]
                 
-                # Préparer les données spécifiques à CE client
                 donnees_pour_client = {
                     'joueurs': etat_joueurs,
-                    'vis_map': self.cartes_visibilite[id_joueur], # N'envoie que SA carte
+                    'vis_map': self.cartes_visibilite[id_joueur],
                     'ennemis': etat_ennemis,
-                    'ames_perdues': etat_ames # Envoi des âmes
+                    'ames_perdues': etat_ames
                 }
 
-                # 5. Envoyer l'état du jeu au client
                 connexion_client.send(pickle.dumps(donnees_pour_client))
                 
         except socket.error as e:
-            print(f"[SERVEUR] Erreur de socket client {id_joueur}: {e}")
+            print(f"[SERVEUR] Erreur socket {id_joueur}: {e}")
         finally:
-            # Nettoyer en cas de déconnexion
             print(f"[SERVEUR] Client {id_joueur} déconnecté.")
             connexion_client.close()
-            del self.clients[connexion_client]
-            del self.joueurs[id_joueur]
-            del self.cartes_visibilite[id_joueur]
-            # Si le joueur qui part avait une âme, on la supprime
-            if id_joueur in [ame.id_joueur for ame in self.ames_perdues.values()]:
-                try:
-                    id_ame_a_suppr = next(ame.id for ame in self.ames_perdues.values() if ame.id_joueur == id_joueur)
-                    del self.ames_perdues[id_ame_a_suppr]
-                except StopIteration:
-                    pass # L'âme n'existait plus
+            if connexion_client in self.clients:
+                del self.clients[connexion_client]
+            if id_joueur in self.joueurs:
+                del self.joueurs[id_joueur]
+            if id_joueur in self.cartes_visibilite:
+                del self.cartes_visibilite[id_joueur]
 
     def boucle_jeu_serveur(self):
-        """
-        Boucle principale du serveur.
-        Met à jour la physique de tous les joueurs.
-        """
         horloge = pygame.time.Clock()
         while self.running:
             temps_actuel = pygame.time.get_ticks()
             
-            # Mettre à jour la logique de chaque ennemi
+            # 1. Ennemis
             for id_ennemi, ennemi in list(self.ennemis.items()):
                 ennemi.appliquer_logique(self.rects_collision, self.carte_jeu)
 
-            # Mettre à jour les joueurs (physique, dégâts, mort, sauvegarde)
+            # 2. Joueurs (Physique, Combat, Mort)
             for id_joueur, joueur in list(self.joueurs.items()):
                 joueur.appliquer_physique(self.rects_collision)
                 
-                # --- 1. Gestion des Dégâts ---
+                # A. Gestion de l'Attaque du Joueur
+                a_attaque = joueur.gerer_attaque(temps_actuel)
+                
+                if joueur.est_en_attaque and joueur.rect_attaque:
+                    # Contre les Ennemis
+                    for id_ennemi, ennemi in list(self.ennemis.items()):
+                        if joueur.rect_attaque.colliderect(ennemi.rect):
+                            mort = ennemi.prendre_degat(DEGATS_JOUEUR)
+                            if mort:
+                                print(f"[SERVEUR] Ennemi {id_ennemi} tué par Joueur {id_joueur}")
+                                del self.ennemis[id_ennemi]
+                                # TODO: Drop argent immédiat ?
+                                
+                    # Contre les Âmes Perdues (Récupération)
+                    for id_ame, ame in list(self.ames_perdues.items()):
+                        # Le joueur ne peut récupérer que SES âmes (ou toutes ? Disons siennes pour l'instant)
+                        if ame.id_joueur == id_joueur:
+                            if joueur.rect_attaque.colliderect(ame.rect):
+                                print(f"[SERVEUR] Joueur {id_joueur} a récupéré son âme ({ame.argent} argents)")
+                                joueur.argent += ame.argent
+                                joueur.ame_perdue = None # Il a récupéré son âme
+                                del self.ames_perdues[id_ame]
+
+                # B. Gestion des Dégâts reçus (Joueur touche Ennemi)
                 for id_ennemi, ennemi in list(self.ennemis.items()):
                     if joueur.rect.colliderect(ennemi.rect):
                         joueur.prendre_degat(1, temps_actuel)
-                        # (On pourrait ajouter un recul ici)
                 
-                # --- 2. Gestion de la Mort et Respawn ---
+                # C. Mort et Respawn
                 if joueur.pv <= 0:
-                    # a. Gérer l'âme (Ghost)
-                    # Si le joueur a déjà une âme, elle est perdue
-                    if joueur.ame_perdue:
-                        if joueur.ame_perdue.id in self.ames_perdues:
-                            del self.ames_perdues[joueur.ame_perdue.id]
-                            print(f"[SERVEUR] Ame {joueur.ame_perdue.id} (Joueur {id_joueur}) perdue.")
+                    # Perte de l'ancienne âme si elle existait
+                    if joueur.ame_perdue and joueur.ame_perdue.id in self.ames_perdues:
+                        del self.ames_perdues[joueur.ame_perdue.id]
                     
-                    # b. Créer une nouvelle âme
-                    argent_perdu = 0 # TODO: Implémenter l'argent
-                    nouvelle_ame = AmePerdue(joueur.rect.centerx, joueur.rect.centery, id_joueur, argent_perdu)
+                    # Création nouvelle âme avec l'argent actuel
+                    nouvelle_ame = AmePerdue(joueur.rect.centerx, joueur.rect.centery, id_joueur, joueur.argent)
                     self.ames_perdues[nouvelle_ame.id] = nouvelle_ame
-                    joueur.ame_perdue = nouvelle_ame # Le joueur se souvient de sa nouvelle âme
+                    joueur.ame_perdue = nouvelle_ame
                     
-                    # c. Récupérer le point de spawn
-                    # L'hôte (0) utilise sa sauvegarde
-                    # Les clients (autres) utilisent le spawn de base
-                    id_checkpoint = ""
-                    if id_joueur == 0:
-                        id_checkpoint = self.donnees_partie["id_dernier_checkpoint"]
-                    else:
-                        id_checkpoint = points_sauvegarde.get_point_depart()[0] # Spawn de base
+                    joueur.argent = 0 # Perte de l'argent porté
                     
+                    # Respawn
+                    id_checkpoint = self.donnees_partie["id_dernier_checkpoint"] if id_joueur == 0 else points_sauvegarde.get_point_depart()[0]
                     coords_spawn = points_sauvegarde.get_coords_par_id(id_checkpoint)
                     joueur.respawn(coords_spawn)
-                    
-                    # d. TODO: Gérer la perte de visibilité de la zone
 
-                # --- 3. Gestion de la Sauvegarde (Hôte uniquement) ---
-                if id_joueur == 0: # Seul l'hôte sauvegarde
+                # D. Sauvegarde (Hôte)
+                if id_joueur == 0: 
                     for id_save, rect_save in self.points_sauvegarde_map.items():
                         if joueur.rect.colliderect(rect_save):
-                            # On vérifie si c'est un *nouveau* checkpoint
                             if self.donnees_partie["id_dernier_checkpoint"] != id_save:
-                                print(f"[SERVEUR] Hôte a atteint un nouveau checkpoint: {id_save}")
                                 self.donnees_partie["id_dernier_checkpoint"] = id_save
                                 self.donnees_partie["vis_map"] = self.cartes_visibilite[id_joueur]
+                                self.donnees_partie["argent"] = joueur.argent # Sauvegarde argent
                                 gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
-                                # TODO: Ajouter un effet visuel/sonore
             
-            # Limiter la boucle (ticks du serveur)
             horloge.tick(FPS)
 
     def demarrer(self):
-        """Accepte les nouvelles connexions et lance la boucle de jeu."""
-        
-        # Lancer la boucle de jeu (physique) dans un thread séparé
         thread_boucle_jeu = threading.Thread(target=self.boucle_jeu_serveur)
-        thread_boucle_jeu.daemon = True # S'arrête si le script principal s'arrête
+        thread_boucle_jeu.daemon = True
         thread_boucle_jeu.start()
         
-        # Accepter les connexions
         self.serveur_socket.listen()
         
         while True:
             connexion_client, adresse = self.serveur_socket.accept()
-            
             id_joueur = self.prochain_id_joueur
             self.prochain_id_joueur += 1
             
             self.clients[connexion_client] = id_joueur
-            
-            # Démarrer un thread pour gérer ce client
             thread_client = threading.Thread(target=self.gerer_client, args=(connexion_client, id_joueur))
             thread_client.daemon = True
             thread_client.start()
 
-# --- Point d'entrée ---
 if __name__ == "__main__":
-    # Initialiser pygame pour l'horloge (pas besoin de fenêtre)
     pygame.init() 
-    
-    # --- Lecture des arguments de lancement ---
-    # sys.argv[0] est le nom du script (serveur.py)
-    # sys.argv[1] sera l'id_slot (0, 1, ou 2)
-    # sys.argv[2] sera 'nouvelle' ou 'charger'
-    
     if len(sys.argv) != 3:
-        print("Usage: python serveur.py <id_slot> <nouvelle|charger>")
         sys.exit(1)
-        
     try:
         id_slot_arg = int(sys.argv[1])
         type_lancement = sys.argv[2]
-        
-        if id_slot_arg not in range(NB_SLOTS_SAUVEGARDE):
-            raise ValueError("ID de slot invalide")
-            
         est_nouvelle_partie_arg = (type_lancement == 'nouvelle')
-        
-    except ValueError as e:
-        print(f"Erreur d'arguments: {e}")
+    except ValueError:
         sys.exit(1)
 
-    # --- Fin Lecture Arguments ---
-    
     serveur_jeu = Serveur(id_slot=id_slot_arg, est_nouvelle_partie=est_nouvelle_partie_arg)
     try:
         serveur_jeu.demarrer()
     except KeyboardInterrupt:
-        print("[SERVEUR] Arrêt manuel.")
         serveur_jeu.running = False
         serveur_jeu.serveur_socket.close()

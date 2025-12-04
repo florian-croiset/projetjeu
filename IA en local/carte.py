@@ -3,7 +3,7 @@
 
 import pygame
 from parametres import *
-
+import math
 class Carte:
     def __init__(self):
         # Pour ce prototype, la carte est codée en dur.
