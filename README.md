@@ -1,4 +1,4 @@
-# Projetjeu J3D
+# Projetjeu
 | Key/Input | Action |
 | :---: | :---: |
 | Non modifiable |
