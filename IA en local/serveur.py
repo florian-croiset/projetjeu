@@ -218,20 +218,27 @@ class Serveur:
             thread_client.daemon = True
             thread_client.start()
 
-if __name__ == "__main__":
-    pygame.init() 
-    if len(sys.argv) != 3:
-        sys.exit(1)
-    try:
-        id_slot_arg = int(sys.argv[1])
-        type_lancement = sys.argv[2]
-        est_nouvelle_partie_arg = (type_lancement == 'nouvelle')
-    except ValueError:
-        sys.exit(1)
+#if __name__ == "__main__":
+#    pygame.init() 
+ #   if len(sys.argv) != 3:
+  #      sys.exit(1)
+   # try:
+   #     id_slot_arg = int(sys.argv[1])
+    #    type_lancement = sys.argv[2]
+  #      est_nouvelle_partie_arg = (type_lancement == 'nouvelle')
+ #   except ValueError:
+       # sys.exit(1)
+#
+ #   serveur_jeu = Serveur(id_slot=id_slot_arg, est_nouvelle_partie=est_nouvelle_partie_arg)
+  #  try:
+   #     serveur_jeu.demarrer()
+    #except KeyboardInterrupt:
+     #   serveur_jeu.running = False
+      #  serveur_jeu.serveur_socket.close()
 
-    serveur_jeu = Serveur(id_slot=id_slot_arg, est_nouvelle_partie=est_nouvelle_partie_arg)
-    try:
-        serveur_jeu.demarrer()
-    except KeyboardInterrupt:
-        serveur_jeu.running = False
-        serveur_jeu.serveur_socket.close()
+
+def main(id_slot, type_lancement):
+    pygame.init()
+    est_nouvelle_partie = (type_lancement == "nouvelle")
+    serveur_jeu = Serveur(id_slot=id_slot, est_nouvelle_partie=est_nouvelle_partie)
+    serveur_jeu.demarrer()
