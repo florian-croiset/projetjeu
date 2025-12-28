@@ -26,6 +26,19 @@ import gestion_sauvegarde
 class Client:
     def __init__(self):
         pygame.init()
+        try:
+            if getattr(sys, 'frozen', False):
+                base_path = sys._MEIPASS
+            else:
+                base_path = os.path.dirname(__file__)
+        
+            icon_path = os.path.join(base_path, 'favicon.png')
+            icon = pygame.image.load(icon_path)
+            pygame.display.set_icon(icon)
+        except Exception as e:
+            print(f"Impossible de charger l'icône: {e}")
+
+
         self.parametres = gestion_parametres.charger_parametres()
         
         langue.set_langue(self.parametres['jouabilite']['langue'])
