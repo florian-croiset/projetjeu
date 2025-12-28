@@ -7,3 +7,10 @@ settings.json
 controls.json
 
 save_slots.json
+
+*.iss
+*.json
+
+"IA en local"/build/
+"IA en local"/dist/
+"IA en local"/installer_output/
