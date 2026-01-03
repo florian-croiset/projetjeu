@@ -6,7 +6,9 @@ import pygame
 import socket
 import pickle
 import sys
-import subprocess
+#import subprocess
+import threading
+import serveur
 import time
 import copy
 import os 
@@ -24,6 +26,19 @@ import gestion_sauvegarde
 class Client:
     def __init__(self):
         pygame.init()
+        try:
+            if getattr(sys, 'frozen', False):
+                base_path = sys._MEIPASS
+            else:
+                base_path = os.path.dirname(__file__)
+        
+            icon_path = os.path.join(base_path, 'favicon.png')
+            icon = pygame.image.load(icon_path)
+            pygame.display.set_icon(icon)
+        except Exception as e:
+            print(f"Impossible de charger l'icône: {e}")
+
+
         self.parametres = gestion_parametres.charger_parametres()
         
         langue.set_langue(self.parametres['jouabilite']['langue'])
@@ -538,33 +553,25 @@ class Client:
     # --- GESTION DU RÉSEAU ET DU JEU ---
 
     def lancer_partie_locale(self, id_slot, est_nouvelle_partie=False):
-        """Lance le serveur local ET s'y connecte."""
-        
-        # 1. Lancer le serveur en arrière-plan avec les bons arguments
         type_lancement = "nouvelle" if est_nouvelle_partie else "charger"
-        print(f"[CLIENT] Lancement du serveur local (Slot {id_slot}, Type: {type_lancement})...")
-        try:
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            serveur_path = os.path.join(script_dir, 'serveur.py')
-            commande_lancement = [sys.executable, serveur_path, str(id_slot), type_lancement]
-            self.processus_serveur = subprocess.Popen(commande_lancement)
-            print("[CLIENT] Serveur démarré en arrière-plan.")
-            time.sleep(2) # Laisse 2 secondes au serveur pour démarrer
-        except FileNotFoundError as e:
-            print(f"[CLIENT] ERREUR CRITIQUE: {e}")
-            self.etat_jeu = "MENU_PRINCIPAL"
-            return
-        except Exception as e:
-            print(f"[CLIENT] Erreur inconnue lors du lancement du serveur: {e}")
-            self.etat_jeu = "MENU_PRINCIPAL"
-            return
-            
-        # 2. Se connecter au serveur (en tant qu'hôte 'localhost')
+
+        print(f"[CLIENT] Démarrage serveur local (slot {id_slot}, {type_lancement})")
+
+        thread_serveur = threading.Thread(
+            target=serveur.main,
+            args=(id_slot, type_lancement),
+            daemon=True
+        )
+        thread_serveur.start()
+
+        time.sleep(1.5)
+
         if self.connecter("localhost"):
             self.etat_jeu = "EN_JEU"
         else:
-            print("[CLIENT] Erreur: Le serveur local n'a pas pu être rejoint.")
-            self.etat_jeu = "MENU_PRINCIPAL" # Retour au menu
+            print("[CLIENT] Échec connexion serveur")
+            self.etat_jeu = "MENU_PRINCIPAL"
+
 
     def lancer_serveur_local(self):
         """DEPRECATED - Remplacé par lancer_partie_locale"""
