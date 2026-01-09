@@ -77,6 +77,7 @@ class Client:
         
         # Variables pour le scroll des paramètres
         self.scroll_y_params = 0
+        self.message_erreur_connexion = None
         
         self.creer_widgets_menu_principal()
         self.creer_widgets_menu_rejoindre()
@@ -84,6 +85,28 @@ class Client:
         self.creer_widgets_menu_pause()
         self.creer_widgets_menu_slots()
         self.creer_widgets_menu_confirmation() # Nouveau
+
+
+
+    def obtenir_ip_locale(self):
+        """Retourne l'IP locale de la machine sur le réseau."""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip_locale = s.getsockname()[0]
+            s.close()
+            return ip_locale
+        except Exception:
+            return "Non disponible"
+
+    def copier_dans_presse_papier(self, texte):
+        """Copie le texte dans le presse-papiers (Windows uniquement pour l'instant)"""
+        try:
+            import subprocess
+            subprocess.run(['clip'], input=texte.encode('utf-16le'), check=True)
+            return True
+        except:
+            return False
 
     def appliquer_parametres_video(self, premiere_fois=False):
         flags = pygame.SCALED
@@ -93,6 +116,8 @@ class Client:
 
     def creer_widgets_menu_principal(self):
         cx = self.largeur_ecran // 2
+        col_droite_bouton = cx + 50
+        largeur_btn_param = 300
         largeur_btn = 400 
         y_start = 250
         self.btn_nouvelle_partie = Bouton(cx - largeur_btn//2, y_start, largeur_btn, 50, langue.get_texte("menu_nouvelle_partie"), self.police_bouton)
@@ -106,6 +131,8 @@ class Client:
         self.btn_quitter = Bouton(cx - largeur_btn//2, y_start, largeur_btn, 50, langue.get_texte("menu_quitter"), self.police_bouton)
         self.boutons_menu_principal = [self.btn_nouvelle_partie, self.btn_continuer, self.btn_rejoindre, self.btn_parametres, self.btn_quitter]
 
+        self.btn_copier_ip_locale = Bouton(col_droite_bouton, 0, largeur_btn_param, 40, "", self.police_texte) #IP
+
     def creer_widgets_menu_rejoindre(self):
         cx = self.largeur_ecran // 2
         self.input_box_ip = pygame.Rect(cx - 200, 300, 400, 50)
@@ -113,6 +140,7 @@ class Client:
         self.input_ip_actif = False
         self.btn_connecter = Bouton(cx - 200, 370, 400, 50, langue.get_texte("rejoindre_connecter"), self.police_bouton)
         self.btn_retour_rejoindre = Bouton(cx - 200, 440, 400, 50, langue.get_texte("rejoindre_retour"), self.police_bouton)
+        self.btn_erreur_ok = Bouton(cx - 50, 0, 100, 50, "OK", self.police_bouton)
 
     def creer_widgets_menu_parametres(self):
         self.widgets_parametres = {}
@@ -141,7 +169,8 @@ class Client:
             self.btn_changer_langue,
             self.btn_toggle_plein_ecran,
             self.btn_changer_gauche, self.btn_changer_droite,
-            self.btn_changer_saut, self.btn_changer_echo, self.btn_changer_attaque
+            self.btn_changer_saut, self.btn_changer_echo, self.btn_changer_attaque,
+            self.btn_copier_ip_locale
         ]
         
         self.boutons_menu_params_fixes = [self.btn_appliquer_params, self.btn_retour_params]
@@ -274,6 +303,16 @@ class Client:
             bouton.dessiner(self.ecran)
 
     def gerer_menu_rejoindre(self, pos_souris):
+        # Si popup d'erreur affichée, gérer uniquement le bouton OK
+        if self.message_erreur_connexion:
+            self.btn_erreur_ok.verifier_survol(pos_souris)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.etat_jeu = "QUITTER"
+                if self.btn_erreur_ok.verifier_clic(event):
+                    self.message_erreur_connexion = None
+            return
+        
         self.btn_connecter.verifier_survol(pos_souris)
         self.btn_retour_rejoindre.verifier_survol(pos_souris)
         for event in pygame.event.get():
@@ -285,8 +324,6 @@ class Client:
                 hote = self.input_ip_texte if self.input_ip_texte else "localhost"
                 if self.connecter(hote):
                     self.etat_jeu = "EN_JEU"
-                else:
-                    print(f"[CLIENT] Échec de la connexion à {hote}")
             if event.type == pygame.MOUSEBUTTONDOWN:
                 self.input_ip_actif = self.input_box_ip.collidepoint(event.pos)
             if event.type == pygame.KEYDOWN and self.input_ip_actif:
@@ -313,6 +350,36 @@ class Client:
             pygame.draw.rect(self.ecran, COULEUR_TEXTE, curseur_rect)
         self.btn_connecter.dessiner(self.ecran)
         self.btn_retour_rejoindre.dessiner(self.ecran)
+        
+        # ⬇️ POPUP D'ERREUR
+        if self.message_erreur_connexion:
+            # Fond semi-transparent
+            surface_overlay = pygame.Surface((self.largeur_ecran, self.hauteur_ecran), pygame.SRCALPHA)
+            surface_overlay.fill((0, 0, 0, 180))
+            self.ecran.blit(surface_overlay, (0, 0))
+            
+            # Cadre popup
+            cx = self.largeur_ecran // 2
+            cy = self.hauteur_ecran // 2
+            rect_popup = pygame.Rect(cx - 300, cy - 150, 600, 300)
+            pygame.draw.rect(self.ecran, COULEUR_BOUTON, rect_popup, border_radius=10)
+            pygame.draw.rect(self.ecran, (255, 80, 80), rect_popup, width=3, border_radius=10)
+            
+            # Titre
+            titre_erreur = self.police_bouton.render("Erreur de connexion", True, (255, 80, 80))
+            self.ecran.blit(titre_erreur, titre_erreur.get_rect(center=(cx, cy - 80)))
+            
+            # Message (peut avoir plusieurs lignes)
+            lignes = self.message_erreur_connexion.split('\n')
+            y_offset = cy - 20
+            for ligne in lignes:
+                txt = self.police_texte.render(ligne, True, COULEUR_TEXTE)
+                self.ecran.blit(txt, txt.get_rect(center=(cx, y_offset)))
+                y_offset += 40
+            
+            # Bouton OK
+            self.btn_erreur_ok.rect.y = cy + 80
+            self.btn_erreur_ok.dessiner(self.ecran)
 
     def gerer_menu_slots(self, pos_souris):
         tous_boutons = self.boutons_slots + [self.btn_retour_slots]
@@ -468,6 +535,12 @@ class Client:
                 if self.btn_changer_echo.verifier_clic(event): self.touche_a_modifier = "echo"
                 if self.btn_changer_attaque.verifier_clic(event): self.touche_a_modifier = "attaque" 
 
+                # Gestion des boutons IP
+                if self.btn_copier_ip_locale.verifier_clic(event):
+                    ip = self.obtenir_ip_locale()
+                    if self.copier_dans_presse_papier(ip):
+                        print(f"[CLIENT] IP locale copiée : {ip}")
+
         # Mise à jour survol pour boutons fixes
         for btn in self.boutons_menu_params_fixes:
             btn.verifier_survol(pos_souris)
@@ -550,6 +623,22 @@ class Client:
         self.btn_appliquer_params.dessiner(self.ecran)
         self.btn_retour_params.dessiner(self.ecran)
 
+        # Section Réseau
+        y_base += 70  # (Espacement)
+        titre_section = self.police_bouton.render(langue.get_texte("param_section_reseau"), True, COULEUR_TITRE)
+        self.ecran.blit(titre_section, (100, y_base))
+        y_base += 60
+        
+        # IP Locale
+        lbl_ip_locale = self.police_texte.render("IP Locale (LAN) :", True, COULEUR_TEXTE)
+        self.ecran.blit(lbl_ip_locale, (120, y_base + 5))
+        
+        self.btn_copier_ip_locale.rect.y = y_base
+        ip_locale = self.obtenir_ip_locale()
+        self.btn_copier_ip_locale.texte = f"{ip_locale}    (copier)"
+        self.btn_copier_ip_locale.dessiner(self.ecran)
+        y_base += 50
+
     # --- GESTION DU RÉSEAU ET DU JEU ---
 
     def lancer_partie_locale(self, id_slot, est_nouvelle_partie=False):
@@ -586,11 +675,26 @@ class Client:
             print(f"[CLIENT] Connexion à {hote}:{PORT_SERVEUR}...")
             self.client_socket.connect((hote, PORT_SERVEUR))
             
-            # Recevoir son ID
-            self.mon_id = pickle.loads(self.client_socket.recv(2048))
+            # Recevoir la réponse
+            reponse = pickle.loads(self.client_socket.recv(2048))
+            
+            # Vérifier si c'est une erreur
+            if isinstance(reponse, dict) and "erreur" in reponse:
+                if reponse["erreur"] == "SERVEUR_PLEIN":
+                    print("[CLIENT] Serveur plein (3/3 joueurs)")
+                    self.message_erreur_connexion = "Le serveur est plein !\n(3/3 joueurs connectes)"
+                    self.client_socket.close()
+                    self.client_socket = None
+                    return False
+            
+            # C'est l'ID du joueur
+            self.mon_id = reponse
             print(f"[CLIENT] Connecté avec succès. Mon ID est {self.mon_id}")
             
-            # Initialiser les éléments de jeu
+            # Réinitialiser message d'erreur
+            self.message_erreur_connexion = None
+            
+            # Initialiser jeu
             self.carte = Carte()
             self.vis_map_locale = self.carte.creer_carte_visibilite_vierge()
             self.joueurs_locaux = {}
@@ -599,7 +703,8 @@ class Client:
             
             return True
         except socket.error as e:
-            print(f"[CLIENT] Échec de la connexion: {e}")
+            print(f"[CLIENT] Échec connexion: {e}")
+            self.message_erreur_connexion = f"Impossible de se connecter\nau serveur : {hote}"
             self.client_socket = None
             return False
 

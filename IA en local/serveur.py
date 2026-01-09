@@ -17,10 +17,38 @@ import points_sauvegarde
 from ennemi import Ennemi
 from ame_perdue import AmePerdue
 
+def obtenir_ip_locale():
+    """Retourne l'IP locale de la machine sur le réseau."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip_locale = s.getsockname()[0]
+        s.close()
+        return ip_locale
+    except Exception:
+        return "127.0.0.1"  # il se passe rien si pas de connexion
+
+ip_serveur = obtenir_ip_locale()
+print(f"[SERVEUR] IP locale : {ip_serveur}")
+print(f"[SERVEUR] Les autres joueurs peuvent se connecter avec : {ip_serveur}")
+
 class Serveur:
     def __init__(self, id_slot, est_nouvelle_partie):
+        #Pour le réseau debut
         self.serveur_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.serveur_socket.bind(('', PORT_SERVEUR))
+        self.serveur_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        try:
+            self.serveur_socket.bind(('0.0.0.0', PORT_SERVEUR))
+            ip_serveur = obtenir_ip_locale()
+            print(f"[SERVEUR] Démarré sur le port {PORT_SERVEUR}")
+            print(f"[SERVEUR] IP locale : {ip_serveur}")
+            print(f"[SERVEUR] Les autres joueurs peuvent se connecter avec : {ip_serveur}")
+        except OSError as e:
+            print(f"[SERVEUR] ERREUR lors du bind: {e}")
+            raise 
+        #fin
+
         self.clients = {}
         self.joueurs = {}
         self.cartes_visibilite = {}
@@ -207,16 +235,35 @@ class Serveur:
         thread_boucle_jeu.start()
         
         self.serveur_socket.listen()
+        print("[SERVEUR] En attente de connexions...")
         
         while True:
+            # Accepter la connexion
             connexion_client, adresse = self.serveur_socket.accept()
+            print(f"[SERVEUR] Tentative de connexion depuis {adresse}")
+            
+            # ⬇️ VÉRIFICATION : LIMITE DE 3 JOUEURS
+            if len(self.clients) >= 3:
+                print(f"[SERVEUR] Connexion refusée de {adresse} - Serveur plein (3/3)")
+                try:
+                    connexion_client.send(pickle.dumps({"erreur": "SERVEUR_PLEIN"}))
+                    time.sleep(0.1)
+                    connexion_client.close()
+                except Exception as e:
+                    print(f"[SERVEUR] Erreur lors du refus : {e}")
+                continue
+            
+            # Accepter le joueur
             id_joueur = self.prochain_id_joueur
             self.prochain_id_joueur += 1
+            
+            print(f"[SERVEUR] Joueur {id_joueur} accepté depuis {adresse} ({len(self.clients)+1}/3)")
             
             self.clients[connexion_client] = id_joueur
             thread_client = threading.Thread(target=self.gerer_client, args=(connexion_client, id_joueur))
             thread_client.daemon = True
             thread_client.start()
+
 
 #if __name__ == "__main__":
 #    pygame.init() 
