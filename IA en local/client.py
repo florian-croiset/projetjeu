@@ -672,10 +672,8 @@ class Client:
         """Tente de se connecter au serveur."""
         try:
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.client_socket.settimeout(5.0)  # Timeout de 5 secondes
             print(f"[CLIENT] Connexion à {hote}:{PORT_SERVEUR}...")
             self.client_socket.connect((hote, PORT_SERVEUR))
-            self.client_socket.settimeout(None)  # Désactiver timeout après connexion
             
             # Recevoir la réponse
             reponse = pickle.loads(self.client_socket.recv(2048))
@@ -704,52 +702,9 @@ class Client:
             self.ames_perdues_locales = {}
             
             return True
-            
-        except socket.timeout:
-            print(f"[CLIENT] Timeout - Le serveur ne répond pas")
-            self.message_erreur_connexion = (
-                f"Timeout: Le serveur {hote}\nne répond pas.\n\n"
-                "CAUSES POSSIBLES:\n"
-                "- Le serveur n'est pas lancé\n"
-                "- Firewall Windows bloque\n"
-                "- Mauvaise adresse IP\n\n"
-                "SOLUTION:\n"
-                "Exécutez 'setup_firewall.bat'\n"
-                "en tant qu'administrateur"
-            )
-            self.client_socket = None
-            return False
-            
-        except ConnectionRefusedError:
-            print(f"[CLIENT] Connexion refusée par {hote}")
-            self.message_erreur_connexion = (
-                f"Connexion refusée par {hote}\n\n"
-                "CAUSE PRINCIPALE:\n"
-                "Le Firewall Windows bloque\n"
-                "l'accès au port 5555\n\n"
-                "SOLUTION RAPIDE:\n"
-                "1. Clic droit sur\n"
-                "   'setup_firewall.bat'\n"
-                "2. 'Exécuter en tant qu'admin'\n"
-                "3. Relancez le jeu\n\n"
-                "OU manuellement:\n"
-                "Paramètres Windows > Pare-feu\n"
-                "> Autoriser Python (port 5555)"
-            )
-            self.client_socket = None
-            return False
-            
         except socket.error as e:
             print(f"[CLIENT] Échec connexion: {e}")
-            if "10061" in str(e):  # WinError 10061
-                self.message_erreur_connexion = (
-                    f"Connexion refusée par {hote}\n\n"
-                    "FIREWALL WINDOWS BLOQUE!\n\n"
-                    "Exécutez setup_firewall.bat\n"
-                    "en administrateur"
-                )
-            else:
-                self.message_erreur_connexion = f"Erreur réseau:\n{hote}\n\n{str(e)}"
+            self.message_erreur_connexion = f"Impossible de se connecter\nau serveur : {hote}"
             self.client_socket = None
             return False
 
