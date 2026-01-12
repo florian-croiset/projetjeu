@@ -3,8 +3,8 @@
 # CORRECTION : Ajout de la valeur en âmes des ennemis.
 
 # -- Paramètres de la Fenêtre --
-LARGEUR_ECRAN = 1024
-HAUTEUR_ECRAN = 768
+LARGEUR_ECRAN = 1920
+HAUTEUR_ECRAN = 1080
 TITRE_FENETRE = "Metroidvania - Écho"
 FPS = 60
 
@@ -41,12 +41,12 @@ COULEUR_PV_PERDU = (70, 70, 70)
 VITESSE_JOUEUR = 5
 FORCE_SAUT = 12
 GRAVITE = 0.6
-PV_JOUEUR_MAX = 6
+PV_JOUEUR_MAX = 5
 TEMPS_INVINCIBILITE = 1000 
 ARGENT_DEPART = 0
 
 # -- Paramètres de Combat --
-DUREE_ATTAQUE = 200 
+DUREE_ATTAQUE = 16
 COOLDOWN_ATTAQUE = 500 
 PORTEE_ATTAQUE = 40 
 DEGATS_JOUEUR = 1
@@ -54,12 +54,12 @@ DEGATS_JOUEUR = 1
 # -- Paramètres de l'Ennemi --
 VITESSE_ENNEMI = 1.5
 PV_ENNEMI_BASE = 3
-ARGENT_PAR_ENNEMI = 10 # <-- AJOUT : Un ennemi rapporte 10 âmes
+ARGENT_PAR_ENNEMI = 10 # <-- Un ennemi rapporte 10 âmes
 
 # -- Paramètres de l'Écho (Raycasting) --
 PORTEE_ECHO = 250 
-NB_RAYONS_ECHO = 90  
-COOLDOWN_ECHO = 6000 
+NB_RAYONS_ECHO = 360
+COOLDOWN_ECHO = 6000
 
 # -- Paramètres Réseau --
 PORT_SERVEUR = 5555
