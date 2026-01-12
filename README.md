@@ -1,19 +1,17 @@
 # Projetjeu
-Lien du site du jeu : https://florian-croiset.github.io/jeusite/
+Lien du site du jeu : https://florian-croiset.github.io/jeusite/ \n
 https://www.pixilart.com/draw#
 
 | Key/Input | Action |
 | :---: | :---: |
 | Non modifiable |
-| Echap+Down | Quit |
+| Echap | Pause |
 | Modifiable |
-| A | Attaque1 (droit) |
-| Z | Attaque2 (revers) |
-| E | Attaque3 (smash) |
-| R | Reveal |
-|  |  |
-|  |  |
-|  |  |
+| K | Attaque1 |
+| E | Reveal |
+| Space | Jump |
+| Q | LEFT |
+| D | RIGHT |
 |  |  |
 |  |  |
 |  |  |
