@@ -63,3 +63,6 @@ COOLDOWN_ECHO = 6000
 
 # -- Paramètres Réseau --
 PORT_SERVEUR = 5555
+
+# -- Paramètres de la Caméra --
+ZOOM_CAMERA = 2.5  # 1.0 = Normal, 2.0 = Zoom x2

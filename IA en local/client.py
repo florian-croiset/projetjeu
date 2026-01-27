@@ -23,6 +23,39 @@ import langue
 from bouton import Bouton
 import gestion_sauvegarde
 
+def calculer_camera(rect_cible, largeur_ecran, hauteur_ecran, zoom, largeur_monde, hauteur_monde):
+    """
+    Calcule le décalage (offset) de la caméra pour centrer la cible.
+    
+    :param rect_cible: Le rect du joueur à suivre (pygame.Rect)
+    :param largeur_ecran: Largeur de la fenêtre de jeu
+    :param hauteur_ecran: Hauteur de la fenêtre de jeu
+    :param zoom: Le facteur de zoom (ex: 1.5)
+    :param largeur_monde: Largeur totale de la carte en pixels
+    :param hauteur_monde: Hauteur totale de la carte en pixels
+    :return: Un tuple (offset_x, offset_y)
+    """
+    
+    # 1. Calculer la taille de la vue "virtuelle" (ce que la caméra voit avant zoom)
+    largeur_vue = largeur_ecran / zoom
+    hauteur_vue = hauteur_ecran / zoom
+    
+    # 2. Centrer la caméra sur le centre du rectangle cible
+    # On veut que : cible_x - offset_x = milieu_ecran
+    offset_x = rect_cible.centerx - (largeur_vue / 2)
+    offset_y = rect_cible.centery - (hauteur_vue / 2)
+    
+    # 3. (Optionnel) Empêcher la caméra de sortir de la carte (Clamping)
+    # Si on va trop à gauche (x < 0), on bloque à 0
+    offset_x = max(0, offset_x) 
+    offset_y = max(0, offset_y)
+    
+    # Si on va trop à droite, on bloque à la fin de la carte
+    offset_x = min(offset_x, largeur_monde - largeur_vue)
+    offset_y = min(offset_y, hauteur_monde - hauteur_vue)
+    
+    return int(offset_x), int(offset_y)
+
 class Client:
     def __init__(self):
         pygame.init()
@@ -816,35 +849,82 @@ class Client:
                 # et déclenchera le nettoyage de la connexion
                 self.etat_jeu = "MENU_PRINCIPAL" 
 
-
     def dessiner_jeu(self):
-        """Dessine l'état actuel du jeu."""
-        if not self.carte or not self.vis_map_locale:
-            return # Ne rien dessiner si le jeu n'est pas prêt
+            """Dessine l'état actuel du jeu avec Caméra et Zoom."""
+            if not self.carte or not self.vis_map_locale:
+                return
 
-        # 1. Dessiner la carte (uniquement les parties visibles)
-        self.carte.dessiner_carte(self.ecran, self.vis_map_locale)
-        
-        # 2. Dessiner tous les joueurs
-        for id_joueur, joueur in self.joueurs_locaux.items():
-            joueur.dessiner(self.ecran)
+            # --- GESTION CAMERA ---
+            # 1. Récupérer mon joueur pour le suivre
+            mon_joueur = self.joueurs_locaux.get(self.mon_id)
             
-            # Optionnel : dessiner son propre joueur d'une couleur différente
-            if id_joueur == self.mon_id:
-                joueur.couleur = COULEUR_JOUEUR
-            else:
-                joueur.couleur = COULEUR_JOUEUR_AUTRE
+            # Par défaut, offset à 0 si le joueur n'est pas encore là
+            camera_offset = (0, 0)
+            
+            if mon_joueur:
+                # Calculer les dimensions réelles de la map en pixels
+                largeur_monde = self.carte.largeur_map * TAILLE_TUILE
+                hauteur_monde = self.carte.hauteur_map * TAILLE_TUILE
                 
-        # 3. Dessiner tous les ennemis
-        for ennemi in self.ennemis_locaux.values():
-            ennemi.dessiner(self.ecran)
+                # Calculer le décalage grâce à notre fonction
+                camera_offset = calculer_camera(
+                    mon_joueur.rect, 
+                    self.largeur_ecran, 
+                    self.hauteur_ecran, 
+                    ZOOM_CAMERA,
+                    largeur_monde,
+                    hauteur_monde
+                )
+
+            # 2. Créer une surface virtuelle (la zone vue par la caméra avant le zoom)
+            # Si on zoome, la zone vue est plus petite que l'écran
+            largeur_virtuelle = int(self.largeur_ecran / ZOOM_CAMERA)
+            hauteur_virtuelle = int(self.hauteur_ecran / ZOOM_CAMERA)
+            surface_virtuelle = pygame.Surface((largeur_virtuelle, hauteur_virtuelle))
             
-        # 4. Dessiner toutes les âmes perdues
-        for ame in self.ames_perdues_locales.values():
-            ame.dessiner(self.ecran)
+            # --- DESSIN SUR LA SURFACE VIRTUELLE ---
+            # Note : On passe 'camera_offset' à toutes les fonctions de dessin
             
-        # 5. Dessiner l'interface (HUD) - Ex: Barre de vie
-        self.dessiner_hud()
+            # A. Dessiner la carte (avec décalage)
+            self.carte.dessiner_carte(surface_virtuelle, self.vis_map_locale, camera_offset)
+
+            # B. Dessiner les joueurs (avec décalage)
+            for id_joueur, joueur in self.joueurs_locaux.items():
+                if id_joueur == self.mon_id:
+                    joueur.couleur = COULEUR_JOUEUR
+                else:
+                    joueur.couleur = COULEUR_JOUEUR_AUTRE
+                # Appel modifié : on ajoute l'argument offset
+                joueur.dessiner(surface_virtuelle, camera_offset)
+
+            # C. Dessiner les ennemis (avec décalage)
+            for ennemi in self.ennemis_locaux.values():
+                # Assure-toi de modifier ennemi.py aussi !
+                if hasattr(ennemi, 'dessiner'): 
+                    try:
+                        ennemi.dessiner(surface_virtuelle, camera_offset)
+                    except TypeError:
+                        # Fallback si ennemi.py n'est pas encore modifié
+                        ennemi.dessiner(surface_virtuelle) 
+
+            # D. Dessiner les âmes (avec décalage)
+            for ame in self.ames_perdues_locales.values():
+                if hasattr(ame, 'dessiner'):
+                    try:
+                        ame.dessiner(surface_virtuelle, camera_offset)
+                    except TypeError:
+                        ame.dessiner(surface_virtuelle)
+
+            # --- APPLICATION DU ZOOM ---
+            # On agrandit la surface virtuelle pour qu'elle remplisse l'écran
+            surface_zoomee = pygame.transform.scale(surface_virtuelle, (self.largeur_ecran, self.hauteur_ecran))
+            
+            # On affiche le résultat final sur l'écran principal
+            self.ecran.blit(surface_zoomee, (0, 0))
+
+            # E. Dessiner l'HUD (Barre de vie)
+            # L'HUD se dessine DIRECTEMENT sur l'écran (pas de zoom, pas de caméra)
+            self.dessiner_hud()
 
     def dessiner_hud(self):
         """Dessine les informations du joueur (PV, etc.)"""

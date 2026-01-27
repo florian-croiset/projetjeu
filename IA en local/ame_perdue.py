@@ -33,6 +33,18 @@ class AmePerdue:
         self.rect.y = data['y']
         self.id_joueur = data['id_joueur']
 
-    def dessiner(self, surface):
-        """Dessine l'âme (côté CLIENT)."""
-        pygame.draw.ellipse(surface, self.couleur, self.rect)
+    def dessiner(self, surface, camera_offset=(0, 0)):
+        """Dessine l'âme en tenant compte de la caméra."""
+        
+        # --- APPLICATION DE LA CAMÉRA ---
+        off_x, off_y = camera_offset
+        
+        # On crée un rectangle temporaire décalé pour l'affichage
+        rect_visuel = pygame.Rect(
+            self.rect.x - off_x,
+            self.rect.y - off_y,
+            self.rect.width,
+            self.rect.height
+        )
+        
+        pygame.draw.ellipse(surface, self.couleur, rect_visuel)
