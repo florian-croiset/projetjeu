@@ -90,23 +90,33 @@ class Carte:
                 else:
                     pass
 
-    def dessiner_carte(self, surface, vis_map):
-        """Dessine la carte sur la surface (écran)."""
-        surface.fill(COULEUR_FOND) 
+    def dessiner_carte(self, surface, vis_map, camera_offset=(0,0)):
+        """Dessine la carte en tenant compte de la caméra."""
+        surface.fill(COULEUR_FOND)
+        
+        off_x, off_y = camera_offset
+        
+        # Optimisation : On ne boucle que sur les tuiles visibles à l'écran serait mieux,
+        # mais pour l'instant on décale tout simplement.
         
         for y in range(self.hauteur_map):
             for x in range(self.largeur_map):
-                if vis_map[y][x]: 
-                    rect = pygame.Rect(x * TAILLE_TUILE, y * TAILLE_TUILE, TAILLE_TUILE, TAILLE_TUILE)
+                if vis_map[y][x]:
+                    # On calcule la position écran : Position Monde - Offset Caméra
+                    pos_x = (x * TAILLE_TUILE) - off_x
+                    pos_y = (y * TAILLE_TUILE) - off_y
                     
-                    tuile_type = self.map_data[y][x]
+                    rect = pygame.Rect(pos_x, pos_y, TAILLE_TUILE, TAILLE_TUILE)
                     
-                    if tuile_type == 1:
-                        pygame.draw.rect(surface, COULEUR_MUR_VISIBLE, rect)
-                    elif tuile_type == 2:
-                        pygame.draw.rect(surface, COULEUR_GUIDE, rect)
-                    elif tuile_type == 3:
-                        pygame.draw.rect(surface, COULEUR_SAUVEGARDE, rect)
+                    # On ne dessine que si c'est dans la surface (petite optimisation)
+                    if surface.get_rect().colliderect(rect):
+                        tuile_type = self.map_data[y][x]
+                        if tuile_type == 1:
+                            pygame.draw.rect(surface, COULEUR_MUR_VISIBLE, rect)
+                        elif tuile_type == 2:
+                            pygame.draw.rect(surface, COULEUR_GUIDE, rect)
+                        elif tuile_type == 3:
+                            pygame.draw.rect(surface, COULEUR_SAUVEGARDE, rect)
 
     def get_rects_collisions(self):
         """Renvoie une liste de Rect pour tous les murs (type 1)."""

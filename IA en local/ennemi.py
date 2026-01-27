@@ -80,17 +80,29 @@ class Ennemi:
         self.clignotement = True
         return self.pv <= 0
 
-    def dessiner(self, surface):
-        """Dessine l'ennemi. Clignote blanc si touché récemment."""
+    def dessiner(self, surface, camera_offset=(0, 0)):
+        """Dessine l'ennemi en tenant compte de la caméra."""
         couleur = self.couleur
         
+        # Gestion du clignotement si touché (code existant conservé)
         if self.clignotement:
             if pygame.time.get_ticks() - self.dernier_coup_recu < 100:
                 couleur = COULEUR_BLANC
             else:
                 self.clignotement = False
         
-        pygame.draw.rect(surface, couleur, self.rect)
+        # --- APPLICATION DE LA CAMÉRA ---
+        off_x, off_y = camera_offset
+        
+        # On crée un rectangle temporaire décalé pour l'affichage
+        rect_visuel = pygame.Rect(
+            self.rect.x - off_x,
+            self.rect.y - off_y,
+            self.rect.width,
+            self.rect.height
+        )
+        
+        pygame.draw.rect(surface, couleur, rect_visuel)
 
     def get_etat(self):
         return {

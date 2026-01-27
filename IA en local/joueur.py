@@ -123,13 +123,29 @@ class Joueur:
         self.sur_le_sol = False
         # On ne reset pas l'argent ici, c'est géré par l'âme perdue
 
-    def dessiner(self, surface):
-        """Dessine le joueur et son attaque."""
-        pygame.draw.rect(surface, self.couleur, self.rect)
+    def dessiner(self, surface, camera_offset=(0,0)):
+        """Dessine le joueur et son attaque par rapport à la caméra."""
+        off_x, off_y = camera_offset
         
+        # Création d'un rect temporaire décalé pour l'affichage
+        rect_visuel = pygame.Rect(
+            self.rect.x - off_x,
+            self.rect.y - off_y,
+            self.rect.width,
+            self.rect.height
+        )
+        
+        pygame.draw.rect(surface, self.couleur, rect_visuel)
+
         # Dessiner l'attaque si active (carré blanc temporaire)
         if self.est_en_attaque and self.rect_attaque:
-            pygame.draw.rect(surface, COULEUR_ATTAQUE, self.rect_attaque)
+            rect_attaque_visuel = pygame.Rect(
+                self.rect_attaque.x - off_x,
+                self.rect_attaque.y - off_y,
+                self.rect_attaque.width,
+                self.rect_attaque.height
+            )
+            pygame.draw.rect(surface, COULEUR_ATTAQUE, rect_attaque_visuel)
 
     def get_etat(self):
         """Données pour le réseau."""
