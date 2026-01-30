@@ -131,6 +131,20 @@ class Client:
             return ip_locale
         except Exception:
             return "Non disponible"
+    def obtenir_ip_hamachi(self):
+        "essaye de trouver l'IP Hamachi (interface commençant par 25.x.x.x)"
+        try:
+            import socket
+            hostname = socket.gethostname()
+            all_ips = socket.gethostbyname_ex(hostname)[2]
+        
+            # Cherche une IP Hamachi (commence par 25.)
+            for ip in all_ips:
+                if ip.startswith("25."):
+                    return ip
+            return "Non connecté"
+        except:
+            return "Non connecté"
 
     def copier_dans_presse_papier(self, texte):
         """Copie le texte dans le presse-papiers (Windows uniquement pour l'instant)"""
@@ -181,6 +195,10 @@ class Client:
         col_droite_bouton = cx + 50
         largeur_btn_param = 300
         
+        # Boutons IP
+        self.btn_copier_ip_locale = Bouton(col_droite_bouton, 0, largeur_btn_param, 40, "", self.police_texte)
+        self.btn_copier_ip_hamachi = Bouton(col_droite_bouton, 0, largeur_btn_param, 40, "", self.police_texte)
+
         # Bouton Langue
         self.btn_changer_langue = Bouton(col_droite_bouton, 0, largeur_btn_param, 40, "", self.police_texte)
 
@@ -203,7 +221,7 @@ class Client:
             self.btn_toggle_plein_ecran,
             self.btn_changer_gauche, self.btn_changer_droite,
             self.btn_changer_saut, self.btn_changer_echo, self.btn_changer_attaque,
-            self.btn_copier_ip_locale
+            self.btn_copier_ip_locale, self.btn_copier_ip_hamachi
         ]
         
         self.boutons_menu_params_fixes = [self.btn_appliquer_params, self.btn_retour_params]
@@ -574,6 +592,12 @@ class Client:
                     if self.copier_dans_presse_papier(ip):
                         print(f"[CLIENT] IP locale copiée : {ip}")
 
+                if self.btn_copier_ip_hamachi.verifier_clic(event):
+                    ip = self.obtenir_ip_hamachi()
+                    if ip != "Non connecté":
+                        if self.copier_dans_presse_papier(ip):
+                            print(f"[CLIENT] IP Hamachi copiée : {ip}")
+
         # Mise à jour survol pour boutons fixes
         for btn in self.boutons_menu_params_fixes:
             btn.verifier_survol(pos_souris)
@@ -671,6 +695,20 @@ class Client:
         self.btn_copier_ip_locale.texte = f"{ip_locale}    (copier)"
         self.btn_copier_ip_locale.dessiner(self.ecran)
         y_base += 50
+
+        # IP Hamachi
+        lbl_ip_hamachi = self.police_texte.render("IP Hamachi (VPN) :", True, COULEUR_TEXTE)
+        self.ecran.blit(lbl_ip_hamachi, (120, y_base + 5))
+        
+        self.btn_copier_ip_hamachi.rect.y = y_base
+        ip_hamachi = self.obtenir_ip_hamachi()
+        self.btn_copier_ip_hamachi.texte = f"{ip_hamachi}    (copier)"
+        self.btn_copier_ip_hamachi.dessiner(self.ecran)
+        y_base += 50
+    
+        texte_aide = self.police_texte.render("Cliquez pour copier dans le presse-papiers", True, (150, 150, 150))
+        self.ecran.blit(texte_aide, (120, y_base))
+        y_base += 30
 
     # --- GESTION DU RÉSEAU ET DU JEU ---
 
