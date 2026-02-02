@@ -3,7 +3,9 @@
 # CORRECTION : Ajout de l'import math.
 
 import pygame
-import math # <-- AJOUTÉ (Indispensable pour cos/sin)
+import math
+import os  # <-- À AJOUTER
+import xml.etree.ElementTree as ET # <-- À AJOUTER
 from parametres import *
 
 class Carte:
