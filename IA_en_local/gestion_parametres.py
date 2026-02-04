@@ -26,7 +26,8 @@ def creer_parametres_defaut():
             "droite": "d",
             "saut": "space",
             "echo": "e",
-            "attaque": "k" 
+            "attaque": "k",
+            "dash": "c"  # <-- AJOUT
         }
     }
 

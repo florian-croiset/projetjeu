@@ -105,6 +105,10 @@ class Serveur:
         # Si c'est l'hôte, on charge aussi son argent
         if id_joueur == 0:
             nouveau_joueur.argent = self.donnees_partie.get("argent", 0) 
+        # Charger les capacités débloquées depuis la sauvegarde
+        ameliorations = self.donnees_partie.get("ameliorations", {})
+        nouveau_joueur.peut_double_saut = ameliorations.get("double_saut", False)  # <-- AJOUT
+        nouveau_joueur.peut_dash = ameliorations.get("dash", False)  # <-- AJOUT
             
         self.joueurs[id_joueur] = nouveau_joueur
         
@@ -225,6 +229,9 @@ class Serveur:
                                 self.donnees_partie["id_dernier_checkpoint"] = id_save
                                 self.donnees_partie["vis_map"] = self.cartes_visibilite[id_joueur]
                                 self.donnees_partie["argent"] = joueur.argent # Sauvegarde argent
+                                # Sauvegarder les capacités débloquées  # <-- AJOUT
+                                self.donnees_partie["ameliorations"]["double_saut"] = joueur.peut_double_saut  # <-- AJOUT
+                                self.donnees_partie["ameliorations"]["dash"] = joueur.peut_dash  # <-- AJOUT
                                 gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
             
             horloge.tick(FPS)

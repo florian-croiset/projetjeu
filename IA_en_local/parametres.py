@@ -39,7 +39,7 @@ COULEUR_PV_PERDU = (70, 70, 70)
 
 # -- Paramètres du Joueur --
 VITESSE_JOUEUR = 5
-FORCE_SAUT = 12
+FORCE_SAUT = 13
 GRAVITE = 0.6
 PV_JOUEUR_MAX = 5
 TEMPS_INVINCIBILITE = 1000 
@@ -55,6 +55,16 @@ DEGATS_JOUEUR = 1
 VITESSE_ENNEMI = 1.5
 PV_ENNEMI_BASE = 3
 ARGENT_PAR_ENNEMI = 10 # <-- Un ennemi rapporte 10 âmes
+
+# -- Paramètres des Capacités --
+# Dash
+DISTANCE_DASH = TAILLE_TUILE * 4  # 4 blocs de texture (128 pixels si TAILLE_TUILE=32)
+DUREE_DASH = 150  # millisecondes
+COOLDOWN_DASH = 600  # millisecondes
+DASH_EN_AIR_MAX = 1  # Nombre de dashs autorisés en l'air
+
+# Double Saut
+FORCE_DOUBLE_SAUT = 10  # Légèrement moins puissant que FORCE_SAUT (12)
 
 # -- Paramètres de l'Écho (Raycasting) --
 PORTEE_ECHO = 250 

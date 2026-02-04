@@ -47,6 +47,7 @@ FR = {
     "param_saut": "Saut",
     "param_echo": "Écho",
     "param_attaque": "Attaque",
+    "param_dash": "Dash",  # <-- AJOUT
     "param_appliquer": "Appliquer",
     "param_retour": "Retour",
     "param_attente_touche": "[ ... ]",
@@ -105,6 +106,7 @@ EN = {
     "param_saut": "Jump",
     "param_echo": "Echo",
     "param_attaque": "Attack",
+    "param_dash": "Dash",  # <-- AJOUT
     "param_appliquer": "Apply",
     "param_retour": "Back",
     "param_attente_touche": "[ ... ]",

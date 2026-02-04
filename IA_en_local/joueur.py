@@ -30,37 +30,121 @@ class Joueur:
         self.est_en_attaque = False
         self.rect_attaque = None # Hitbox active
         
+        # Capacités
+        self.peut_double_saut = False  # <-- AJOUT
+        self.peut_dash = False  # <-- AJOUT
+        self.a_double_saute = False  # <-- AJOUT : Pour limiter à 1 double saut
+        self.dash_disponibles_en_air = DASH_EN_AIR_MAX  # <-- AJOUT
+        self.dernier_dash_temps = 0  # <-- AJOUT
+        self.est_en_dash = False  # <-- AJOUT
+        self.dash_direction = 0  # <-- AJOUT
+        self.dash_distance_restante = 0  # <-- AJOUT
+        self.dash_debut_temps = 0  # <-- AJOUT
+        
         # Commandes
-        self.commandes = {'gauche': False, 'droite': False, 'saut': False, 'attaque': False}
-
+        self.commandes = {'gauche': False, 'droite': False, 'saut': False, 'attaque': False, 'dash': False}  # <-- MODIFICATION
+        # État précédent des commandes (pour détecter les nouveaux appuis)
+        self.saut_precedent = False
     def appliquer_physique(self, rects_collision):
         """Gère la gravité, le mouvement et les collisions."""
         dx = 0
         dy = 0
 
-        # 1. Mouvement horizontal
-        if self.commandes['gauche']:
-            dx = -VITESSE_JOUEUR
-            self.direction = -1
-        if self.commandes['droite']:
-            dx = VITESSE_JOUEUR
-            self.direction = 1
-            
-        # 2. Mouvement vertical
-        if self.commandes['saut'] and self.sur_le_sol:
-            self.vel_y = -FORCE_SAUT
-            self.sur_le_sol = False
-            self.commandes['saut'] = False 
-
-        # Gravité
-        self.vel_y += GRAVITE
-        if self.vel_y > 10: 
-            self.vel_y = 10
-        dy = self.vel_y
+        # --- GESTION DU DASH ---
+        temps_actuel = pygame.time.get_ticks()
         
+        if self.est_en_dash:
+            # Vérifier si le dash est terminé
+            if temps_actuel - self.dash_debut_temps >= DUREE_DASH or self.dash_distance_restante <= 0:
+                self.est_en_dash = False
+                self.dash_distance_restante = 0
+            else:
+                # Calculer la vitesse du dash pour cette frame
+                vitesse_dash = DISTANCE_DASH / (DUREE_DASH / 1000 * FPS)
+                deplacement_dash = min(vitesse_dash, self.dash_distance_restante)
+                
+                dx = deplacement_dash * self.dash_direction
+                self.dash_distance_restante -= abs(deplacement_dash)
+                
+                # Pendant le dash, on ignore les autres mouvements
+                # On applique quand même la gravité mais réduite
+                self.vel_y += GRAVITE * 0.3
+                if self.vel_y > 10:
+                    self.vel_y = 10
+                dy = self.vel_y
+        else:
+            # Mouvement normal
+            
+            # 1. Activation du Dash
+            if self.commandes.get('dash', False) and self.peut_dash:
+                peut_dasher = False
+                
+                if self.sur_le_sol:
+                    peut_dasher = True
+                elif self.dash_disponibles_en_air > 0:
+                    peut_dasher = True
+                
+                if peut_dasher and (temps_actuel - self.dernier_dash_temps >= COOLDOWN_DASH):
+                    # Déterminer la direction du dash
+                    if self.commandes['droite']:
+                        self.dash_direction = 1
+                    elif self.commandes['gauche']:
+                        self.dash_direction = -1
+                    else:
+                        self.dash_direction = self.direction  # Direction actuelle
+                    
+                    # Activer le dash
+                    self.est_en_dash = True
+                    self.dash_debut_temps = temps_actuel
+                    self.dernier_dash_temps = temps_actuel
+                    self.dash_distance_restante = DISTANCE_DASH
+                    
+                    # Consommer un dash en l'air si nécessaire
+                    if not self.sur_le_sol:
+                        self.dash_disponibles_en_air -= 1
+                    
+                    # Consommer la commande
+                    if 'dash' in self.commandes:
+                        self.commandes['dash'] = False
+            
+            # 2. Mouvement horizontal
+            if self.commandes['gauche']:
+                dx = -VITESSE_JOUEUR
+                self.direction = -1
+            if self.commandes['droite']:
+                dx = VITESSE_JOUEUR
+                self.direction = 1
+                
+            # 3. Saut et Double Saut
+            # 3. Saut et Double Saut
+            saut_actuel = self.commandes.get('saut', False)
+            
+            # Détecter un NOUVEAU front montant (passage de False à True)
+            if saut_actuel and not self.saut_precedent:
+                if self.sur_le_sol:
+                    # Saut normal
+                    self.vel_y = -FORCE_SAUT
+                    self.sur_le_sol = False
+                    self.a_double_saute = False  # Reset du double saut
+                elif self.peut_double_saut and not self.a_double_saute:
+                    # Double saut
+                    self.vel_y = -FORCE_DOUBLE_SAUT
+                    self.a_double_saute = True
+            
+            # Mémoriser l'état actuel pour la prochaine frame
+            self.saut_precedent = saut_actuel
+
+            # Gravité
+            self.vel_y += GRAVITE
+            if self.vel_y > 10: 
+                self.vel_y = 10
+            dy = self.vel_y
+        
+        # Reset du flag sur_le_sol
+        ancien_sur_le_sol = self.sur_le_sol
         self.sur_le_sol = False 
         
-        # 3. Vérification des collisions
+        # 4. Vérification des collisions
         
         # Axe X
         self.rect.x += dx
@@ -68,8 +152,16 @@ class Joueur:
             if self.rect.colliderect(mur):
                 if dx > 0:
                     self.rect.right = mur.left
+                    # Arrêter le dash si collision
+                    if self.est_en_dash:
+                        self.est_en_dash = False
+                        self.dash_distance_restante = 0
                 elif dx < 0:
                     self.rect.left = mur.right
+                    # Arrêter le dash si collision
+                    if self.est_en_dash:
+                        self.est_en_dash = False
+                        self.dash_distance_restante = 0
         
         # Axe Y
         self.rect.y += dy
@@ -82,7 +174,10 @@ class Joueur:
                 elif dy < 0:
                     self.rect.top = mur.bottom
                     self.vel_y = 0
-
+        
+        # Réinitialiser les dashs en l'air quand on touche le sol
+        if self.sur_le_sol and not ancien_sur_le_sol:
+            self.dash_disponibles_en_air = DASH_EN_AIR_MAX
     def gerer_attaque(self, temps_actuel):
         """Gère la logique d'attaque (création hitbox, cooldown)."""
         # Si on demande d'attaquer et que le cooldown est fini
@@ -163,7 +258,10 @@ class Joueur:
             'pv': self.pv,
             'pv_max': self.pv_max,
             'argent': self.argent,
-            'attaque': etat_attaque
+            'attaque': etat_attaque,
+            'peut_double_saut': self.peut_double_saut,  # <-- AJOUT
+            'peut_dash': self.peut_dash,  # <-- AJOUT
+            'est_en_dash': self.est_en_dash  # <-- AJOUT pour effet visuel
         }
 
     def set_etat(self, data):
@@ -174,6 +272,11 @@ class Joueur:
         self.pv = data['pv']
         self.pv_max = data['pv_max']
         self.argent = data.get('argent', 0)
+        
+        # Capacités
+        self.peut_double_saut = data.get('peut_double_saut', False)  # <-- AJOUT
+        self.peut_dash = data.get('peut_dash', False)  # <-- AJOUT
+        self.est_en_dash = data.get('est_en_dash', False)  # <-- AJOUT
         
         # Gestion visuelle de l'attaque distante
         etat_attaque = data.get('attaque')

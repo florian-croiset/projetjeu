@@ -211,7 +211,7 @@ class Client:
         self.btn_changer_saut = Bouton(col_droite_bouton, 0, largeur_btn_param, 40, "", self.police_texte)
         self.btn_changer_echo = Bouton(col_droite_bouton, 0, largeur_btn_param, 40, "", self.police_texte)
         self.btn_changer_attaque = Bouton(col_droite_bouton, 0, largeur_btn_param, 40, "", self.police_texte)
-
+        self.btn_changer_dash = Bouton(col_droite_bouton, 0, largeur_btn_param, 40, "", self.police_texte)  # <-- AJOUT
         # Boutons Fixes (ne scrollent pas)
         self.btn_appliquer_params = Bouton(cx - 320, self.hauteur_ecran - 100, 300, 50, langue.get_texte("param_appliquer"), self.police_bouton)
         self.btn_retour_params = Bouton(cx + 20, self.hauteur_ecran - 100, 300, 50, langue.get_texte("param_retour"), self.police_bouton)
@@ -220,7 +220,7 @@ class Client:
             self.btn_changer_langue,
             self.btn_toggle_plein_ecran,
             self.btn_changer_gauche, self.btn_changer_droite,
-            self.btn_changer_saut, self.btn_changer_echo, self.btn_changer_attaque,
+            self.btn_changer_saut, self.btn_changer_echo, self.btn_changer_attaque, self.btn_changer_dash,  # <-- MODIFICATION
             self.btn_copier_ip_locale, self.btn_copier_ip_hamachi
         ]
         
@@ -585,6 +585,7 @@ class Client:
                 if self.btn_changer_saut.verifier_clic(event): self.touche_a_modifier = "saut"
                 if self.btn_changer_echo.verifier_clic(event): self.touche_a_modifier = "echo"
                 if self.btn_changer_attaque.verifier_clic(event): self.touche_a_modifier = "attaque" 
+                if self.btn_changer_dash.verifier_clic(event): self.touche_a_modifier = "dash"  # <-- AJOUT
 
                 # Gestion des boutons IP
                 if self.btn_copier_ip_locale.verifier_clic(event):
@@ -675,6 +676,8 @@ class Client:
         dessiner_controle_btn(langue.get_texte("param_echo"), 'echo', self.btn_changer_echo, y_base)
         y_base += 50
         dessiner_controle_btn(langue.get_texte("param_attaque"), 'attaque', self.btn_changer_attaque, y_base) 
+        y_base += 50
+        dessiner_controle_btn(langue.get_texte("param_dash"), 'dash', self.btn_changer_dash, y_base)  # <-- AJOUT
         
         # Boutons Appliquer / Retour (Fixes en bas)
         self.btn_appliquer_params.dessiner(self.ecran)
@@ -806,8 +809,9 @@ class Client:
         Renvoie les commandes à envoyer au serveur.
         """
         # Initialiser les commandes et l'indicateur d'écho pour éviter les références avant affectation
-        commandes_clavier = {'gauche': False, 'droite': False, 'saut': False, 'attaque': False}
+        commandes_clavier = {'gauche': False, 'droite': False, 'saut': False, 'attaque': False, 'dash': False}
         declencher_echo = False
+        saut_juste_presse = False  # Pour détecter un NOUVEL appui
         
         # Récupérer les codes de touches depuis les paramètres
         try:
@@ -816,10 +820,11 @@ class Client:
             touche_saut = pygame.key.key_code(self.parametres['controles']['saut'])
             touche_echo = pygame.key.key_code(self.parametres['controles']['echo'])
             touche_attaque = pygame.key.key_code(self.parametres['controles']['attaque'])
+            touche_dash = pygame.key.key_code(self.parametres['controles']['dash'])  # <-- AJOUT
         except Exception as e:
             print(f"Erreur de mapping des touches: {e}. Utilisation des touches par défaut.")
             # Fallback (au cas où les noms dans le JSON sont mauvais)
-            touche_gauche, touche_droite, touche_saut, touche_echo, touche_attaque = pygame.K_q, pygame.K_d, pygame.K_SPACE, pygame.K_e, pygame.K_k
+            touche_gauche, touche_droite, touche_saut, touche_echo, touche_attaque, touche_dash = pygame.K_q, pygame.K_d, pygame.K_SPACE, pygame.K_e, pygame.K_k, pygame.K_c  # <-- MODIFICATION
 
 
         for event in pygame.event.get():
@@ -833,20 +838,27 @@ class Client:
                     declencher_echo = True
                 if event.key == touche_attaque:
                     commandes_clavier['attaque'] = True # On marque l'action pour ce tick
+                if event.key == touche_dash:
+                    commandes_clavier['dash'] = True
+                if event.key == touche_saut:
+                    saut_juste_presse = True  # Nouveau : détection du nouvel appui
                 # Menu Pause
                 if event.key == pygame.K_ESCAPE:
                     print("[CLIENT] Passage en mode Pause")
                     self.etat_jeu_interne = "PAUSE"
                     # On retourne des commandes vides pour ce tick
-                    return {'clavier': {'gauche': False, 'droite': False, 'saut': False, 'attaque': False}, 'echo': False}
+                    return {'clavier': {'gauche': False, 'droite': False, 'saut': False, 'attaque': False, 'dash': False}, 'echo': False}  # <-- MODIFICATION
         
+        # Gérer les mouvements (touches maintenues)
         # Gérer les mouvements (touches maintenues)
         touches = pygame.key.get_pressed()
         if touches[touche_gauche]:
             commandes_clavier['gauche'] = True
         if touches[touche_droite]:
             commandes_clavier['droite'] = True
-        if touches[touche_saut]:
+        
+        # Saut : Seulement si la touche vient d'être pressée (pas maintenue)
+        if saut_juste_presse:
             commandes_clavier['saut'] = True
             
         return {'clavier': commandes_clavier, 'echo': declencher_echo}
@@ -1046,14 +1058,13 @@ class Client:
             pos_souris = pygame.mouse.get_pos()
             
             # 1. Gérer les entrées locales (soit jeu, soit pause)
-            commandes_a_envoyer = {'clavier': {'gauche': False, 'droite': False, 'saut': False, 'attaque': False}, 'echo': False}
-            
+            commandes_a_envoyer = {'clavier': {'gauche': False, 'droite': False, 'saut': False, 'attaque': False, 'dash': False}, 'echo': False}
+
             if self.etat_jeu_interne == "JEU":
                 commandes_a_envoyer = self.gerer_evenements_jeu()
             elif self.etat_jeu_interne == "PAUSE":
                 self.gerer_evenements_pause(pos_souris)
-                # On envoie des commandes vides pendant la pause
-            
+                # On envoie des commandes vides pendant la pause (déjà initialisées ci-dessus)
             # Si on quitte (via ESC ou croix ou bouton), self.etat_jeu change
             if self.etat_jeu != "EN_JEU" or not self.running:
                 break

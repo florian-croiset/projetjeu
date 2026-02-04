@@ -29,7 +29,8 @@ def creer_sauvegarde_vierge():
         "vis_map": vis_map_vierge,
         "items": [],
         "ameliorations": {
-            "double_saut": False
+            "double_saut": False,
+            "dash": False  # <-- AJOUT
         }
     }
 
