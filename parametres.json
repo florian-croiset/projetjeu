@@ -12,6 +12,7 @@
         "droite": "d",
         "saut": "space",
         "echo": "e",
-        "attaque": "k"
+        "attaque": "k",
+        "dash": "c"
     }
 }
