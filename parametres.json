@@ -10,7 +10,7 @@
     "controles": {
         "gauche": "q",
         "droite": "d",
-        "saut": "space",
+        "saut": "z",
         "echo": "e",
         "attaque": "k",
         "dash": "c"

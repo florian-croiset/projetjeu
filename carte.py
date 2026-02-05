@@ -1,17 +1,50 @@
 # carte.py
 # Gère la tilemap du niveau et la carte de visibilité pour chaque joueur.
-# CORRECTION : Ajout de l'import math.
 
 import pygame
 import math
-import os  # <-- À AJOUTER
-import xml.etree.ElementTree as ET # <-- À AJOUTER
+import os
+import json
 from parametres import *
 
 class Carte:
-    def __init__(self):
-        # Pour ce prototype, la carte est codée en dur.
-        # 0 = Vide, 1 = Mur, 2 = Point de repère, 3 = Point de Sauvegarde
+    def __init__(self, fichier_map="map.json"):
+        """Charge la carte depuis un fichier JSON."""
+        self.map_data = []
+        self.largeur_map = 0
+        self.hauteur_map = 0
+        
+        # Charger le fichier JSON
+        if os.path.exists(fichier_map):
+            self.charger_json(fichier_map)
+        else:
+            print(f"[CARTE] Fichier {fichier_map} introuvable, utilisation de la carte par défaut")
+            self.charger_carte_par_defaut()
+        
+        self.visibility_map = self.creer_carte_visibilite_vierge()
+
+    def charger_json(self, fichier_map):
+        """Charge la carte depuis un fichier JSON."""
+        try:
+            with open(fichier_map, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            self.largeur_map = data['largeur']
+            self.hauteur_map = data['hauteur']
+            self.map_data = data['data']
+            
+            print(f"[CARTE] Map JSON chargée : {self.largeur_map}x{self.hauteur_map}")
+            print(f"[CARTE] Première ligne : {self.map_data[0][:10]}...")
+            print(f"[CARTE] Dernière ligne : {self.map_data[-1][:10]}...")
+            
+        except Exception as e:
+            print(f"[CARTE] ERREUR lors du chargement du JSON: {e}")
+            import traceback
+            traceback.print_exc()
+            self.charger_carte_par_defaut()
+
+    def charger_carte_par_defaut(self):
+        """Charge la carte codée en dur (backup)."""
         self.map_data = [
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
@@ -38,11 +71,9 @@ class Carte:
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
         ]
-        
         self.largeur_map = len(self.map_data[0])
         self.hauteur_map = len(self.map_data)
-        
-        self.visibility_map = self.creer_carte_visibilite_vierge()
+        print(f"[CARTE] Carte par défaut chargée : {self.largeur_map}x{self.hauteur_map}")
 
     def creer_carte_visibilite_vierge(self):
         """Crée une carte de visibilité basée sur la map_data."""
@@ -89,8 +120,6 @@ class Carte:
                 if self.map_data[tuile_y][tuile_x] in [1, 3]:
                     vis_map[tuile_y][tuile_x] = True 
                     break 
-                else:
-                    pass
 
     def dessiner_carte(self, surface, vis_map, camera_offset=(0,0)):
         """Dessine la carte en tenant compte de la caméra."""
@@ -98,19 +127,14 @@ class Carte:
         
         off_x, off_y = camera_offset
         
-        # Optimisation : On ne boucle que sur les tuiles visibles à l'écran serait mieux,
-        # mais pour l'instant on décale tout simplement.
-        
         for y in range(self.hauteur_map):
             for x in range(self.largeur_map):
                 if vis_map[y][x]:
-                    # On calcule la position écran : Position Monde - Offset Caméra
                     pos_x = (x * TAILLE_TUILE) - off_x
                     pos_y = (y * TAILLE_TUILE) - off_y
                     
                     rect = pygame.Rect(pos_x, pos_y, TAILLE_TUILE, TAILLE_TUILE)
                     
-                    # On ne dessine que si c'est dans la surface (petite optimisation)
                     if surface.get_rect().colliderect(rect):
                         tuile_type = self.map_data[y][x]
                         if tuile_type == 1:

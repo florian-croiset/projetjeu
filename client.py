@@ -769,7 +769,10 @@ class Client:
             self.message_erreur_connexion = None
             
             # Initialiser jeu
-            self.carte = Carte()
+            import os
+            dossier_script = os.path.dirname(os.path.abspath(__file__))
+            chemin_tmx = os.path.join(dossier_script, "Map.tmx")
+            self.carte = Carte(chemin_tmx)
             self.vis_map_locale = self.carte.creer_carte_visibilite_vierge()
             self.joueurs_locaux = {}
             self.ennemis_locaux = {}

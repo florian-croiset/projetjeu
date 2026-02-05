@@ -6,17 +6,16 @@ from parametres import TAILLE_TUILE
 
 # Dictionnaire optionnel pour donner des noms sympas à certaines coordonnées
 NOMS_CHECKPOINTS = {
-    "3_21": "Point de Départ",
+    "10_46": "Point de Départ",
     "1_12": "Entrée de la Grotte",
     # Ajoutez d'autres noms ici si vous connaissez les coordonnées tuiles (x_y)
 }
 
 def get_point_depart():
     """Renvoie l'ID et les coordonnées du tout premier point de spawn."""
-    # Coordonnées codées en dur pour le tout premier spawn
-    # Correspond à la tuile (x=3, y=21) dans la map_data
-    id_depart = "3_21" 
-    coords = (3 * TAILLE_TUILE + (TAILLE_TUILE // 4), 21 * TAILLE_TUILE) # (x=104, y=672)
+    # Position AU MILIEU DE LA MAP, LIGNE 20 (juste au-dessus du sol ligne 22)
+    id_depart = "15_20"
+    coords = (15 * TAILLE_TUILE, 20 * TAILLE_TUILE)
     return id_depart, coords
 
 def get_coords_par_id(id_point):
