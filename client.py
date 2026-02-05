@@ -56,6 +56,65 @@ def calculer_camera(rect_cible, largeur_ecran, hauteur_ecran, zoom, largeur_mond
     
     return int(offset_x), int(offset_y)
 
+def afficher_splash_screen(ecran, duree=3000):
+    """Affiche un splash screen avec le logo du jeu (70% de l'écran)."""
+    try:
+        # Gestion du chemin pour PyInstaller
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(__file__)
+        
+        logo_path = os.path.join(base_path, 'favicon.png')
+        logo_original = pygame.image.load(logo_path).convert_alpha()
+        
+        # Calcul de la taille : 70% de la plus petite dimension de l'écran
+        taille_reference = min(LARGEUR_ECRAN, HAUTEUR_ECRAN)
+        cote_cible = int(taille_reference * 0.7)
+        
+        # Redimensionnement (l'image est carrée)
+        logo = pygame.transform.smoothscale(logo_original, (cote_cible, cote_cible))
+        
+        # Créer une surface de fond noir
+        fond = pygame.Surface((LARGEUR_ECRAN, HAUTEUR_ECRAN))
+        fond.fill((0, 0, 0))
+        
+        # Position centrée
+        logo_rect = logo.get_rect(center=(LARGEUR_ECRAN // 2, HAUTEUR_ECRAN // 2))
+        
+        debut = pygame.time.get_ticks()
+        horloge = pygame.time.Clock()
+        
+        while pygame.time.get_ticks() - debut < duree:
+            temps_ecoule = pygame.time.get_ticks() - debut
+            
+            # Calcul de l'alpha (fade in 30%, plein 40%, fade out 30%)
+            if temps_ecoule < duree * 0.3:
+                alpha = int((temps_ecoule / (duree * 0.3)) * 255)
+            elif temps_ecoule > duree * 0.7:
+                alpha = int((1 - (temps_ecoule - duree * 0.7) / (duree * 0.3)) * 255)
+            else:
+                alpha = 255
+            
+            # Affichage
+            ecran.blit(fond, (0, 0))
+            logo_temp = logo.copy()
+            logo_temp.set_alpha(alpha)
+            ecran.blit(logo_temp, logo_rect)
+            
+            pygame.display.flip()
+            horloge.tick(60)
+            
+            # Gestion des événements pour passer le splash
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                    return
+        
+    except Exception as e:
+        print(f"Impossible d'afficher le splash screen: {e}")
 class Client:
     def __init__(self):
         pygame.init()
@@ -82,6 +141,7 @@ class Client:
         
         pygame.display.set_caption(langue.get_texte("titre_jeu"))
         self.horloge = pygame.time.Clock()
+        afficher_splash_screen(self.ecran, duree=3000)  # 3 secondes
         
         # Etats: MENU_PRINCIPAL, MENU_REJOINDRE, MENU_NOUVELLE_PARTIE, MENU_CONTINUER, MENU_PARAMETRES, MENU_CONFIRMATION, EN_JEU, QUITTER
         self.etat_jeu = "MENU_PRINCIPAL" 
