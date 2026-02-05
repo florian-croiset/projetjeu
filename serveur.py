@@ -34,7 +34,7 @@ print(f"[SERVEUR] Les autres joueurs peuvent se connecter avec : {ip_serveur}")
 
 class Serveur:
     def __init__(self, id_slot, est_nouvelle_partie):
-        #Pour le réseau debut
+        # ===== RÉSEAU =====
         self.serveur_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serveur_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
@@ -43,26 +43,29 @@ class Serveur:
             ip_serveur = obtenir_ip_locale()
             print(f"[SERVEUR] Démarré sur le port {PORT_SERVEUR}")
             print(f"[SERVEUR] IP locale : {ip_serveur}")
-            print(f"[SERVEUR] Les autres joueurs peuvent se connecter avec : {ip_serveur}")
         except OSError as e:
             print(f"[SERVEUR] ERREUR lors du bind: {e}")
             raise 
-        #fin
 
+        # ===== DONNÉES DE JEU =====
         self.clients = {}
         self.joueurs = {}
         self.cartes_visibilite = {}
         self.ennemis = {}
         self.ames_perdues = {}
         
-        self.carte_jeu = Carte()
+        # ===== CARTE =====
+        import os
+        dossier_script = os.path.dirname(os.path.abspath(__file__))
+        chemin_map = os.path.join(dossier_script, "map.json")
+        self.carte_jeu = Carte(chemin_map)
+
         self.rects_collision = self.carte_jeu.get_rects_collisions()
         self.points_sauvegarde_map = self.scanner_points_sauvegarde()
         
-        # --- Chargement Sauvegarde ---
+        # ===== SAUVEGARDE =====
         self.id_slot = id_slot
         self.donnees_partie = None
-        self.spawn_point = None
         
         if est_nouvelle_partie:
             self.donnees_partie = gestion_sauvegarde.creer_sauvegarde_vierge()
@@ -73,14 +76,28 @@ class Serveur:
                 self.donnees_partie = gestion_sauvegarde.creer_sauvegarde_vierge()
                 gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
 
+        # ===== SPAWN POINT =====
         id_checkpoint = self.donnees_partie["id_dernier_checkpoint"]
         self.spawn_point = points_sauvegarde.get_coords_par_id(id_checkpoint)
         
-        # --- Init ---
+        # ===== DEBUG =====
+        print(f"[DEBUG] Dimensions carte : {self.carte_jeu.largeur_map}x{self.carte_jeu.hauteur_map}")
+        print(f"[DEBUG] Spawn point : {self.spawn_point}")
+        spawn_x = int(self.spawn_point[0] // TAILLE_TUILE)
+        spawn_y = int(self.spawn_point[1] // TAILLE_TUILE)
+        print(f"[DEBUG] Tuile au spawn : x={spawn_x}, y={spawn_y}")
+        
+        # Vérifier la tuile sous le spawn
+        if spawn_y + 1 < self.carte_jeu.hauteur_map and spawn_x < self.carte_jeu.largeur_map:
+            tuile_dessous = self.carte_jeu.map_data[spawn_y + 1][spawn_x]
+            print(f"[DEBUG] Tuile sous le spawn : {tuile_dessous} (devrait être 1 pour un mur)")
+        
+        print(f"[DEBUG] Nombre de murs : {len(self.rects_collision)}")
+        
+        # ===== INIT FINALE =====
         self.creer_ennemis()
         self.prochain_id_joueur = 0
         self.running = True
-        print(f"[SERVEUR] Démarré sur le port {PORT_SERVEUR}")
 
     def scanner_points_sauvegarde(self):
         points = {}
