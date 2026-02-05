@@ -2,13 +2,35 @@
 # Classe définissant le joueur, sa physique et ses actions (combat).
 
 import pygame
+import sys  # AJOUTER
+import os   # AJOUTER
 from parametres import *
 
+# Charger le sprite du joueur
+def charger_sprite_joueur():
+    """Charge le sprite du personnage."""
+    try:
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(__file__)
+        
+        sprite_path = os.path.join(base_path, 'assets', 'perso.png')
+        sprite = pygame.image.load(sprite_path)
+        # Adapter la taille au personnage (TAILLE_TUILE - 8)
+        sprite = pygame.transform.scale(sprite, (TAILLE_TUILE - 8, TAILLE_TUILE - 4))
+        return sprite
+    except Exception as e:
+        print(f"Impossible de charger le sprite: {e}")
+        return None
+
+SPRITE_JOUEUR = charger_sprite_joueur()
 class Joueur:
     def __init__(self, x, y, id, couleur=COULEUR_JOUEUR):
         self.id = id
         self.rect = pygame.Rect(x, y, TAILLE_TUILE - 8, TAILLE_TUILE - 4)
         self.couleur = couleur
+        self.sprite = SPRITE_JOUEUR  # AJOUTER CETTE LIGNE
         
         # Mouvement
         self.vel_y = 0
@@ -230,7 +252,10 @@ class Joueur:
             self.rect.height
         )
         
-        pygame.draw.rect(surface, self.couleur, rect_visuel)
+        if self.sprite:
+            surface.blit(self.sprite, rect_visuel.topleft)
+        else:
+            pygame.draw.rect(surface, self.couleur, rect_visuel)
 
         # Dessiner l'attaque si active (carré blanc temporaire)
         if self.est_en_attaque and self.rect_attaque:
