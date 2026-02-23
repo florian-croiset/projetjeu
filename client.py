@@ -1,7 +1,4 @@
 # client.py
-# Le VISUEL du jeu. À lancer par TOUS les joueurs.
-# MISE À JOUR : Design des menus aux couleurs de la charte graphique Echo (Team Nightberry).
-#               Positionnement dynamique : les menus s'adaptent à toute taille d'écran.
 
 import pygame
 import socket
@@ -40,46 +37,51 @@ def dessiner_fond_echo(surface, largeur, hauteur, temps):
       - lueur centrale pulsante
     """
     # 1. Fond de base dégradé vertical
-    for y in range(hauteur):
-        ratio = y / hauteur
-        r = int(8  + ratio * 4)
-        g = int(8  + ratio * 2)
-        b = int(20 + ratio * 15)
-        pygame.draw.line(surface, (r, g, b), (0, y), (largeur, y))
+    if FOND_MENU:
+        for y in range(hauteur):
+            ratio = y / hauteur
+            r = int(8  + ratio * 4)
+            g = int(8  + ratio * 2)
+            b = int(20 + ratio * 15)
+            pygame.draw.line(surface, (r, g, b), (0, y), (largeur, y))
+    else:
+        surface.fill((0, 0, 0))
 
     # 2. Grille en perspective (lignes horizontales fines)
-    nb_lignes = 12
-    grille_surf = pygame.Surface((largeur, hauteur), pygame.SRCALPHA)
-    for i in range(nb_lignes):
-        ratio = (i + 1) / nb_lignes
-        y_pos = int(hauteur * 0.55 + ratio * hauteur * 0.6)
-        if y_pos >= hauteur:
-            break
-        alpha = int(12 + ratio * 25)
-        epaisseur = 1 if ratio < 0.6 else 2
-        pygame.draw.line(grille_surf, (0, 180, 255, alpha),
-                         (0, y_pos), (largeur, y_pos), epaisseur)
+    if HALOS_MENU:
+        nb_lignes = 12
+        grille_surf = pygame.Surface((largeur, hauteur), pygame.SRCALPHA)
+        for i in range(nb_lignes):
+            ratio = (i + 1) / nb_lignes
+            y_pos = int(hauteur * 0.55 + ratio * hauteur * 0.6)
+            if y_pos >= hauteur:
+                break
+            alpha = int(12 + ratio * 25)
+            epaisseur = 1 if ratio < 0.6 else 2
+            pygame.draw.line(grille_surf, (0, 180, 255, alpha),
+                            (0, y_pos), (largeur, y_pos), epaisseur)
 
-    # Lignes verticales de la grille
-    nb_v = 20
-    for i in range(nb_v + 1):
-        ratio_x = i / nb_v
-        x_vanish = largeur // 2
-        y_vanish = int(hauteur * 0.55)
-        x_bas = int(ratio_x * largeur)
-        alpha = int(8 + abs(ratio_x - 0.5) * 20)
-        pygame.draw.line(grille_surf, (0, 150, 220, alpha),
-                         (x_vanish, y_vanish), (x_bas, hauteur), 1)
-    surface.blit(grille_surf, (0, 0))
+        # Lignes verticales de la grille
+        nb_v = 20
+        for i in range(nb_v + 1):
+            ratio_x = i / nb_v
+            x_vanish = largeur // 2
+            y_vanish = int(hauteur * 0.55)
+            x_bas = int(ratio_x * largeur)
+            alpha = int(8 + abs(ratio_x - 0.5) * 20)
+            pygame.draw.line(grille_surf, (0, 150, 220, alpha),
+                            (x_vanish, y_vanish), (x_bas, hauteur), 1)
+        surface.blit(grille_surf, (0, 0))
 
     # 3. Lueur centrale pulsante (cyan)
-    pulse = 0.75 + 0.25 * math.sin(temps / 1200)
-    glow_surf = pygame.Surface((largeur, hauteur), pygame.SRCALPHA)
-    cx, cy = largeur // 2, int(hauteur * 0.38)
-    for rayon, alpha_base in [(420, 18), (280, 30), (150, 45), (70, 25)]:
-        a = int(alpha_base * pulse)
-        pygame.draw.circle(glow_surf, (0, 180, 255, a), (cx, cy), rayon)
-    surface.blit(glow_surf, (0, 0))
+    if HALOS_MENU:
+        pulse = 0.75 + 0.25 * math.sin(temps / 1200)
+        glow_surf = pygame.Surface((largeur, hauteur), pygame.SRCALPHA)
+        cx, cy = largeur // 2, int(hauteur * 0.38)
+        for rayon, alpha_base in [(420, 18), (280, 30), (150, 45), (70, 25)]:
+            a = int(alpha_base * pulse)
+            pygame.draw.circle(glow_surf, (0, 180, 255, a), (cx, cy), rayon)
+        surface.blit(glow_surf, (0, 0))
 
 
 def dessiner_separateur_neon(surface, x1, y, x2, couleur=None, alpha=180):
@@ -267,7 +269,8 @@ class Client:
 
         # Polices — tailles relatives à la hauteur d'écran
         h = self.hauteur_ecran
-        self.police_titre  = pygame.font.Font(None, max(48, h // 14))
+        #self.police_titre  = pygame.font.Font(None, max(48, h // 14))
+        self.police_titre = pygame.font.Font(None, max(96, h // 7))
         self.police_bouton = pygame.font.Font(None, max(30, h // 28))
         self.police_texte  = pygame.font.Font(None, max(24, h // 36))
         self.police_petit  = pygame.font.Font(None, max(18, h // 48))
@@ -611,6 +614,11 @@ class Client:
                 self.etat_jeu = "MENU_PARAMETRES"
             if self.btn_quitter.verifier_clic(event):
                 self.etat_jeu = "QUITTER"
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                lien_rect = self.police_petit.render("florian-croiset.github.io/jeusite/", True, COULEUR_CYAN_SOMBRE).get_rect(bottomleft=(20, self.hauteur_ecran - 12))
+                if lien_rect.collidepoint(event.pos):
+                    import webbrowser
+                    webbrowser.open("https://florian-croiset.github.io/jeusite/")
 
     def dessiner_menu_principal(self):
         t = self.temps_anim
@@ -620,18 +628,19 @@ class Client:
 
         # Zone titre
         cy_titre = max(80, self.hauteur_ecran // 7)
-        dessiner_titre_neon(self.ecran, self.police_titre,
+        police_grand_titre = pygame.font.Font(None, max(96, self.hauteur_ecran // 7))
+        dessiner_titre_neon(self.ecran, police_grand_titre,
                             langue.get_texte("titre_jeu"),
                             self.cx, cy_titre)
 
         # Sous-titre
         sub = self.police_petit.render("par la Team Nightberry", True, COULEUR_TEXTE_SOMBRE)
-        self.ecran.blit(sub, sub.get_rect(center=(self.cx, cy_titre + 40)))
+        self.ecran.blit(sub, sub.get_rect(center=(self.cx, cy_titre + police_grand_titre.get_height() // 2 + 20)))
 
         # Séparateur
         marge = self.largeur_ecran // 6
         dessiner_separateur_neon(self.ecran,
-                                 marge, cy_titre + 65,
+                                 marge, cy_titre + police_grand_titre.get_height() // 2 + 50,
                                  self.largeur_ecran - marge)
 
         # Boutons
@@ -642,6 +651,15 @@ class Client:
         ver = self.police_petit.render("v1.2 — Beta", True, COULEUR_TEXTE_SOMBRE)
         self.ecran.blit(ver, (self.largeur_ecran - ver.get_width() - 20,
                               self.hauteur_ecran - ver.get_height() - 12))
+        
+        # Lien site (coin bas gauche) avec survol
+        lien_texte = "https://florian-croiset.github.io/jeusite/"
+        pos_souris = pygame.mouse.get_pos()
+        lien_surf = self.police_petit.render(lien_texte, True, COULEUR_CYAN_SOMBRE)
+        lien_rect = lien_surf.get_rect(bottomleft=(20, self.hauteur_ecran - 12))
+        if lien_rect.collidepoint(pos_souris):
+            lien_surf = self.police_petit.render(lien_texte, True, COULEUR_CYAN)
+        self.ecran.blit(lien_surf, lien_rect)
 
     # ------------------------------------------------------------------
     #  MENU REJOINDRE
@@ -935,8 +953,9 @@ class Client:
         dessiner_fond_echo(self.ecran, self.largeur_ecran, self.hauteur_ecran,
                            self.temps_anim)
 
-        # Titre fixe
-        dessiner_titre_neon(self.ecran, self.police_titre,
+        # Titre fixe — police normale (pas le grand titre du menu principal)
+        police_titre_params = pygame.font.Font(None, max(48, self.hauteur_ecran // 14))
+        dessiner_titre_neon(self.ecran, police_titre_params,
                             langue.get_texte("param_titre"),
                             self.cx, self.hauteur_ecran // 14)
 

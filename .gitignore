@@ -7,7 +7,7 @@ dist/
 *$py.class
 
 settings.json
-
+client.spec
 controls.json
 slot_1.json
 slot_2.json
