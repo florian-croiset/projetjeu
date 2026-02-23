@@ -103,23 +103,47 @@ class Carte:
         return False 
 
     def reveler_par_echo(self, centre_x, centre_y, vis_map):
-        """Lance des rayons depuis le centre et met à jour la carte de visibilité."""
+        """Lance des rayons depuis le centre — s'arrête sur les murs (ne traverse pas)."""
         for i in range(NB_RAYONS_ECHO):
             angle = (i / NB_RAYONS_ECHO) * 2 * math.pi
-            
+            cos_a = math.cos(angle)
+            sin_a = math.sin(angle)
+
             for dist in range(1, PORTEE_ECHO):
-                x = centre_x + dist * math.cos(angle)
-                y = centre_y + dist * math.sin(angle)
-                
+                x = centre_x + dist * cos_a
+                y = centre_y + dist * sin_a
+
                 tuile_x = int(x // TAILLE_TUILE)
                 tuile_y = int(y // TAILLE_TUILE)
 
                 if not (0 <= tuile_x < self.largeur_map and 0 <= tuile_y < self.hauteur_map):
-                    break 
+                    break
 
                 if self.map_data[tuile_y][tuile_x] in [1, 3]:
-                    vis_map[tuile_y][tuile_x] = True 
-                    break 
+                    vis_map[tuile_y][tuile_x] = True
+                    break  # Stop : le rayon ne traverse pas le mur
+
+    def reveler_anneau(self, centre_x, centre_y, rayon_min, rayon_max, vis_map):
+        """Révèle les tuiles dans l'anneau [rayon_min, rayon_max] pixels.
+        Utilisé pour la révélation progressive de l'écho."""
+        for i in range(NB_RAYONS_ECHO):
+            angle = (i / NB_RAYONS_ECHO) * 2 * math.pi
+            cos_a = math.cos(angle)
+            sin_a = math.sin(angle)
+
+            for dist in range(max(1, rayon_min), min(rayon_max + 1, PORTEE_ECHO)):
+                x = centre_x + dist * cos_a
+                y = centre_y + dist * sin_a
+
+                tuile_x = int(x // TAILLE_TUILE)
+                tuile_y = int(y // TAILLE_TUILE)
+
+                if not (0 <= tuile_x < self.largeur_map and 0 <= tuile_y < self.hauteur_map):
+                    break
+
+                if self.map_data[tuile_y][tuile_x] in [1, 3]:
+                    vis_map[tuile_y][tuile_x] = True
+                    break  # Stop au premier mur : pas de traversée
 
     def dessiner_carte(self, surface, vis_map, camera_offset=(0,0)):
         """Dessine la carte en tenant compte de la caméra."""
@@ -152,3 +176,20 @@ class Carte:
                 if self.map_data[y][x] == 1:
                     rects.append(pygame.Rect(x * TAILLE_TUILE, y * TAILLE_TUILE, TAILLE_TUILE, TAILLE_TUILE))
         return rects
+    
+    def reveler_par_echo_partiel(self, centre_x, centre_y, portee, vis_map):
+        """Révélation progressive : repart de 0 jusqu'à portee pixels."""
+        for i in range(NB_RAYONS_ECHO):
+            angle = (i / NB_RAYONS_ECHO) * 2 * math.pi
+            cos_a = math.cos(angle)
+            sin_a = math.sin(angle)
+            for dist in range(1, min(portee + 1, PORTEE_ECHO)):
+                x = centre_x + dist * cos_a
+                y = centre_y + dist * sin_a
+                tuile_x = int(x // TAILLE_TUILE)
+                tuile_y = int(y // TAILLE_TUILE)
+                if not (0 <= tuile_x < self.largeur_map and 0 <= tuile_y < self.hauteur_map):
+                    break
+                if self.map_data[tuile_y][tuile_x] in [1, 3]:
+                    vis_map[tuile_y][tuile_x] = True
+                    break

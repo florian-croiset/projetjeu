@@ -16,6 +16,8 @@ import gestion_sauvegarde
 import points_sauvegarde
 from ennemi import Ennemi
 from ame_perdue import AmePerdue
+from ame_libre import AmeLibre
+from cle import Cle
 
 def obtenir_ip_locale():
     """Retourne l'IP locale de la machine sur le réseau."""
@@ -53,6 +55,9 @@ class Serveur:
         self.cartes_visibilite = {}
         self.ennemis = {}
         self.ames_perdues = {}
+        self.ames_libres = {}
+        self.cle = None
+        self.echos_en_cours = []
         
         # ===== CARTE =====
         import os
@@ -90,14 +95,19 @@ class Serveur:
         # Vérifier la tuile sous le spawn
         if spawn_y + 1 < self.carte_jeu.hauteur_map and spawn_x < self.carte_jeu.largeur_map:
             tuile_dessous = self.carte_jeu.map_data[spawn_y + 1][spawn_x]
-            print(f"[DEBUG] Tuile sous le spawn : {tuile_dessous} (devrait être 1 pour un mur)")
+            print(f"[DEBUG] Tuile sous le spawn : {tuile_dessous} (devrait etre 1 pour un mur)")
         
         print(f"[DEBUG] Nombre de murs : {len(self.rects_collision)}")
         
         # ===== INIT FINALE =====
         self.creer_ennemis()
+        self.creer_ames_libres()
+        self.cle = Cle(x=806, y=80)
         self.prochain_id_joueur = 0
-        self.running = True
+        self.torche_allumee = False
+        self.torche_x = 32
+        self.torche_y = 672
+        self.running = True        
 
     def scanner_points_sauvegarde(self):
         points = {}
@@ -110,10 +120,25 @@ class Serveur:
         return points
 
     def creer_ennemis(self):
-        # Création de quelques ennemis pour tester
         self.ennemis[0] = Ennemi(x=200, y=680, id=0)
         self.ennemis[1] = Ennemi(x=500, y=420, id=1)
         self.ennemis[2] = Ennemi(x=800, y=260, id=2)
+
+    def creer_ames_libres(self):
+        """Place des âmes libres à divers endroits de la map."""
+        positions = [
+            (320, 320), (640, 320), (900, 200),
+            (250, 640), (480, 380), (730, 640), (960, 420),
+        ]
+        for x, y in positions:
+            ame = AmeLibre(x, y)
+            self.ames_libres[ame.id] = ame
+
+    def creer_cle(self):
+        """Place la clé en haut à droite de la map."""
+        # Haut-droite : tuile ~(28, 2) → pixel (896, 64)
+        largeur_px = self.carte_jeu.largeur_map * TAILLE_TUILE
+        self.cle = Cle(x=largeur_px - 4 * TAILLE_TUILE, y=2 * TAILLE_TUILE + 16)
 
     def gerer_client(self, connexion_client, id_joueur):
         spawn_x, spawn_y = self.spawn_point if id_joueur == 0 else points_sauvegarde.get_point_depart()[1]
@@ -145,24 +170,38 @@ class Serveur:
                 
                 self.joueurs[id_joueur].commandes = commandes['clavier']
                 
-                # Gestion Écho
+                # Gestion Écho → révélation progressive
                 if commandes['echo']:
-                    temps_actuel = pygame.time.get_ticks()
+                    t_echo = pygame.time.get_ticks()
                     joueur = self.joueurs[id_joueur]
-                    if temps_actuel - joueur.dernier_echo_temps > COOLDOWN_ECHO:
-                        joueur.dernier_echo_temps = temps_actuel
-                        self.carte_jeu.reveler_par_echo(joueur.rect.centerx, joueur.rect.centery, self.cartes_visibilite[id_joueur])
+                    if t_echo - joueur.dernier_echo_temps > COOLDOWN_ECHO:
+                        joueur.dernier_echo_temps = t_echo
+                        self.echos_en_cours.append({
+                            'id_joueur': id_joueur,
+                            'cx': joueur.rect.centerx,
+                            'cy': joueur.rect.centery,
+                            'debut': t_echo,
+                            'rayon_precedent': 0,
+                        })
+
+                if commandes.get('toggle_torche'):
+                    self.torche_allumee = not self.torche_allumee
 
                 # Préparation données
                 etat_joueurs = [j.get_etat() for j in self.joueurs.values()]
                 etat_ennemis = [e.get_etat() for e in self.ennemis.values()]
                 etat_ames = [a.get_etat() for a in self.ames_perdues.values()]
-                
+                etat_ames_libres = [a.get_etat() for a in self.ames_libres.values()]
+                etat_cle = self.cle.get_etat() if self.cle else None
+
                 donnees_pour_client = {
                     'joueurs': etat_joueurs,
                     'vis_map': self.cartes_visibilite[id_joueur],
                     'ennemis': etat_ennemis,
-                    'ames_perdues': etat_ames
+                    'ames_perdues': etat_ames,
+                    'ames_libres': etat_ames_libres,
+                    'cle': etat_cle,
+                    'torche_allumee': self.torche_allumee,
                 }
 
                 connexion_client.send(pickle.dumps(donnees_pour_client))
@@ -183,12 +222,57 @@ class Serveur:
         horloge = pygame.time.Clock()
         while self.running:
             temps_actuel = pygame.time.get_ticks()
-            
-            # 1. Ennemis
+
+            # 0. Révélation progressive des échos
+            echos_restants = []
+            for echo in self.echos_en_cours:
+                elapsed = temps_actuel - echo['debut']
+                if elapsed <= ECHO_DUREE_REVEAL:
+                    rayon_max = int((elapsed / ECHO_DUREE_REVEAL) * PORTEE_ECHO)
+                    rayon_prec = echo.get('rayon_precedent', 0)
+                    if rayon_max > rayon_prec and echo['id_joueur'] in self.cartes_visibilite:
+                        self.carte_jeu.reveler_par_echo_partiel(
+                            echo['cx'], echo['cy'],
+                            rayon_max,                    # portée max = rayon actuel
+                            self.cartes_visibilite[echo['id_joueur']]
+                        )
+                        echo['rayon_precedent'] = rayon_max
+                    echos_restants.append(echo)
+            self.echos_en_cours = echos_restants
+
+            # Flash sonar : déclenché pour chaque écho terminé cette frame
+            for echo in echos_restants:
+                for id_ennemi, ennemi in self.ennemis.items():
+                    dx = ennemi.rect.centerx - echo['cx']
+                    dy = ennemi.rect.centery - echo['cy']
+                    dist = (dx**2 + dy**2) ** 0.5
+                    if dist <= PORTEE_ECHO:
+                        ennemi.flash_echo_temps = temps_actuel
+
+            # 1. Âmes libres : animation + collecte par contact
+            for ame in self.ames_libres.values():
+                ame.mettre_a_jour(temps_actuel)
+            for id_joueur, joueur in list(self.joueurs.items()):
+                for id_ame, ame in list(self.ames_libres.items()):
+                    if joueur.rect.colliderect(ame.rect):
+                        joueur.argent += ame.valeur
+                        print(f"[SERVEUR] Joueur {id_joueur} ramasse âme libre (+{ame.valeur})")
+                        del self.ames_libres[id_ame]
+
+            # 2. Clé : animation + collecte par contact
+            if self.cle and not self.cle.est_ramassee:
+                self.cle.mettre_a_jour(temps_actuel)
+                for id_joueur, joueur in list(self.joueurs.items()):
+                    if joueur.rect.colliderect(self.cle.rect):
+                        self.cle.est_ramassee = True
+                        joueur.have_key = True
+                        print(f"[SERVEUR] Joueur {id_joueur} a ramassé la clé !")
+
+            # 3. Ennemis
             for id_ennemi, ennemi in list(self.ennemis.items()):
                 ennemi.appliquer_logique(self.rects_collision, self.carte_jeu)
 
-            # 2. Joueurs (Physique, Combat, Mort)
+            # 4. Joueurs (Physique, Combat, Mort)
             for id_joueur, joueur in list(self.joueurs.items()):
                 joueur.appliquer_physique(self.rects_collision)
                 
@@ -220,23 +304,29 @@ class Serveur:
                     if joueur.rect.colliderect(ennemi.rect):
                         joueur.prendre_degat(1, temps_actuel)
                 
+                
                 # C. Mort et Respawn
                 if joueur.pv <= 0:
-                    # Perte de l'ancienne âme si elle existait
-                    if joueur.ame_perdue and joueur.ame_perdue.id in self.ames_perdues:
-                        del self.ames_perdues[joueur.ame_perdue.id]
-                    
-                    # Création nouvelle âme avec l'argent actuel
-                    nouvelle_ame = AmePerdue(joueur.rect.centerx, joueur.rect.centery, id_joueur, joueur.argent)
-                    self.ames_perdues[nouvelle_ame.id] = nouvelle_ame
-                    joueur.ame_perdue = nouvelle_ame
-                    
-                    joueur.argent = 0 # Perte de l'argent porté
-                    
-                    # Respawn
-                    id_checkpoint = self.donnees_partie["id_dernier_checkpoint"] if id_joueur == 0 else points_sauvegarde.get_point_depart()[0]
-                    coords_spawn = points_sauvegarde.get_coords_par_id(id_checkpoint)
-                    joueur.respawn(coords_spawn)
+                    # Initialiser le timer de mort si pas encore fait
+                    if not hasattr(joueur, 'temps_mort') or joueur.temps_mort is None:
+                        joueur.temps_mort = temps_actuel
+                        
+                        # Perte de l'ancienne âme si elle existait
+                        if joueur.ame_perdue and joueur.ame_perdue.id in self.ames_perdues:
+                            del self.ames_perdues[joueur.ame_perdue.id]
+                        
+                        # Création nouvelle âme avec l'argent actuel
+                        nouvelle_ame = AmePerdue(joueur.rect.centerx, joueur.rect.centery, id_joueur, joueur.argent)
+                        self.ames_perdues[nouvelle_ame.id] = nouvelle_ame
+                        joueur.ame_perdue = nouvelle_ame
+                        joueur.argent = 0
+
+                    # Respawn seulement après 3 secondes
+                    elif temps_actuel - joueur.temps_mort >= 3000:
+                        id_checkpoint = self.donnees_partie["id_dernier_checkpoint"] if id_joueur == 0 else points_sauvegarde.get_point_depart()[0]
+                        coords_spawn = points_sauvegarde.get_coords_par_id(id_checkpoint)
+                        joueur.respawn(coords_spawn)
+                        joueur.temps_mort = None
 
                 # D. Sauvegarde (Hôte)
                 if id_joueur == 0: 
@@ -268,7 +358,7 @@ class Serveur:
             
             # ⬇️ VÉRIFICATION : LIMITE DE 3 JOUEURS
             if len(self.clients) >= 3:
-                print(f"[SERVEUR] Connexion refusée de {adresse} - Serveur plein (3/3)")
+                print(f"[SERVEUR] Connexion refusee de {adresse} - Serveur plein (3/3)")
                 try:
                     connexion_client.send(pickle.dumps({"erreur": "SERVEUR_PLEIN"}))
                     time.sleep(0.1)

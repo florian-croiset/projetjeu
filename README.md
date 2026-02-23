@@ -1,4 +1,4 @@
-# Metroidvania - Écho 🎮
+# Écho 🎮
 
 **Projet de jeu vidéo multijoueur coopératif - Cycle Préparatoire S1 & S2**
 
@@ -22,7 +22,7 @@
 
 ## 🎯 Présentation du projet
 
-**Metroidvania - Écho** est un jeu d'action-plateforme 2D développé dans le cadre d'un projet étudiant de première année du cycle préparatoire. Le jeu s'inspire du genre "Metroidvania" en proposant une exploration progressive basée sur un système de vision unique : **l'écholocalisation**.
+**Écho** est un jeu d'action-plateforme 2D développé dans le cadre d'un projet étudiant de première année du cycle préparatoire. Le jeu s'inspire du genre "Metroidvania" en proposant une exploration progressive basée sur un système de vision unique : **l'écholocalisation**.
 
 ### Concept principal
 
@@ -618,4 +618,4 @@ Pour toute question concernant ce projet :
 - **Dépôt GitHub** : https://github.com/florian-croiset/projetjeu
 ---
 
-*README généré avec ❤️ par l'équipe Metroidvania - Écho*
+*README généré avec ❤️ par la team Nightberry*

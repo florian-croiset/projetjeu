@@ -45,7 +45,8 @@ class Joueur:
         
         # Mécaniques
         self.dernier_echo_temps = 0
-        self.ame_perdue = None 
+        self.ame_perdue = None
+        self.have_key = False  # True si le joueur possède une clé
         
         # Combat
         self.dernier_attaque_temps = 0
@@ -202,26 +203,26 @@ class Joueur:
             self.dash_disponibles_en_air = DASH_EN_AIR_MAX
     def gerer_attaque(self, temps_actuel):
         """Gère la logique d'attaque (création hitbox, cooldown)."""
-        # Si on demande d'attaquer et que le cooldown est fini
+        # Déclenchement nouvelle attaque
         if self.commandes['attaque'] and (temps_actuel - self.dernier_attaque_temps > COOLDOWN_ATTAQUE):
             self.est_en_attaque = True
             self.dernier_attaque_temps = temps_actuel
-            # Créer la hitbox devant le joueur
-            if self.direction == 1:
-                self.rect_attaque = pygame.Rect(self.rect.right, self.rect.y, PORTEE_ATTAQUE, self.rect.height)
-            else:
-                self.rect_attaque = pygame.Rect(self.rect.left - PORTEE_ATTAQUE, self.rect.y, PORTEE_ATTAQUE, self.rect.height)
-            
-            # Consommer la commande (pour ne pas spammer)
             self.commandes['attaque'] = False
-            return True # Une attaque vient d'être lancée
-            
-        # Vérifier si l'attaque est finie
+            return True
+
+        # Fin de l'attaque
         if self.est_en_attaque:
             if temps_actuel - self.dernier_attaque_temps > DUREE_ATTAQUE:
                 self.est_en_attaque = False
                 self.rect_attaque = None
-                
+
+        # Mettre à jour la hitbox pour qu'elle suive le joueur pendant toute la durée
+        if self.est_en_attaque:
+            if self.direction == 1:
+                self.rect_attaque = pygame.Rect(self.rect.right, self.rect.y, PORTEE_ATTAQUE, self.rect.height)
+            else:
+                self.rect_attaque = pygame.Rect(self.rect.left - PORTEE_ATTAQUE, self.rect.y, PORTEE_ATTAQUE, self.rect.height)
+
         return False
 
     def prendre_degat(self, montant, temps_actuel):
@@ -284,9 +285,10 @@ class Joueur:
             'pv_max': self.pv_max,
             'argent': self.argent,
             'attaque': etat_attaque,
-            'peut_double_saut': self.peut_double_saut,  # <-- AJOUT
-            'peut_dash': self.peut_dash,  # <-- AJOUT
-            'est_en_dash': self.est_en_dash  # <-- AJOUT pour effet visuel
+            'peut_double_saut': self.peut_double_saut,
+            'peut_dash': self.peut_dash,
+            'est_en_dash': self.est_en_dash,
+            'have_key': self.have_key,
         }
 
     def set_etat(self, data):
@@ -299,9 +301,10 @@ class Joueur:
         self.argent = data.get('argent', 0)
         
         # Capacités
-        self.peut_double_saut = data.get('peut_double_saut', False)  # <-- AJOUT
-        self.peut_dash = data.get('peut_dash', False)  # <-- AJOUT
-        self.est_en_dash = data.get('est_en_dash', False)  # <-- AJOUT
+        self.peut_double_saut = data.get('peut_double_saut', False)
+        self.peut_dash = data.get('peut_dash', False)
+        self.est_en_dash = data.get('est_en_dash', False)
+        self.have_key = data.get('have_key', False)
         
         # Gestion visuelle de l'attaque distante
         etat_attaque = data.get('attaque')

@@ -22,6 +22,8 @@ class Ennemi:
         self.dernier_coup_recu = 0
         self.clignotement = False
 
+        self.flash_echo_temps = 0
+
     def appliquer_logique(self, rects_collision, carte):
         """Gère la physique et l'IA de patrouille."""
         dx = 0
@@ -110,7 +112,8 @@ class Ennemi:
             'x': self.rect.x,
             'y': self.rect.y,
             'pv': self.pv,
-            'clignotement': self.clignotement # Pour synchro visuelle
+            'clignotement': self.clignotement, # Pour synchro visuelle
+            'flash_echo_temps': self.flash_echo_temps,
         }
 
     def set_etat(self, data):
@@ -118,3 +121,4 @@ class Ennemi:
         self.rect.y = data['y']
         self.pv = data['pv']
         self.clignotement = data.get('clignotement', False)
+        self.flash_echo_temps = data.get('flash_echo_temps', 0)
