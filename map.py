@@ -1,117 +1,124 @@
-# visualiseur_map.py
-# Script pour afficher la map et vérifier qu'elle est correcte
+# map.py - Visualiseur de map avec coordonnées au clic souris
 
 import pygame
 import json
 import sys
+import os
 
-# Paramètres
 TAILLE_TUILE = 32
-COULEUR_FOND = (10, 10, 10)
-COULEUR_MUR = (100, 100, 100)
-COULEUR_GUIDE = (30, 30, 30)
-COULEUR_SAUVEGARDE = (200, 200, 50)
-COULEUR_VIDE = (20, 20, 20)
+COULEUR_FOND       = (10, 10, 10)
+COULEUR_MUR        = (80, 80, 120)
+COULEUR_GUIDE      = (40, 40, 70)
+COULEUR_SAUVEGARDE = (0, 200, 100)
+COULEUR_VIDE       = (20, 20, 35)
+COULEUR_GRILLE     = (30, 30, 50)
+COULEUR_CLÉ        = (255, 215, 0)   # repère doré pour positionner la clé
 
 def charger_map(fichier="map.json"):
-    """Charge la map depuis le fichier JSON."""
-    try:
-        with open(fichier, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return data['largeur'], data['hauteur'], data['data']
-    except Exception as e:
-        print(f"Erreur lors du chargement : {e}")
-        sys.exit(1)
+    dossier = os.path.dirname(os.path.abspath(__file__))
+    chemin  = os.path.join(dossier, fichier)
+    with open(chemin, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data["largeur"], data["hauteur"], data["data"]
 
 def afficher_map():
-    """Affiche la map dans une fenêtre pygame."""
     pygame.init()
-    
-    # Charger la map
     largeur, hauteur, map_data = charger_map()
-    
-    print(f"Map chargée : {largeur}x{hauteur}")
-    print(f"Tuile (0,0) = {map_data[0][0]}")
-    print(f"Tuile (12,1) = {map_data[12][1]} (devrait être 3 pour un checkpoint)")
-    
-    # Créer la fenêtre
-    largeur_ecran = largeur * TAILLE_TUILE
-    hauteur_ecran = hauteur * TAILLE_TUILE
-    
-    # Limiter la taille si trop grande
-    if largeur_ecran > 1920:
-        largeur_ecran = 1920
-    if hauteur_ecran > 1080:
-        hauteur_ecran = 1080
-    
-    ecran = pygame.display.set_mode((largeur_ecran, hauteur_ecran))
-    pygame.display.set_caption("Visualiseur de Map")
-    
-    # Créer une surface pour toute la map
-    surface_map = pygame.Surface((largeur * TAILLE_TUILE, hauteur * TAILLE_TUILE))
-    
-    # Dessiner toute la map
+
+    map_w = largeur * TAILLE_TUILE   # 1024
+    map_h = hauteur * TAILLE_TUILE   # 768
+
+    # Fenêtre un peu plus grande pour laisser de l'espace à la légende
+    WIN_W = max(map_w + 20, 800)
+    WIN_H = max(map_h + 80, 600)
+    ecran = pygame.display.set_mode((WIN_W, WIN_H))
+    pygame.display.set_caption("Visualiseur de Map — Clique pour obtenir les coordonnées")
+
+    # Pré-dessiner la map sur une surface
+    surface_map = pygame.Surface((map_w, map_h))
     for y in range(hauteur):
         for x in range(largeur):
             tuile = map_data[y][x]
-            rect = pygame.Rect(x * TAILLE_TUILE, y * TAILLE_TUILE, TAILLE_TUILE, TAILLE_TUILE)
-            
-            if tuile == 0:
-                couleur = COULEUR_VIDE
-            elif tuile == 1:
-                couleur = COULEUR_MUR
-            elif tuile == 2:
-                couleur = COULEUR_GUIDE
-            elif tuile == 3:
-                couleur = COULEUR_SAUVEGARDE
-            else:
-                couleur = (255, 0, 255)  # Magenta pour valeurs inconnues
-            
+            rect  = pygame.Rect(x*TAILLE_TUILE, y*TAILLE_TUILE, TAILLE_TUILE, TAILLE_TUILE)
+            if   tuile == 0: couleur = COULEUR_VIDE
+            elif tuile == 1: couleur = COULEUR_MUR
+            elif tuile == 2: couleur = COULEUR_GUIDE
+            elif tuile == 3: couleur = COULEUR_SAUVEGARDE
+            else:            couleur = (255, 0, 255)
             pygame.draw.rect(surface_map, couleur, rect)
-    
-    # Offset pour naviguer
-    offset_x = 0
-    offset_y = 0
-    vitesse_scroll = 20
-    
-    running = True
+            pygame.draw.rect(surface_map, COULEUR_GRILLE, rect, 1)
+
+    police     = pygame.font.Font(None, 22)
+    police_big = pygame.font.Font(None, 28)
+
+    # Décalage de la map dans la fenêtre (centrage)
+    MAP_OX = 10
+    MAP_OY = 50  # espace en haut pour la légende
+
+    dernier_clic = None   # (tuile_x, tuile_y, pixel_x, pixel_y)
+    marqueur     = None   # (pixel_x, pixel_y) dans la map
+
     horloge = pygame.time.Clock()
-    
+    running = True
+
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    running = False
-        
-        # Navigation avec les flèches
-        touches = pygame.key.get_pressed()
-        if touches[pygame.K_LEFT]:
-            offset_x -= vitesse_scroll
-        if touches[pygame.K_RIGHT]:
-            offset_x += vitesse_scroll
-        if touches[pygame.K_UP]:
-            offset_y -= vitesse_scroll
-        if touches[pygame.K_DOWN]:
-            offset_y += vitesse_scroll
-        
-        # Limiter l'offset
-        offset_x = max(0, min(offset_x, max(0, largeur * TAILLE_TUILE - largeur_ecran)))
-        offset_y = max(0, min(offset_y, max(0, hauteur * TAILLE_TUILE - hauteur_ecran)))
-        
-        # Afficher
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                running = False
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mx, my = event.pos
+                # Convertir en coordonnées dans la map
+                px = mx - MAP_OX
+                py = my - MAP_OY
+                if 0 <= px < map_w and 0 <= py < map_h:
+                    tx = px // TAILLE_TUILE
+                    ty = py // TAILLE_TUILE
+                    dernier_clic = (tx, ty, px, py)
+                    marqueur     = (px, py)
+                    print(f"Clique : tuile ({tx}, {ty})  ->  pixels x={px}, y={py}")
+                    print(f"         dans serveur.py : Cle(x={px}, y={py})")
+
+        # Fond
         ecran.fill(COULEUR_FOND)
-        ecran.blit(surface_map, (-offset_x, -offset_y))
-        
-        # Afficher les infos
-        police = pygame.font.Font(None, 24)
-        texte = police.render(f"Position: ({offset_x//TAILLE_TUILE}, {offset_y//TAILLE_TUILE}) | Flèches pour naviguer | ESC pour quitter", True, (255, 255, 255))
-        ecran.blit(texte, (10, 10))
-        
+
+        # Map
+        ecran.blit(surface_map, (MAP_OX, MAP_OY))
+
+        # Marqueur au clic (croix dorée)
+        if marqueur:
+            mx_m = marqueur[0] + MAP_OX
+            my_m = marqueur[1] + MAP_OY
+            pygame.draw.line(ecran, COULEUR_CLÉ, (mx_m-10, my_m), (mx_m+10, my_m), 2)
+            pygame.draw.line(ecran, COULEUR_CLÉ, (mx_m, my_m-10), (mx_m, my_m+10), 2)
+            pygame.draw.circle(ecran, COULEUR_CLÉ, (mx_m, my_m), 5, 2)
+
+        # Surbrillance tuile sous la souris
+        mx_s, my_s = pygame.mouse.get_pos()
+        px_s = mx_s - MAP_OX
+        py_s = my_s - MAP_OY
+        if 0 <= px_s < map_w and 0 <= py_s < map_h:
+            tx_s = (px_s // TAILLE_TUILE) * TAILLE_TUILE
+            ty_s = (py_s // TAILLE_TUILE) * TAILLE_TUILE
+            sur_rect = pygame.Rect(tx_s + MAP_OX, ty_s + MAP_OY, TAILLE_TUILE, TAILLE_TUILE)
+            pygame.draw.rect(ecran, (255, 255, 255), sur_rect, 2)
+
+        # Bandeau info en haut
+        info1 = f"Souris : tuile ({px_s//TAILLE_TUILE}, {py_s//TAILLE_TUILE})  pixel ({px_s}, {py_s})"
+        if dernier_clic:
+            tx, ty, cpx, cpy = dernier_clic
+            info2 = f"Dernier clic -> Cle(x={cpx}, y={cpy})   [tuile {tx},{ty}]  — aussi affiché dans le terminal"
+        else:
+            info2 = "Clique sur la map pour obtenir les coordonnées à copier dans serveur.py"
+
+        pygame.draw.rect(ecran, (14, 10, 35), pygame.Rect(0, 0, WIN_W, 46))
+        ecran.blit(police.render(info1, True, (0, 212, 255)), (10, 8))
+        ecran.blit(police.render(info2, True, (255, 215, 0)), (10, 28))
+
         pygame.display.flip()
         horloge.tick(60)
-    
+
     pygame.quit()
 
 if __name__ == "__main__":

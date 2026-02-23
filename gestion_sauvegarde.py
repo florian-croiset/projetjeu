@@ -71,17 +71,18 @@ def get_infos_slots():
         nom_slot = f"Slot {i + 1}"
         
         if donnees:
-            # Cette ligne causait l'erreur avant car get_nom_par_id manquait
             nom_checkpoint = points_sauvegarde.get_nom_par_id(donnees.get("id_dernier_checkpoint", "spawn_01"))
             infos.append({
                 "nom": nom_slot,
-                "description": f"Checkpoint: {nom_checkpoint}",
+                #"description": f"Checkpoint: {nom_checkpoint}",
+                "description": f"",
                 "est_vide": False
             })
         else:
             infos.append({
                 "nom": nom_slot,
-                "description": "[ Emplacement Vide ]",
+                #"description": "[ Emplacement Vide ]",
+                "description": f"",
                 "est_vide": True
             })
     return infos

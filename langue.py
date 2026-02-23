@@ -4,7 +4,7 @@
 
 # Dictionnaire des textes en Français
 FR = {
-    "titre_jeu": "Metroidvania - Écho",
+    "titre_jeu": "Écho",
     
     # Menu Principal
     "menu_heberger": "Héberger une partie",
@@ -37,7 +37,7 @@ FR = {
     "param_titre": "Paramètres",
     "param_section_jouabilite": "--- Jouabilité ---",
     "param_langue": "Langue : Français",
-    "param_section_reseau": "Réseau",
+    "param_section_reseau": "--- Réseau ---",
     "param_section_video": "--- Vidéo ---",
     "param_plein_ecran": "Plein écran",
     "param_vsync": "VSync (Non implémenté)",
@@ -63,7 +63,7 @@ FR = {
 
 # Dictionnaire des textes en Anglais
 EN = {
-    "titre_jeu": "Metroidvania - Echo",
+    "titre_jeu": "Echo",
     
     # Main Menu
     "menu_heberger": "Host a game",
@@ -96,7 +96,7 @@ EN = {
     "param_titre": "Settings",
     "param_section_jouabilite": "--- Gameplay ---",
     "param_langue": "Language: English",
-    "param_section_reseau": "Network",
+    "param_section_reseau": "--- Network ---",
     "param_section_video": "--- Video ---",
     "param_plein_ecran": "Fullscreen",
     "param_vsync": "VSync (Not implemented)",
