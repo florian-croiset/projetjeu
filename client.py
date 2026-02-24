@@ -1619,7 +1619,7 @@ class Client:
     def connecter(self, hote):
         try:
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.client_socket.settimeout(5)  # 5 secondes max pour se connecter
+            self.client_socket.settimeout(15)  # 5 secondes max pour se connecter
             print(f"[CLIENT] Connexion a {hote}:{PORT_SERVEUR}...")
             self.client_socket.connect((hote, PORT_SERVEUR))
             self.client_socket.settimeout(None)  # mode bloquant normal après connexion
