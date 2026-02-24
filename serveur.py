@@ -388,10 +388,6 @@ class Serveur:
 
 
 def main(id_slot, type_lancement):
-    #pygame.init()
-    import os
-    os.environ["SDL_VIDEODRIVER"] = "dummy"
-    os.environ["SDL_AUDIODRIVER"] = "dummy"
     pygame.init()
     ip = obtenir_ip_locale()
     print(f"[SERVEUR] IP locale : {ip}")
