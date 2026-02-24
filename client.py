@@ -1482,6 +1482,28 @@ class Client:
         self.ecran.blit(surface_zoomee, (0, 0))
         self.dessiner_hud()
 
+    def _recv_complet(self, sock):
+        """Reçoit un paquet pickle complet, quelle que soit sa taille."""
+        morceaux = b""
+        sock.settimeout(0.1)
+        try:
+            while True:
+                morceau = sock.recv(65536)
+                if not morceau:
+                    break
+                morceaux += morceau
+                try:
+                    pickle.loads(morceaux)
+                    break
+                except Exception:
+                    continue
+        except socket.timeout:
+            pass
+        finally:
+            sock.settimeout(None)
+        return pickle.loads(morceaux)
+
+
     def boucle_jeu_reseau(self):
         if not self.client_socket:
             self.etat_jeu = "MENU_PRINCIPAL"
@@ -1507,26 +1529,6 @@ class Client:
             try:
                 self.client_socket.send(pickle.dumps(commandes_a_envoyer))
                 donnees_recues = self._recv_complet(self.client_socket)
-                def _recv_complet(self, sock):
-                    """Reçoit un paquet pickle complet, quelle que soit sa taille."""
-                    morceaux = b""
-                    sock.settimeout(0.1)
-                    try:
-                        while True:
-                            morceau = sock.recv(65536)
-                            if not morceau:
-                                break
-                            morceaux += morceau
-                            try:
-                                pickle.loads(morceaux)
-                                break  # données complètes et décodables
-                            except Exception:
-                                continue  # on attend la suite
-                    except socket.timeout:
-                        pass
-                    finally:
-                        sock.settimeout(None)
-                    return pickle.loads(morceaux)
 
                 self.vis_map_locale = donnees_recues['vis_map']
 
