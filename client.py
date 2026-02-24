@@ -748,6 +748,43 @@ class Client:
         if self.message_erreur_connexion:
             self._dessiner_popup_erreur()
 
+    def _dessiner_popup_erreur(self):
+        """Affiche une popup d'erreur de connexion par-dessus le menu rejoindre."""
+        cx, cy = self.cx, self.cy
+        w_popup = max(440, min(600, self.largeur_ecran // 3))
+        h_popup = max(200, min(260, self.hauteur_ecran // 4))
+        rect_popup = pygame.Rect(cx - w_popup // 2, cy - h_popup // 2,
+                                w_popup, h_popup)
+
+        # Fond semi-transparent sombre
+        overlay = pygame.Surface((self.largeur_ecran, self.hauteur_ecran), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        self.ecran.blit(overlay, (0, 0))
+
+        # Panneau
+        dessiner_panneau(self.ecran, rect_popup, couleur_bordure=(220, 50, 50))
+
+        # Titre
+        titre_surf = self.police_texte.render("Erreur de connexion", True, (220, 50, 50))
+        self.ecran.blit(titre_surf, titre_surf.get_rect(
+            center=(cx, rect_popup.y + 36)))
+
+        # Séparateur
+        dessiner_separateur_neon(self.ecran,
+                                rect_popup.x + 20, rect_popup.y + 58,
+                                rect_popup.right - 20, couleur=(220, 50, 50))
+
+        # Message (peut contenir \n)
+        police_msg = self.police_petit
+        lignes = self.message_erreur_connexion.split('\n')
+        for i, ligne in enumerate(lignes):
+            s = police_msg.render(ligne, True, COULEUR_TEXTE)
+            self.ecran.blit(s, s.get_rect(center=(cx, rect_popup.y + 90 + i * 26)))
+
+        # Bouton OK
+        self.btn_erreur_ok.rect.center = (cx, rect_popup.bottom - 36)
+        self.btn_erreur_ok.dessiner(self.ecran)
+
     def _dessiner_ecran_mort(self, surface):
         if not hasattr(self, '_mort_depuis') or self._mort_depuis is None:
             self._mort_depuis = pygame.time.get_ticks()
@@ -1469,7 +1506,27 @@ class Client:
 
             try:
                 self.client_socket.send(pickle.dumps(commandes_a_envoyer))
-                donnees_recues = pickle.loads(self.client_socket.recv(4096))
+                donnees_recues = self._recv_complet(self.client_socket)
+                def _recv_complet(self, sock):
+                    """Reçoit un paquet pickle complet, quelle que soit sa taille."""
+                    morceaux = b""
+                    sock.settimeout(0.1)
+                    try:
+                        while True:
+                            morceau = sock.recv(65536)
+                            if not morceau:
+                                break
+                            morceaux += morceau
+                            try:
+                                pickle.loads(morceaux)
+                                break  # données complètes et décodables
+                            except Exception:
+                                continue  # on attend la suite
+                    except socket.timeout:
+                        pass
+                    finally:
+                        sock.settimeout(None)
+                    return pickle.loads(morceaux)
 
                 self.vis_map_locale = donnees_recues['vis_map']
 
@@ -1560,8 +1617,10 @@ class Client:
     def connecter(self, hote):
         try:
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.client_socket.settimeout(5)  # 5 secondes max pour se connecter
             print(f"[CLIENT] Connexion a {hote}:{PORT_SERVEUR}...")
             self.client_socket.connect((hote, PORT_SERVEUR))
+            self.client_socket.settimeout(None)  # mode bloquant normal après connexion
             reponse = pickle.loads(self.client_socket.recv(2048))
 
             if isinstance(reponse, dict) and "erreur" in reponse:
