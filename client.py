@@ -1352,11 +1352,10 @@ class Client:
                         continue
                     joueur = self.joueurs_locaux[self.mon_id]
                     vient_dallumer = self.torche.toggle()
-                    if vient_dallumer and self.mon_id in self.joueurs_locaux:
-                        joueur = self.joueurs_locaux[self.mon_id]
-                        commandes['toggle_torche'] = True  # envoyé au serveur
-                        dx = joueur.rect.centerx - self.torche.x if self.mon_id in self.joueurs_locaux else 999
-                        dy = joueur.rect.centery - self.torche.y if self.mon_id in self.joueurs_locaux else 999
+                    commandes['toggle_torche'] = True
+                    if vient_dallumer:
+                        dx = joueur.rect.centerx - self.torche.x
+                        dy = joueur.rect.centery - self.torche.y
                         if (dx**2 + dy**2)**0.5 <= DISTANCE_TORCHE_ECHO:
                             commandes['echo'] = True
 
@@ -1482,26 +1481,28 @@ class Client:
         self.ecran.blit(surface_zoomee, (0, 0))
         self.dessiner_hud()
 
+    def _recvall(self, sock, n):
+        """Lit exactement n octets depuis le socket."""
+        data = b""
+        while len(data) < n:
+            paquet = sock.recv(n - len(data))
+            if not paquet:
+                raise EOFError("Connexion fermée")
+            data += paquet
+        return data
+
     def _recv_complet(self, sock):
-        """Reçoit un paquet pickle complet, quelle que soit sa taille."""
-        morceaux = b""
-        sock.settimeout(0.1)
-        try:
-            while True:
-                morceau = sock.recv(65536)
-                if not morceau:
-                    break
-                morceaux += morceau
-                try:
-                    pickle.loads(morceaux)
-                    break
-                except Exception:
-                    continue
-        except socket.timeout:
-            pass
-        finally:
-            sock.settimeout(None)
-        return pickle.loads(morceaux)
+        """Reçoit un paquet pickle complet : lit 4 octets de taille, puis le payload."""
+        header = self._recvall(sock, 4)
+        taille = int.from_bytes(header, 'big')
+        data = self._recvall(sock, taille)
+        return pickle.loads(data)
+
+    def _send_complet(self, sock, obj):
+        """Envoie un objet pickle précédé de 4 octets de taille."""
+        data = pickle.dumps(obj)
+        header = len(data).to_bytes(4, 'big')
+        sock.sendall(header + data)
 
 
     def boucle_jeu_reseau(self):
@@ -1527,7 +1528,7 @@ class Client:
                 break
 
             try:
-                self.client_socket.send(pickle.dumps(commandes_a_envoyer))
+                self._send_complet(self.client_socket, commandes_a_envoyer)
                 donnees_recues = self._recv_complet(self.client_socket)
 
                 self.vis_map_locale = donnees_recues['vis_map']
@@ -1623,7 +1624,7 @@ class Client:
             print(f"[CLIENT] Connexion a {hote}:{PORT_SERVEUR}...")
             self.client_socket.connect((hote, PORT_SERVEUR))
             self.client_socket.settimeout(None)  # mode bloquant normal après connexion
-            reponse = pickle.loads(self.client_socket.recv(2048))
+            reponse = self._recv_complet(self.client_socket)
 
             if isinstance(reponse, dict) and "erreur" in reponse:
                 if reponse["erreur"] == "SERVEUR_PLEIN":
