@@ -246,7 +246,7 @@ class Serveur:
         except socket.error as e:
             print(f"[SERVEUR] Erreur socket {id_joueur}: {e}")
         finally:
-            print(f"[SERVEUR] Client {id_joueur} déconnecté.")
+            print(f"[SERVEUR] Client {id_joueur} deconnecte.")
             connexion_client.close()
             with self.lock:
                 if connexion_client in self.clients:

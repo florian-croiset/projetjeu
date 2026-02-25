@@ -1,5 +1,8 @@
 # client.py
 
+import envoyer_logs
+envoyer_logs.activer_capture()   # ← UNE seule ligne, c'est tout
+
 import pygame
 import socket
 import pickle
@@ -208,6 +211,9 @@ def afficher_splash_screen(ecran, duree=3000):
                     sys.exit()
                 if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
                     return
+                if MODE_DEV and envoyer_logs.get_bouton().verifier_clic(event):
+                    envoyer_logs.envoyer_maintenant()
+                    print("[LOG] Envoi manuel déclenché depuis le bouton HUD")
     except Exception as e:
         print(f"Impossible d'afficher le splash screen: {e}")
 
@@ -280,6 +286,12 @@ class Client:
         self.id_slot_a_ecraser = None
         self.scroll_y_params = 0
         self.message_erreur_connexion = None
+
+        # Activer le presse-papiers pygame
+        try:
+            pygame.scrap.init()
+        except Exception:
+            pass  # Non critique
 
         self.creer_widgets_menu_principal()
         self.creer_widgets_menu_rejoindre()
@@ -364,6 +376,13 @@ class Client:
         self.btn_erreur_ok = Bouton(cx - 60, cy + 90, 120, bh, "OK",
                                     self.police_bouton, style="danger")
 
+        # Bouton "Coller" — à droite de l'input IP
+        lw_coller = 90
+        self.btn_coller_ip = Bouton(
+            cx + lw // 2 + 10, cy - 30, lw_coller, 46,
+            "📋 Coller", self.police_bouton, style="ghost"
+        )
+
     def creer_widgets_menu_parametres(self):
         cx = self.cx
         col_droite = cx + 60
@@ -377,6 +396,7 @@ class Client:
         self.btn_copier_ip_hamachi   = _p()
         self.btn_changer_langue      = _p()
         self.btn_toggle_plein_ecran  = _p()
+        self.btn_toggle_musique      = _p()
         self.btn_changer_gauche      = _p()
         self.btn_changer_droite      = _p()
         self.btn_changer_saut        = _p()
@@ -396,7 +416,9 @@ class Client:
                                            self.police_bouton, style="ghost")
 
         self.boutons_menu_params_scrollables = [
-            self.btn_changer_langue, self.btn_toggle_plein_ecran,
+            self.btn_changer_langue,
+            self.btn_toggle_plein_ecran,
+            self.btn_toggle_musique,
             self.btn_changer_gauche, self.btn_changer_droite,
             self.btn_changer_saut, self.btn_changer_echo,
             self.btn_changer_attaque, self.btn_changer_dash,
@@ -438,16 +460,20 @@ class Client:
         self.btn_pause_parametres   = Bouton(cx - lw // 2, y0 + esp,      lw, bh,
                                              langue.get_texte("pause_parametres"),
                                              self.police_bouton)
-        self.btn_pause_activer_multi = Bouton(cx - lw // 2, y0 + esp * 2, lw, bh,
-                                              "Activer Multijoueur (Bientôt)",
-                                              self.police_bouton, style="ghost")
-        self.btn_pause_quitter      = Bouton(cx - lw // 2, y0 + esp * 3,  lw, bh,
+        # DÉSACTIVÉ — bouton inutile pour l'instant
+        # self.btn_pause_activer_multi = Bouton(cx - lw // 2, y0 + esp * 2, lw, bh,
+        #                                       "Activer Multijoueur (Bientôt)",
+        #                                       self.police_bouton, style="ghost")
+
+        # Le bouton quitter remonte d'un cran (index esp * 2 au lieu de esp * 3)
+        self.btn_pause_quitter      = Bouton(cx - lw // 2, y0 + esp * 2,  lw, bh,
                                              langue.get_texte("pause_quitter_session"),
                                              self.police_bouton, style="ghost")
 
         self.boutons_menu_pause = [
             self.btn_pause_reprendre, self.btn_pause_parametres,
-            self.btn_pause_activer_multi, self.btn_pause_quitter
+            self.btn_pause_quitter
+            # self.btn_pause_activer_multi retiré
         ]
 
         self.surface_fond_pause = pygame.Surface(
@@ -677,6 +703,7 @@ class Client:
 
         self.btn_connecter.verifier_survol(pos_souris)
         self.btn_retour_rejoindre.verifier_survol(pos_souris)
+        self.btn_coller_ip.verifier_survol(pos_souris)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -689,6 +716,29 @@ class Client:
                     self.etat_jeu = "EN_JEU"
             if event.type == pygame.MOUSEBUTTONDOWN:
                 self.input_ip_actif = self.input_box_ip.collidepoint(event.pos)
+            if self.btn_coller_ip.verifier_clic(event):
+                try:
+                    texte_presse_papier = pygame.scrap.get(pygame.SCRAP_TEXT)
+                    if texte_presse_papier:
+                        # pygame.scrap renvoie bytes avec null-terminateur sur Windows
+                        ip_collee = texte_presse_papier.decode('utf-8', errors='ignore').rstrip('\x00').strip()
+                        if ip_collee:
+                            self.input_ip_texte = ip_collee
+                            self.input_ip_actif = True
+                except Exception:
+                    # Fallback : essai via pyperclip ou subprocess
+                    try:
+                        import subprocess
+                        result = subprocess.run(
+                            ['powershell', '-command', 'Get-Clipboard'],
+                            capture_output=True, text=True, timeout=2
+                        )
+                        ip_collee = result.stdout.strip()
+                        if ip_collee:
+                            self.input_ip_texte = ip_collee
+                    except Exception:
+                        pass
+
             if event.type == pygame.KEYDOWN and self.input_ip_actif:
                 if event.key == pygame.K_RETURN:
                     hote = self.input_ip_texte if self.input_ip_texte else "localhost"
@@ -741,6 +791,7 @@ class Client:
                              pygame.Rect(cx_cur, cy_cur, 2,
                                          self.police_texte.get_height() - 6))
 
+        self.btn_coller_ip.dessiner(self.ecran)
         self.btn_connecter.dessiner(self.ecran)
         self.btn_retour_rejoindre.dessiner(self.ecran)
 
@@ -957,6 +1008,20 @@ class Client:
                     self.parametres_temp['video']['plein_ecran'] = \
                         not self.parametres_temp['video']['plein_ecran']
 
+                if self.btn_toggle_musique.verifier_clic(event):
+                    nouvelle_val = not self.parametres_temp['video'].get('musique', True)
+                    self.parametres_temp['video']['musique'] = nouvelle_val
+                    # Appliquer immédiatement
+                    if self._musique_ok:
+                        if nouvelle_val:
+                            if not self._musique_jouee:
+                                pygame.mixer.music.play(-1)
+                                self._musique_jouee = True
+                            else:
+                                pygame.mixer.music.unpause()
+                        else:
+                            pygame.mixer.music.pause()
+
                 if self.btn_changer_langue.verifier_clic(event):
                     langues = ['fr', 'en']
                     actuelle = self.parametres_temp['jouabilite']['langue']
@@ -1066,6 +1131,11 @@ class Client:
                      self.btn_toggle_plein_ecran,
                      langue.get_texte("param_oui"),
                      langue.get_texte("param_non"))
+        ligne_toggle("Musique",
+                     params['video'].get('musique', True),
+                     self.btn_toggle_musique,
+                     langue.get_texte("param_oui"),
+                     langue.get_texte("param_non"))
 
         # ---- Contrôles ----
         section(langue.get_texte("param_section_controles"))
@@ -1106,18 +1176,12 @@ class Client:
                             self.cy - int(self.hauteur_ecran * 0.22))
 
         est_hote = (self.mon_id == 0)
-        if est_hote:
-            est_multi = len(self.joueurs_locaux) > 1
-            self.btn_pause_quitter.texte = langue.get_texte(
-                "pause_terminer_session" if est_multi else "pause_quitter_session")
-        else:
-            self.btn_pause_quitter.texte = langue.get_texte("pause_quitter_session")
-
-        if est_hote:
-            self.btn_pause_activer_multi.style = "normal"
-        else:
-            self.btn_pause_activer_multi.style = "ghost"
-        self.btn_pause_activer_multi._definir_style(self.btn_pause_activer_multi.style)
+        #if est_hote:
+        #    est_multi = len(self.joueurs_locaux) > 1
+        #    self.btn_pause_quitter.texte = langue.get_texte(
+        #        "pause_terminer_session" if est_multi else "pause_quitter_session")
+        #else:
+        #    self.btn_pause_quitter.texte = langue.get_texte("pause_quitter_session")      
 
         for btn in self.boutons_menu_pause:
             btn.dessiner(self.ecran)
@@ -1164,8 +1228,9 @@ class Client:
         self._musique_jouee = False
 
     def _demarrer_musique(self):
-        """Lance la musique (appelé au demarrage du jeu)."""
-        if self._musique_ok and not self._musique_jouee:
+        """Lance la musique si activée dans les paramètres."""
+        musique_activee = self.parametres.get('video', {}).get('musique', True)
+        if self._musique_ok and not self._musique_jouee and musique_activee:
             pygame.mixer.music.play(-1)  # -1 = boucle infinie
             self._musique_jouee = True
 
@@ -1248,6 +1313,9 @@ class Client:
         # -- Compteur debug (MODE_DEV) --
         if MODE_DEV:
             self._dessiner_debug_hud()
+            #btn = envoyer_logs.get_bouton()
+            #btn.rect.topleft = (10, 40)   # à côté du compteur FPS
+            #btn.dessiner(surface)
 
     def _dessiner_debug_hud(self):
         """Affiche les infos de performance en haut à droite (MODE_DEV)."""
@@ -1337,6 +1405,9 @@ class Client:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+            if MODE_DEV and envoyer_logs.get_bouton().verifier_clic(event):
+                print("[LOG] Clic bouton détecté — envoi en cours...")
+                envoyer_logs.envoyer_maintenant()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.etat_jeu_interne = "PAUSE"
@@ -1446,6 +1517,7 @@ class Client:
         self.torche.mettre_a_jour(temps_ms)
         self.torche.dessiner(surface_virtuelle, camera_offset, temps_ms)
 
+
         # -- Calque obscurité avec halo dégradé --
         if mon_joueur:
             obscurite = pygame.Surface(surface_virtuelle.get_size(), pygame.SRCALPHA)
@@ -1479,6 +1551,13 @@ class Client:
         surface_zoomee = pygame.transform.scale(
             surface_virtuelle, (self.largeur_ecran, self.hauteur_ecran))
         self.ecran.blit(surface_zoomee, (0, 0))
+
+        if MODE_DEV:
+            btn = envoyer_logs.get_bouton()
+            btn.rect.topleft = (self.largeur_ecran - 175, 140)
+            btn.verifier_survol(pygame.mouse.get_pos())
+            btn.dessiner(self.ecran)
+
         self.dessiner_hud()
 
     def _recvall(self, sock, n):
@@ -1591,8 +1670,8 @@ class Client:
                     self.dessiner_menu_pause()
 
             except EOFError as e:
-                print(f"[CLIENT] Serveur déconnecté: {e}")
-                self.message_erreur_connexion = "Le serveur s'est déconnecté."
+                print(f"[CLIENT] Serveur deconnecte: {e}")
+                self.message_erreur_connexion = "Le serveur s'est deconnecte."
                 self.nettoyer_connexion()
                 self.etat_jeu = "MENU_PRINCIPAL"
                 break
