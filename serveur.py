@@ -31,28 +31,28 @@ def obtenir_ip_locale():
         return "127.0.0.1"
 
 
+def _recvall(sock, n):
+    """Lit exactement n octets depuis le socket."""
+    data = b""
+    while len(data) < n:
+        paquet = sock.recv(n - len(data))
+        if not paquet:
+            raise EOFError("Connexion fermée")
+        data += paquet
+    return data
+
 def _recv_complet_serveur(sock):
-    """Reçoit un paquet pickle complet depuis le client, quelle que soit sa taille."""
-    morceaux = b""
-    sock.settimeout(2.0)
-    try:
-        while True:
-            morceau = sock.recv(65536)
-            if not morceau:
-                break
-            morceaux += morceau
-            try:
-                pickle.loads(morceaux)
-                break  # données complètes et décodables
-            except Exception:
-                continue  # on attend la suite
-    except socket.timeout:
-        pass
-    finally:
-        sock.settimeout(None)
-    if not morceaux:
-        raise EOFError("Connexion fermée")
-    return pickle.loads(morceaux)
+    """Reçoit un paquet pickle complet : lit 4 octets de taille, puis le payload."""
+    header = _recvall(sock, 4)
+    taille = int.from_bytes(header, 'big')
+    data = _recvall(sock, taille)
+    return pickle.loads(data)
+
+def _send_complet(sock, obj):
+    """Envoie un objet pickle précédé de 4 octets indiquant sa taille."""
+    data = pickle.dumps(obj)
+    header = len(data).to_bytes(4, 'big')
+    sock.sendall(header + data)
 
 
 class Serveur:
@@ -176,7 +176,7 @@ class Serveur:
         else:
             self.cartes_visibilite[id_joueur] = self.carte_jeu.creer_carte_visibilite_vierge()
 
-        connexion_client.send(pickle.dumps(id_joueur))
+        _send_complet(connexion_client, id_joueur)
 
         try:
             while self.running:
@@ -222,7 +222,7 @@ class Serveur:
                     'torche_allumee': self.torche_allumee,
                 }
 
-                connexion_client.send(pickle.dumps(donnees_pour_client))
+                _send_complet(connexion_client, donnees_pour_client)
 
         except socket.error as e:
             print(f"[SERVEUR] Erreur socket {id_joueur}: {e}")
@@ -369,7 +369,7 @@ class Serveur:
             if len(self.clients) >= 3:
                 print(f"[SERVEUR] Connexion refusee de {adresse} - Serveur plein (3/3)")
                 try:
-                    connexion_client.send(pickle.dumps({"erreur": "SERVEUR_PLEIN"}))
+                    _send_complet(connexion_client, {"erreur": "SERVEUR_PLEIN"})
                     time.sleep(0.1)
                     connexion_client.close()
                 except Exception as e:
