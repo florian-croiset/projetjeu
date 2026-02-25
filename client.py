@@ -1164,7 +1164,7 @@ class Client:
         self._musique_jouee = False
 
     def _demarrer_musique(self):
-        """Lance la musique (appelé au démarrage du jeu)."""
+        """Lance la musique (appelé au demarrage du jeu)."""
         if self._musique_ok and not self._musique_jouee:
             pygame.mixer.music.play(-1)  # -1 = boucle infinie
             self._musique_jouee = True
@@ -1352,7 +1352,7 @@ class Client:
                         continue
                     joueur = self.joueurs_locaux[self.mon_id]
                     vient_dallumer = self.torche.toggle()
-                    commandes['toggle_torche'] = True
+                    commandes['toggle_torche'] = True  # envoyé au serveur (ON et OFF)
                     if vient_dallumer:
                         dx = joueur.rect.centerx - self.torche.x
                         dy = joueur.rect.centery - self.torche.y
@@ -1482,27 +1482,27 @@ class Client:
         self.dessiner_hud()
 
     def _recvall(self, sock, n):
-        """Lit exactement n octets depuis le socket."""
+        """Lit exactement n octets (TCP peut fragmenter les paquets)."""
         data = b""
         while len(data) < n:
             paquet = sock.recv(n - len(data))
             if not paquet:
-                raise EOFError("Connexion fermée")
+                raise EOFError("Connexion fermée par le serveur")
             data += paquet
         return data
 
     def _recv_complet(self, sock):
-        """Reçoit un paquet pickle complet : lit 4 octets de taille, puis le payload."""
+        """Reçoit un paquet complet : 4 octets taille + payload pickle."""
         header = self._recvall(sock, 4)
         taille = int.from_bytes(header, 'big')
-        data = self._recvall(sock, taille)
-        return pickle.loads(data)
+        if taille > 10_000_000:  # sécurité : max 10 MB
+            raise ValueError(f"Paquet suspect trop grand : {taille} octets")
+        return pickle.loads(self._recvall(sock, taille))
 
     def _send_complet(self, sock, obj):
         """Envoie un objet pickle précédé de 4 octets de taille."""
         data = pickle.dumps(obj)
-        header = len(data).to_bytes(4, 'big')
-        sock.sendall(header + data)
+        sock.sendall(len(data).to_bytes(4, 'big') + data)
 
 
     def boucle_jeu_reseau(self):
@@ -1531,7 +1531,9 @@ class Client:
                 self._send_complet(self.client_socket, commandes_a_envoyer)
                 donnees_recues = self._recv_complet(self.client_socket)
 
-                self.vis_map_locale = donnees_recues['vis_map']
+                # Delta vis_map : le serveur n'envoie une vis_map que si elle a changé
+                if donnees_recues.get('vis_map') is not None:
+                    self.vis_map_locale = donnees_recues['vis_map']
 
                 ids_serveur = {j['id'] for j in donnees_recues['joueurs']}
                 for id_local in list(self.joueurs_locaux.keys()):
@@ -1588,11 +1590,27 @@ class Client:
                 if self.etat_jeu_interne == "PAUSE":
                     self.dessiner_menu_pause()
 
-            except (socket.error, EOFError) as e:
-                print(f"[CLIENT] Erreur réseau: {e}")
+            except EOFError as e:
+                print(f"[CLIENT] Serveur déconnecté: {e}")
+                self.message_erreur_connexion = "Le serveur s'est déconnecté."
+                self.nettoyer_connexion()
                 self.etat_jeu = "MENU_PRINCIPAL"
-            except pickle.UnpicklingError:
-                pass
+                break
+            except socket.timeout:
+                print("[CLIENT] Timeout réseau — serveur ne répond plus")
+                self.message_erreur_connexion = "Connexion perdue (timeout)."
+                self.nettoyer_connexion()
+                self.etat_jeu = "MENU_PRINCIPAL"
+                break
+            except (socket.error, OSError) as e:
+                print(f"[CLIENT] Erreur socket: {e}")
+                self.message_erreur_connexion = "Connexion perdue."
+                self.nettoyer_connexion()
+                self.etat_jeu = "MENU_PRINCIPAL"
+                break
+            except (pickle.UnpicklingError, ValueError) as e:
+                print(f"[CLIENT] Paquet corrompu ignoré: {e}")
+                # On continue — un seul paquet corrompu ne doit pas crasher
 
             pygame.display.flip()
             self.horloge.tick(FPS)
@@ -1603,15 +1621,21 @@ class Client:
 
     def lancer_partie_locale(self, id_slot, est_nouvelle_partie=False):
         type_lancement = "nouvelle" if est_nouvelle_partie else "charger"
-        print(f"[CLIENT] Démarrage serveur local (slot {id_slot}, {type_lancement})")
+        print(f"[CLIENT] Demarrage serveur local (slot {id_slot}, {type_lancement})")
         thread_serveur = threading.Thread(
             target=serveur.main,
             args=(id_slot, type_lancement),
             daemon=True
         )
         thread_serveur.start()
-        time.sleep(1.5)
-        if self.connecter("localhost"):
+        # Attente active : retry jusqu'à 3s au lieu d'un sleep fixe
+        connecte = False
+        for _ in range(6):
+            time.sleep(0.5)
+            connecte = self.connecter("localhost")
+            if connecte:
+                break
+        if connecte:
             self.etat_jeu = "EN_JEU"
         else:
             print("[CLIENT] Échec connexion serveur")
@@ -1620,10 +1644,10 @@ class Client:
     def connecter(self, hote):
         try:
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.client_socket.settimeout(15)  # 5 secondes max pour se connecter
+            self.client_socket.settimeout(5)   # 5 secondes max pour se connecter
             print(f"[CLIENT] Connexion a {hote}:{PORT_SERVEUR}...")
             self.client_socket.connect((hote, PORT_SERVEUR))
-            self.client_socket.settimeout(None)  # mode bloquant normal après connexion
+            self.client_socket.settimeout(10.0)  # timeout 10s : détecte serveur mort
             reponse = self._recv_complet(self.client_socket)
 
             if isinstance(reponse, dict) and "erreur" in reponse:

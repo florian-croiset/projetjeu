@@ -40,7 +40,7 @@ def sauvegarder_partie(id_slot, donnees_partie):
     try:
         with open(chemin_fichier, 'w', encoding='utf-8') as f:
             json.dump(donnees_partie, f, indent=4)
-        print(f"Partie sauvegardée dans {chemin_fichier}")
+        print(f"[SAUVEGARDE] Partie sauvegardee dans {chemin_fichier}")
     except IOError as e:
         print(f"Erreur lors de la sauvegarde de {chemin_fichier}: {e}")
 

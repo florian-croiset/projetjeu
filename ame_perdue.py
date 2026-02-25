@@ -43,7 +43,7 @@ class AmePerdue:
         self.argent = argent
         self.couleur = COULEUR_AME_PERDUE
         self.phase = (self.id * 0.91) % (2 * math.pi)
-        print(f"Ame {self.id} creee pour Joueur {self.id_joueur} à ({x}, {y})")
+        print(f"Ame {self.id} creee pour Joueur {self.id_joueur} a ({x}, {y})")
 
         global SPRITE_CRISTAL_PERDU
         if SPRITE_CRISTAL_PERDU is None:

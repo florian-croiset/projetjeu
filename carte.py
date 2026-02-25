@@ -33,9 +33,9 @@ class Carte:
             self.hauteur_map = data['hauteur']
             self.map_data = data['data']
             
-            print(f"[CARTE] Map JSON chargée : {self.largeur_map}x{self.hauteur_map}")
-            print(f"[CARTE] Première ligne : {self.map_data[0][:10]}...")
-            print(f"[CARTE] Dernière ligne : {self.map_data[-1][:10]}...")
+            print(f"[CARTE] Map JSON chargee : {self.largeur_map}x{self.hauteur_map}")
+            print(f"[CARTE] Premiere ligne : {self.map_data[0][:10]}...")
+            print(f"[CARTE] Derniere ligne : {self.map_data[-1][:10]}...")
             
         except Exception as e:
             print(f"[CARTE] ERREUR lors du chargement du JSON: {e}")
@@ -73,7 +73,7 @@ class Carte:
         ]
         self.largeur_map = len(self.map_data[0])
         self.hauteur_map = len(self.map_data)
-        print(f"[CARTE] Carte par défaut chargée : {self.largeur_map}x{self.hauteur_map}")
+        print(f"[CARTE] Carte par défaut chargee : {self.largeur_map}x{self.hauteur_map}")
 
     def creer_carte_visibilite_vierge(self):
         """Crée une carte de visibilité basée sur la map_data."""

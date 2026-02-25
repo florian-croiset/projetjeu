@@ -32,7 +32,7 @@ def obtenir_ip_locale():
 
 
 def _recvall(sock, n):
-    """Lit exactement n octets depuis le socket."""
+    """Lit exactement n octets depuis le socket (TCP peut fragmenter)."""
     data = b""
     while len(data) < n:
         paquet = sock.recv(n - len(data))
@@ -42,17 +42,17 @@ def _recvall(sock, n):
     return data
 
 def _recv_complet_serveur(sock):
-    """Reçoit un paquet pickle complet : lit 4 octets de taille, puis le payload."""
+    """Reçoit un paquet complet : 4 octets taille + payload."""
     header = _recvall(sock, 4)
     taille = int.from_bytes(header, 'big')
-    data = _recvall(sock, taille)
-    return pickle.loads(data)
+    if taille > 10_000_000:  # sécurité : max 10 MB
+        raise ValueError(f"Paquet trop grand : {taille} octets")
+    return pickle.loads(_recvall(sock, taille))
 
 def _send_complet(sock, obj):
-    """Envoie un objet pickle précédé de 4 octets indiquant sa taille."""
+    """Envoie un objet pickle précédé de 4 octets de taille."""
     data = pickle.dumps(obj)
-    header = len(data).to_bytes(4, 'big')
-    sock.sendall(header + data)
+    sock.sendall(len(data).to_bytes(4, 'big') + data)
 
 
 class Serveur:
@@ -64,11 +64,14 @@ class Serveur:
         try:
             self.serveur_socket.bind(('0.0.0.0', PORT_SERVEUR))
             ip_serveur = obtenir_ip_locale()
-            print(f"[SERVEUR] Démarré sur le port {PORT_SERVEUR}")
+            print(f"[SERVEUR] Demarre sur le port {PORT_SERVEUR}")
             print(f"[SERVEUR] IP locale : {ip_serveur}")
         except OSError as e:
             print(f"[SERVEUR] ERREUR lors du bind: {e}")
             raise
+
+        # ===== VERROU THREAD =====
+        self.lock = threading.Lock()
 
         # ===== DONNÉES DE JEU =====
         self.clients = {}
@@ -77,6 +80,7 @@ class Serveur:
         self.ennemis = {}
         self.ames_perdues = {}
         self.ames_libres = {}
+        self.vis_map_precedente = {}  # pour delta vis_map
         self.cle = None
         self.echos_en_cours = []
 
@@ -123,7 +127,7 @@ class Serveur:
         self.creer_ennemis()
         self.creer_ames_libres()
         self.cle = Cle(x=806, y=80)
-        self.prochain_id_joueur = 0
+        self._ids_pool = list(range(3))  # IDs réutilisables : 0, 1, 2
         self.torche_allumee = False
         self.torche_x = 32
         self.torche_y = 672
@@ -172,11 +176,15 @@ class Serveur:
         self.joueurs[id_joueur] = nouveau_joueur
 
         if id_joueur == 0:
-            self.cartes_visibilite[id_joueur] = self.donnees_partie["vis_map"]
+            # Copie profonde pour éviter la mutation de la sauvegarde
+            self.cartes_visibilite[id_joueur] = [row[:] for row in self.donnees_partie["vis_map"]]
         else:
             self.cartes_visibilite[id_joueur] = self.carte_jeu.creer_carte_visibilite_vierge()
+        # Version précédente pour détecter les changements (delta vis_map)
+        self.vis_map_precedente[id_joueur] = None
 
         _send_complet(connexion_client, id_joueur)
+        connexion_client.settimeout(10.0)  # kick si inactif > 10s
 
         try:
             while self.running:
@@ -186,35 +194,46 @@ class Serveur:
                 except EOFError:
                     break
 
-                self.joueurs[id_joueur].commandes = commandes['clavier']
+                with self.lock:
+                    self.joueurs[id_joueur].commandes = commandes['clavier']
 
-                # Gestion Écho → révélation progressive
-                if commandes.get('echo'):
-                    t_echo = pygame.time.get_ticks()
-                    joueur = self.joueurs[id_joueur]
-                    if t_echo - joueur.dernier_echo_temps > COOLDOWN_ECHO:
-                        joueur.dernier_echo_temps = t_echo
-                        self.echos_en_cours.append({
-                            'id_joueur': id_joueur,
-                            'cx': joueur.rect.centerx,
-                            'cy': joueur.rect.centery,
-                            'debut': t_echo,
-                            'rayon_precedent': 0,
-                        })
+                    # Gestion Écho → révélation progressive
+                    if commandes.get('echo'):
+                        t_echo = pygame.time.get_ticks()
+                        joueur = self.joueurs[id_joueur]
+                        if t_echo - joueur.dernier_echo_temps > COOLDOWN_ECHO:
+                            joueur.dernier_echo_temps = t_echo
+                            self.echos_en_cours.append({
+                                'id_joueur': id_joueur,
+                                'cx': joueur.rect.centerx,
+                                'cy': joueur.rect.centery,
+                                'debut': t_echo,
+                                'rayon_precedent': 0,
+                            })
 
-                if commandes.get('toggle_torche'):
-                    self.torche_allumee = not self.torche_allumee
+                    if commandes.get('toggle_torche'):
+                        self.torche_allumee = not self.torche_allumee
 
                 # Préparation données
-                etat_joueurs = [j.get_etat() for j in self.joueurs.values()]
-                etat_ennemis = [e.get_etat() for e in self.ennemis.values()]
-                etat_ames = [a.get_etat() for a in self.ames_perdues.values()]
-                etat_ames_libres = [a.get_etat() for a in self.ames_libres.values()]
-                etat_cle = self.cle.get_etat() if self.cle else None
+                with self.lock:
+                    etat_joueurs = [j.get_etat() for j in self.joueurs.values()]
+                    etat_ennemis = [e.get_etat() for e in self.ennemis.values()]
+                    etat_ames = [a.get_etat() for a in self.ames_perdues.values()]
+                    etat_ames_libres = [a.get_etat() for a in self.ames_libres.values()]
+                    etat_cle = self.cle.get_etat() if self.cle else None
+
+                    # Delta vis_map : n'envoyer que si elle a changé
+                    vis_actuelle = self.cartes_visibilite.get(id_joueur)
+                    vis_prec = self.vis_map_precedente.get(id_joueur)
+                    if vis_actuelle != vis_prec:
+                        vis_a_envoyer = [row[:] for row in vis_actuelle]
+                        self.vis_map_precedente[id_joueur] = [row[:] for row in vis_actuelle]
+                    else:
+                        vis_a_envoyer = None  # pas de changement, pas d'envoi
 
                 donnees_pour_client = {
                     'joueurs': etat_joueurs,
-                    'vis_map': self.cartes_visibilite[id_joueur],
+                    'vis_map': vis_a_envoyer,
                     'ennemis': etat_ennemis,
                     'ames_perdues': etat_ames,
                     'ames_libres': etat_ames_libres,
@@ -229,12 +248,19 @@ class Serveur:
         finally:
             print(f"[SERVEUR] Client {id_joueur} déconnecté.")
             connexion_client.close()
-            if connexion_client in self.clients:
-                del self.clients[connexion_client]
-            if id_joueur in self.joueurs:
-                del self.joueurs[id_joueur]
-            if id_joueur in self.cartes_visibilite:
-                del self.cartes_visibilite[id_joueur]
+            with self.lock:
+                if connexion_client in self.clients:
+                    del self.clients[connexion_client]
+                if id_joueur in self.joueurs:
+                    del self.joueurs[id_joueur]
+                if id_joueur in self.cartes_visibilite:
+                    del self.cartes_visibilite[id_joueur]
+                if id_joueur in self.vis_map_precedente:
+                    del self.vis_map_precedente[id_joueur]
+                # Remettre l'ID dans le pool pour réutilisation
+                if id_joueur not in self._ids_pool:
+                    self._ids_pool.append(id_joueur)
+                    self._ids_pool.sort()
 
     def boucle_jeu_serveur(self):
         horloge = pygame.time.Clock()
@@ -267,15 +293,18 @@ class Serveur:
                     if dist <= PORTEE_ECHO:
                         ennemi.flash_echo_temps = temps_actuel
 
-            # 1. Âmes libres : animation + collecte
-            for ame in self.ames_libres.values():
-                ame.mettre_a_jour(temps_actuel)
-            for id_joueur, joueur in list(self.joueurs.items()):
-                for id_ame, ame in list(self.ames_libres.items()):
-                    if joueur.rect.colliderect(ame.rect):
-                        joueur.argent += ame.valeur
-                        print(f"[SERVEUR] Joueur {id_joueur} ramasse âme libre (+{ame.valeur})")
-                        del self.ames_libres[id_ame]
+            with self.lock:
+              # 1. Âmes libres : animation + collecte
+              for ame in self.ames_libres.values():
+                  ame.mettre_a_jour(temps_actuel)
+              for id_joueur, joueur in list(self.joueurs.items()):
+                  for id_ame, ame in list(self.ames_libres.items()):
+                      if id_ame not in self.ames_libres:  # déjà ramassée ?
+                          continue
+                      if joueur.rect.colliderect(ame.rect):
+                          joueur.argent += ame.valeur
+                          print(f"[SERVEUR] Joueur {id_joueur} ramasse ame libre (+{ame.valeur})")
+                          del self.ames_libres[id_ame]
 
             # 2. Clé : animation + collecte
             if self.cle and not self.cle.est_ramassee:
@@ -346,12 +375,13 @@ class Serveur:
                         if joueur.rect.colliderect(rect_save):
                             if self.donnees_partie["id_dernier_checkpoint"] != id_save:
                                 self.donnees_partie["id_dernier_checkpoint"] = id_save
-                                self.donnees_partie["vis_map"] = self.cartes_visibilite[id_joueur]
+                                self.donnees_partie["vis_map"] = [row[:] for row in self.cartes_visibilite[id_joueur]]
                                 self.donnees_partie["argent"] = joueur.argent
                                 self.donnees_partie["ameliorations"]["double_saut"] = joueur.peut_double_saut
                                 self.donnees_partie["ameliorations"]["dash"] = joueur.peut_dash
                                 gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
 
+            # fin du bloc with self.lock (les indentations du bloc lock couvrent tout)
             horloge.tick(FPS)
 
     def demarrer(self):
@@ -366,7 +396,7 @@ class Serveur:
             connexion_client, adresse = self.serveur_socket.accept()
             print(f"[SERVEUR] Tentative de connexion depuis {adresse}")
 
-            if len(self.clients) >= 3:
+            if not self._ids_pool:
                 print(f"[SERVEUR] Connexion refusee de {adresse} - Serveur plein (3/3)")
                 try:
                     _send_complet(connexion_client, {"erreur": "SERVEUR_PLEIN"})
@@ -376,10 +406,9 @@ class Serveur:
                     print(f"[SERVEUR] Erreur lors du refus : {e}")
                 continue
 
-            id_joueur = self.prochain_id_joueur
-            self.prochain_id_joueur += 1
+            id_joueur = self._ids_pool.pop(0)  # prend le plus petit ID libre
 
-            print(f"[SERVEUR] Joueur {id_joueur} accepté depuis {adresse} ({len(self.clients)+1}/3)")
+            print(f"[SERVEUR] Joueur {id_joueur} accepte depuis {adresse} ({3 - len(self._ids_pool)}/3)")
 
             self.clients[connexion_client] = id_joueur
             thread_client = threading.Thread(target=self.gerer_client, args=(connexion_client, id_joueur))
