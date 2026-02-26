@@ -1,7 +1,9 @@
 # client.py
 
+from parametres import *
 import envoyer_logs
-envoyer_logs.activer_capture()   # ← UNE seule ligne, c'est tout
+if MODE_DEV:
+    envoyer_logs.activer_capture()   # ← UNE seule ligne, c'est tout
 
 import pygame
 import socket
@@ -1406,7 +1408,7 @@ class Client:
             if event.type == pygame.QUIT:
                 self.running = False
             if MODE_DEV and envoyer_logs.get_bouton().verifier_clic(event):
-                print("[LOG] Clic bouton détecté — envoi en cours...")
+                print("[LOG] Clic bouton detecte : envoi en cours...")
                 envoyer_logs.envoyer_maintenant()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
