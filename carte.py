@@ -14,6 +14,7 @@ class Carte:
         self.largeur_map = 0
         self.hauteur_map = 0
         
+        self._directions = [(math.cos(i/NB_RAYONS_ECHO * 2*math.pi), math.sin(i/NB_RAYONS_ECHO * 2*math.pi)) for i in range(NB_RAYONS_ECHO)]
         # Charger le fichier JSON
         if os.path.exists(fichier_map):
             self.charger_json(fichier_map)
@@ -103,25 +104,40 @@ class Carte:
         return False 
 
     def reveler_par_echo(self, centre_x, centre_y, vis_map):
-        """Lance des rayons depuis le centre — s'arrête sur les murs (ne traverse pas)."""
-        for i in range(NB_RAYONS_ECHO):
-            angle = (i / NB_RAYONS_ECHO) * 2 * math.pi
-            cos_a = math.cos(angle)
-            sin_a = math.sin(angle)
+        """Lance des rayons via l'algorithme DDA (rapide et précis)."""
+        tuile_depart_x = int(centre_x // TAILLE_TUILE)
+        tuile_depart_y = int(centre_y // TAILLE_TUILE)
+        portee_tuiles = int(PORTEE_ECHO // TAILLE_TUILE)
 
-            for dist in range(1, PORTEE_ECHO):
-                x = centre_x + dist * cos_a
-                y = centre_y + dist * sin_a
+        for cos_a, sin_a in self._directions:
+            step_x = 1 if cos_a > 0 else -1 if cos_a < 0 else 0
+            step_y = 1 if sin_a > 0 else -1 if sin_a < 0 else 0
 
-                tuile_x = int(x // TAILLE_TUILE)
-                tuile_y = int(y // TAILLE_TUILE)
+            t_delta_x = abs(TAILLE_TUILE / cos_a) if cos_a != 0 else float('inf')
+            t_delta_y = abs(TAILLE_TUILE / sin_a) if sin_a != 0 else float('inf')
 
-                if not (0 <= tuile_x < self.largeur_map and 0 <= tuile_y < self.hauteur_map):
+            t_max_x = abs(((tuile_depart_x + (1 if step_x > 0 else 0)) * TAILLE_TUILE - centre_x) / cos_a) if cos_a != 0 else float('inf')
+            t_max_y = abs(((tuile_depart_y + (1 if step_y > 0 else 0)) * TAILLE_TUILE - centre_y) / sin_a) if sin_a != 0 else float('inf')
+
+            tuile_actuelle_x = tuile_depart_x
+            tuile_actuelle_y = tuile_depart_y
+
+            for _ in range(portee_tuiles):
+                if not (0 <= tuile_actuelle_x < self.largeur_map and 0 <= tuile_actuelle_y < self.hauteur_map):
                     break
 
-                if self.map_data[tuile_y][tuile_x] in [1, 3]:
-                    vis_map[tuile_y][tuile_x] = True
-                    break  # Stop : le rayon ne traverse pas le mur
+                tuile_type = self.map_data[tuile_actuelle_y][tuile_actuelle_x]
+                if tuile_type in [1, 3]:
+                    vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
+                    break
+                vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
+
+                if t_max_x < t_max_y:
+                    t_max_x += t_delta_x
+                    tuile_actuelle_x += step_x
+                else:
+                    t_max_y += t_delta_y
+                    tuile_actuelle_y += step_y
 
     def reveler_anneau(self, centre_x, centre_y, rayon_min, rayon_max, vis_map):
         """Révèle les tuiles dans l'anneau [rayon_min, rayon_max] pixels.
@@ -151,22 +167,27 @@ class Carte:
         
         off_x, off_y = camera_offset
         
-        for y in range(self.hauteur_map):
-            for x in range(self.largeur_map):
+        off_x, off_y = camera_offset
+        lv, hv = surface.get_size()
+        x_min = max(0, off_x // TAILLE_TUILE)
+        y_min = max(0, off_y // TAILLE_TUILE)
+        x_max = min(self.largeur_map, (off_x + lv) // TAILLE_TUILE + 1)
+        y_max = min(self.hauteur_map, (off_y + hv) // TAILLE_TUILE + 1)
+
+        for y in range(y_min, y_max):
+            for x in range(x_min, x_max):
                 if vis_map[y][x]:
                     pos_x = (x * TAILLE_TUILE) - off_x
                     pos_y = (y * TAILLE_TUILE) - off_y
                     
                     rect = pygame.Rect(pos_x, pos_y, TAILLE_TUILE, TAILLE_TUILE)
-                    
-                    if surface.get_rect().colliderect(rect):
-                        tuile_type = self.map_data[y][x]
-                        if tuile_type == 1:
-                            pygame.draw.rect(surface, COULEUR_MUR_VISIBLE, rect)
-                        elif tuile_type == 2:
-                            pygame.draw.rect(surface, COULEUR_GUIDE, rect)
-                        elif tuile_type == 3:
-                            pygame.draw.rect(surface, COULEUR_SAUVEGARDE, rect)
+                    tuile_type = self.map_data[y][x]
+                    if tuile_type == 1:
+                        pygame.draw.rect(surface, COULEUR_MUR_VISIBLE, rect)
+                    elif tuile_type == 2:
+                        pygame.draw.rect(surface, COULEUR_GUIDE, rect)
+                    elif tuile_type == 3:
+                        pygame.draw.rect(surface, COULEUR_SAUVEGARDE, rect)
 
     def get_rects_collisions(self):
         """Renvoie une liste de Rect pour tous les murs (type 1)."""
@@ -178,18 +199,42 @@ class Carte:
         return rects
     
     def reveler_par_echo_partiel(self, centre_x, centre_y, portee, vis_map):
-        """Révélation progressive : repart de 0 jusqu'à portee pixels."""
-        for i in range(NB_RAYONS_ECHO):
-            angle = (i / NB_RAYONS_ECHO) * 2 * math.pi
-            cos_a = math.cos(angle)
-            sin_a = math.sin(angle)
-            for dist in range(1, min(portee + 1, PORTEE_ECHO)):
-                x = centre_x + dist * cos_a
-                y = centre_y + dist * sin_a
-                tuile_x = int(x // TAILLE_TUILE)
-                tuile_y = int(y // TAILLE_TUILE)
-                if not (0 <= tuile_x < self.largeur_map and 0 <= tuile_y < self.hauteur_map):
+        """Révélation progressive avec DDA : s'arrête sur les murs et à la distance 'portee'."""
+        tuile_depart_x = int(centre_x // TAILLE_TUILE)
+        tuile_depart_y = int(centre_y // TAILLE_TUILE)
+        for cos_a, sin_a in self._directions:
+            dir_x = cos_a if cos_a != 0 else 1e-10
+            dir_y = sin_a if sin_a != 0 else 1e-10
+            t_delta_x = abs(TAILLE_TUILE / dir_x)
+            t_delta_y = abs(TAILLE_TUILE / dir_y)
+            step_x = 1 if dir_x > 0 else -1
+            step_y = 1 if dir_y > 0 else -1
+            if dir_x > 0:
+                t_max_x = ((tuile_depart_x + 1) * TAILLE_TUILE - centre_x) / dir_x
+            else:
+                t_max_x = (centre_x - tuile_depart_x * TAILLE_TUILE) / abs(dir_x)
+            if dir_y > 0:
+                t_max_y = ((tuile_depart_y + 1) * TAILLE_TUILE - centre_y) / dir_y
+            else:
+                t_max_y = (centre_y - tuile_depart_y * TAILLE_TUILE) / abs(dir_y)
+            tuile_actuelle_x = tuile_depart_x
+            tuile_actuelle_y = tuile_depart_y
+            distance_parcourue = 0
+            if 0 <= tuile_actuelle_x < self.largeur_map and 0 <= tuile_actuelle_y < self.hauteur_map:
+                vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
+            while True:
+                if t_max_x < t_max_y:
+                    distance_parcourue = t_max_x
+                    t_max_x += t_delta_x
+                    tuile_actuelle_x += step_x
+                else:
+                    distance_parcourue = t_max_y
+                    t_max_y += t_delta_y
+                    tuile_actuelle_y += step_y
+                if distance_parcourue > portee:
                     break
-                if self.map_data[tuile_y][tuile_x] in [1, 3]:
-                    vis_map[tuile_y][tuile_x] = True
+                if not (0 <= tuile_actuelle_x < self.largeur_map and 0 <= tuile_actuelle_y < self.hauteur_map):
+                    break
+                vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
+                if self.map_data[tuile_actuelle_y][tuile_actuelle_x] in [1, 3]:
                     break
