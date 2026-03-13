@@ -37,7 +37,7 @@ def _recvall(sock, n):
     while len(data) < n:
         paquet = sock.recv(n - len(data))
         if not paquet:
-            raise EOFError("Connexion fermee")
+            raise EOFError("Connexion fermée")
         data += paquet
     return data
 
@@ -60,7 +60,6 @@ class Serveur:
         # ===== RÉSEAU =====
         self.serveur_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serveur_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.serveur_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
         try:
             self.serveur_socket.bind(('0.0.0.0', PORT_SERVEUR))
@@ -133,8 +132,6 @@ class Serveur:
         self.torche_x = 32
         self.torche_y = 672
         self.running = True
-        self._etat_broadcast = None
-        self._broadcast_lock = threading.Lock()
 
     def scanner_points_sauvegarde(self):
         points = {}
@@ -188,7 +185,6 @@ class Serveur:
 
         _send_complet(connexion_client, id_joueur)
         connexion_client.settimeout(10.0)  # kick si inactif > 10s
-        connexion_client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
         try:
             while self.running:
@@ -218,25 +214,33 @@ class Serveur:
                     if commandes.get('toggle_torche'):
                         self.torche_allumee = not self.torche_allumee
 
-                # Récupérer l'état commun pré-calculé par boucle_jeu_serveur
-                with self._broadcast_lock:
-                    etat_commun = self._etat_broadcast
-
-                if etat_commun is None:
-                    time.sleep(0.001)
-                    continue
-
-                # Delta vis_map : spécifique à ce joueur, calculé ici
+                # Préparation données
                 with self.lock:
+                    etat_joueurs = [j.get_etat() for j in self.joueurs.values()]
+                    etat_ennemis = [e.get_etat() for e in self.ennemis.values()]
+                    etat_ames = [a.get_etat() for a in self.ames_perdues.values()]
+                    etat_ames_libres = [a.get_etat() for a in self.ames_libres.values()]
+                    etat_cle = self.cle.get_etat() if self.cle else None
+
+                    # Delta vis_map : n'envoyer que si elle a changé
                     vis_actuelle = self.cartes_visibilite.get(id_joueur)
                     vis_prec = self.vis_map_precedente.get(id_joueur)
                     if vis_actuelle != vis_prec:
                         vis_a_envoyer = [row[:] for row in vis_actuelle]
                         self.vis_map_precedente[id_joueur] = [row[:] for row in vis_actuelle]
                     else:
-                        vis_a_envoyer = None
+                        vis_a_envoyer = None  # pas de changement, pas d'envoi
 
-                donnees_pour_client = {**etat_commun, 'vis_map': vis_a_envoyer}
+                donnees_pour_client = {
+                    'joueurs': etat_joueurs,
+                    'vis_map': vis_a_envoyer,
+                    'ennemis': etat_ennemis,
+                    'ames_perdues': etat_ames,
+                    'ames_libres': etat_ames_libres,
+                    'cle': etat_cle,
+                    'torche_allumee': self.torche_allumee,
+                }
+
                 _send_complet(connexion_client, donnees_pour_client)
 
         except socket.error as e:
@@ -263,10 +267,9 @@ class Serveur:
         while self.running:
             temps_actuel = pygame.time.get_ticks()
 
-            with self.lock:
-              # 0. Révélation progressive des échos
-              echos_restants = []
-              for echo in self.echos_en_cours:
+            # 0. Révélation progressive des échos
+            echos_restants = []
+            for echo in self.echos_en_cours:
                 elapsed = temps_actuel - echo['debut']
                 if elapsed <= ECHO_DUREE_REVEAL:
                     rayon_max = int((elapsed / ECHO_DUREE_REVEAL) * PORTEE_ECHO)
@@ -310,7 +313,7 @@ class Serveur:
                     if joueur.rect.colliderect(self.cle.rect):
                         self.cle.est_ramassee = True
                         joueur.have_key = True
-                        print(f"[SERVEUR] Joueur {id_joueur} a ramasse la cle !")
+                        print(f"[SERVEUR] Joueur {id_joueur} a ramassé la clé !")
 
             # 3. Ennemis
             for id_ennemi, ennemi in list(self.ennemis.items()):
@@ -329,7 +332,7 @@ class Serveur:
                         if joueur.rect_attaque.colliderect(ennemi.rect):
                             mort = ennemi.prendre_degat(DEGATS_JOUEUR)
                             if mort:
-                                print(f"[SERVEUR] Ennemi {id_ennemi} tue par Joueur {id_joueur}")
+                                print(f"[SERVEUR] Ennemi {id_ennemi} tué par Joueur {id_joueur}")
                                 joueur.argent += ARGENT_PAR_ENNEMI
                                 del self.ennemis[id_ennemi]
 
@@ -337,7 +340,7 @@ class Serveur:
                     for id_ame, ame in list(self.ames_perdues.items()):
                         if ame.id_joueur == id_joueur:
                             if joueur.rect_attaque.colliderect(ame.rect):
-                                print(f"[SERVEUR] Joueur {id_joueur} a recupere son ame ({ame.argent} argents)")
+                                print(f"[SERVEUR] Joueur {id_joueur} a récupéré son âme ({ame.argent} argents)")
                                 joueur.argent += ame.argent
                                 joueur.ame_perdue = None
                                 del self.ames_perdues[id_ame]
@@ -349,23 +352,22 @@ class Serveur:
 
                 # C. Mort et Respawn
                 if joueur.pv <= 0:
-                    if joueur.pv <= 0:
-                        if joueur.temps_mort is None:
-                            joueur.temps_mort = temps_actuel
+                    if not hasattr(joueur, 'temps_mort') or joueur.temps_mort is None:
+                        joueur.temps_mort = temps_actuel
 
-                            if joueur.ame_perdue and joueur.ame_perdue.id in self.ames_perdues:
-                                del self.ames_perdues[joueur.ame_perdue.id]
+                        if joueur.ame_perdue and joueur.ame_perdue.id in self.ames_perdues:
+                            del self.ames_perdues[joueur.ame_perdue.id]
 
-                            nouvelle_ame = AmePerdue(joueur.rect.centerx, joueur.rect.centery, id_joueur, joueur.argent)
-                            self.ames_perdues[nouvelle_ame.id] = nouvelle_ame
-                            joueur.ame_perdue = nouvelle_ame
-                            joueur.argent = 0
+                        nouvelle_ame = AmePerdue(joueur.rect.centerx, joueur.rect.centery, id_joueur, joueur.argent)
+                        self.ames_perdues[nouvelle_ame.id] = nouvelle_ame
+                        joueur.ame_perdue = nouvelle_ame
+                        joueur.argent = 0
 
-                        elif temps_actuel - joueur.temps_mort >= 3000:
-                            id_checkpoint = self.donnees_partie["id_dernier_checkpoint"] if id_joueur == 0 else points_sauvegarde.get_point_depart()[0]
-                            coords_spawn = points_sauvegarde.get_coords_par_id(id_checkpoint)
-                            joueur.respawn(coords_spawn)
-                            joueur.temps_mort = None
+                    elif temps_actuel - joueur.temps_mort >= 3000:
+                        id_checkpoint = self.donnees_partie["id_dernier_checkpoint"] if id_joueur == 0 else points_sauvegarde.get_point_depart()[0]
+                        coords_spawn = points_sauvegarde.get_coords_par_id(id_checkpoint)
+                        joueur.respawn(coords_spawn)
+                        joueur.temps_mort = None
 
                 # D. Sauvegarde (Hôte uniquement)
                 if id_joueur == 0:
@@ -380,24 +382,6 @@ class Serveur:
                                 gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
 
             # fin du bloc with self.lock (les indentations du bloc lock couvrent tout)
-            # Construire le broadcast seulement au tick rate réseau
-            if not hasattr(self, '_dernier_broadcast'):
-                self._dernier_broadcast = 0
-            intervalle = 1000 / TICK_RATE_RESEAU
-            if temps_actuel - self._dernier_broadcast >= intervalle:
-                self._dernier_broadcast = temps_actuel
-                with self.lock:
-                    etat_commun = {
-                        'joueurs':        [j.get_etat() for j in self.joueurs.values()],
-                        'ennemis':        [e.get_etat() for e in self.ennemis.values()],
-                        'ames_perdues':   [a.get_etat() for a in self.ames_perdues.values()],
-                        'ames_libres':    [a.get_etat() for a in self.ames_libres.values()],
-                        'cle':            self.cle.get_etat() if self.cle else None,
-                        'torche_allumee': self.torche_allumee,
-                    }
-                with self._broadcast_lock:
-                    self._etat_broadcast = etat_commun
-
             horloge.tick(FPS)
 
     def demarrer(self):
