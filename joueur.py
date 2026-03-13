@@ -46,7 +46,8 @@ class Joueur:
         # Mécaniques
         self.dernier_echo_temps = 0
         self.ame_perdue = None
-        self.have_key = False  # True si le joueur possède une clé
+        self.have_key = False
+        self.temps_mort = None
         
         # Combat
         self.dernier_attaque_temps = 0
