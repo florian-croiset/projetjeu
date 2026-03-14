@@ -28,7 +28,8 @@ def creer_parametres_defaut():
             "saut": "space",
             "echo": "e",
             "attaque": "k",
-            "dash": "c"  # <-- AJOUT
+            "dash": "c",
+            "echo_dir": "y"   # <-- AJOUT écho directionnel
         }
     }
 

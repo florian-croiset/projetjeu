@@ -418,6 +418,7 @@ class Client:
         self.btn_changer_echo        = _p()
         self.btn_changer_attaque     = _p()
         self.btn_changer_dash        = _p()
+        self.btn_changer_echo_dir    = _p()
 
         lw = self._largeur_bouton()
         bh = self._hauteur_bouton()
@@ -1050,13 +1051,20 @@ class Client:
                         nouvelle = 'fr'
                     self.parametres_temp['jouabilite']['langue'] = nouvelle
 
-                if self.btn_changer_gauche.verifier_clic(event):   self.touche_a_modifier = "gauche"
-                if self.btn_changer_droite.verifier_clic(event):   self.touche_a_modifier = "droite"
-                if self.btn_changer_saut.verifier_clic(event):     self.touche_a_modifier = "saut"
-                if self.btn_changer_echo.verifier_clic(event):     self.touche_a_modifier = "echo"
-                if self.btn_changer_attaque.verifier_clic(event):  self.touche_a_modifier = "attaque"
-                if self.btn_changer_dash.verifier_clic(event):     self.touche_a_modifier = "dash"
-
+                if self.btn_changer_gauche.verifier_clic(event):   
+                    self.touche_a_modifier = "gauche"
+                if self.btn_changer_droite.verifier_clic(event):   
+                    self.touche_a_modifier = "droite"
+                if self.btn_changer_saut.verifier_clic(event):     
+                    self.touche_a_modifier = "saut"
+                if self.btn_changer_echo.verifier_clic(event):     
+                    self.touche_a_modifier = "echo"
+                if self.btn_changer_attaque.verifier_clic(event):  
+                    self.touche_a_modifier = "attaque"
+                if self.btn_changer_dash.verifier_clic(event):
+                    self.touche_a_modifier = 'dash'
+                if self.btn_changer_echo_dir.verifier_clic(event):
+                    self.touche_a_modifier = 'echo_dir'
                 if self.btn_copier_ip_locale.verifier_clic(event):
                     ip = self.obtenir_ip_locale()
                     self.copier_dans_presse_papier(ip)
@@ -1162,7 +1170,8 @@ class Client:
         ligne_controle(langue.get_texte("param_saut"),     'saut',    self.btn_changer_saut)
         ligne_controle(langue.get_texte("param_echo"),     'echo',    self.btn_changer_echo)
         ligne_controle(langue.get_texte("param_attaque"),  'attaque', self.btn_changer_attaque)
-        ligne_controle(langue.get_texte("param_dash"),     'dash',    self.btn_changer_dash)
+        ligne_controle(langue.get_texte("param_dash"), 'dash', self.btn_changer_dash)
+        ligne_controle(langue.get_texte("param_echo_dir"), 'echo_dir', self.btn_changer_echo_dir)
 
         # ---- Réseau ----
         section(langue.get_texte("param_section_reseau"))
@@ -1413,7 +1422,7 @@ class Client:
 
     def gerer_evenements_jeu(self):
         commandes = {'clavier': {'gauche': False, 'droite': False, 'saut': False, 'attaque': False, 'dash': False},
-                    'echo': False, 'toggle_torche': False,}
+                    'echo': False, 'echo_dir': False, 'toggle_torche': False,}
     
         key = self._codes_touches.get
 
@@ -1433,6 +1442,8 @@ class Client:
                     commandes['echo'] = True
                 if event.key == key('dash'):
                     commandes['clavier']['dash'] = True
+                if event.key == key('echo_dir'):
+                    commandes['echo_dir'] = True
                 if event.key == pygame.K_l:
                     if self.mon_id not in self.joueurs_locaux:
                         continue

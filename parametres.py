@@ -98,6 +98,11 @@ NB_RAYONS_ECHO = 360
 COOLDOWN_ECHO = 2500            # Réduit : 2.5s entre chaque écho
 ECHO_DUREE_REVEAL = 600         # Durée révélation progressive (ms)
 
+# -- Paramètres de l'Écho Directionnel --
+PORTEE_ECHO_DIR = PORTEE_ECHO * 2   # 500px (portée double)
+COOLDOWN_ECHO_DIR = 4000            # 4s de cooldown indépendant
+ECHO_DIR_DEMI_ANGLE = 25           # ±15° autour de la direction (cône de 30°)
+
 # -- Âmes libres --
 ARGENT_AME_LIBRE = 5
 COULEUR_AME_LIBRE = (0, 220, 180)  # Turquoise

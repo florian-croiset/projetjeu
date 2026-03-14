@@ -175,6 +175,7 @@ class Serveur:
         ameliorations = self.donnees_partie.get("ameliorations", {})
         nouveau_joueur.peut_double_saut = ameliorations.get("double_saut", False)
         nouveau_joueur.peut_dash = ameliorations.get("dash", False)
+        nouveau_joueur.peut_echo_dir = ameliorations.get("echo_dir", False)
 
         self.joueurs[id_joueur] = nouveau_joueur
 
@@ -202,6 +203,7 @@ class Serveur:
                     self.joueurs[id_joueur].commandes = commandes['clavier']
 
                     # Gestion Écho → révélation progressive
+                    # Gestion Écho normal → révélation progressive
                     if commandes.get('echo'):
                         t_echo = pygame.time.get_ticks()
                         joueur = self.joueurs[id_joueur]
@@ -213,6 +215,26 @@ class Serveur:
                                 'cy': joueur.rect.centery,
                                 'debut': t_echo,
                                 'rayon_precedent': 0,
+                                'type': 'normal',
+                                'portee_max': PORTEE_ECHO,
+                            })
+
+                    # Gestion Écho Directionnel → révélation dans un cône
+                    if commandes.get('echo_dir'):
+                        t_echo_dir = pygame.time.get_ticks()
+                        joueur = self.joueurs[id_joueur]
+                        if (joueur.peut_echo_dir and
+                                t_echo_dir - joueur.dernier_echo_dir_temps > COOLDOWN_ECHO_DIR):
+                            joueur.dernier_echo_dir_temps = t_echo_dir
+                            self.echos_en_cours.append({
+                                'id_joueur': id_joueur,
+                                'cx': joueur.rect.centerx,
+                                'cy': joueur.rect.centery,
+                                'debut': t_echo_dir,
+                                'rayon_precedent': 0,
+                                'type': 'dir',
+                                'portee_max': PORTEE_ECHO_DIR,
+                                'direction': joueur.direction,
                             })
 
                     if commandes.get('toggle_torche'):
@@ -269,14 +291,23 @@ class Serveur:
               for echo in self.echos_en_cours:
                 elapsed = temps_actuel - echo['debut']
                 if elapsed <= ECHO_DUREE_REVEAL:
-                    rayon_max = int((elapsed / ECHO_DUREE_REVEAL) * PORTEE_ECHO)
+                    portee_max = echo.get('portee_max', PORTEE_ECHO)
+                    rayon_max = int((elapsed / ECHO_DUREE_REVEAL) * portee_max)
                     rayon_prec = echo.get('rayon_precedent', 0)
                     if rayon_max > rayon_prec and echo['id_joueur'] in self.cartes_visibilite:
-                        self.carte_jeu.reveler_par_echo_partiel(
-                            echo['cx'], echo['cy'],
-                            rayon_max,
-                            self.cartes_visibilite[echo['id_joueur']]
-                        )
+                        if echo.get('type') == 'dir':
+                            self.carte_jeu.reveler_par_echo_dir_partiel(
+                                echo['cx'], echo['cy'],
+                                rayon_max,
+                                self.cartes_visibilite[echo['id_joueur']],
+                                echo['direction']
+                            )
+                        else:
+                            self.carte_jeu.reveler_par_echo_partiel(
+                                echo['cx'], echo['cy'],
+                                rayon_max,
+                                self.cartes_visibilite[echo['id_joueur']]
+                            )
                         echo['rayon_precedent'] = rayon_max
                     echos_restants.append(echo)
             self.echos_en_cours = echos_restants

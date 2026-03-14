@@ -15,6 +15,22 @@ class Carte:
         self.hauteur_map = 0
         
         self._directions = [(math.cos(i/NB_RAYONS_ECHO * 2*math.pi), math.sin(i/NB_RAYONS_ECHO * 2*math.pi)) for i in range(NB_RAYONS_ECHO)]
+        
+        # Précalcul des sous-ensembles pour l'écho directionnel (cône ±15°)
+        # Précalcul de NB_RAYONS_ECHO rayons répartis uniformément dans le cône ±15°
+        _demi_rad = ECHO_DIR_DEMI_ANGLE * math.pi / 180
+        # Droite : cône centré sur 0° (angle 0 rad)
+        self._directions_droite = [
+            (math.cos(-_demi_rad + i / (NB_RAYONS_ECHO - 1) * 2 * _demi_rad),
+            math.sin(-_demi_rad + i / (NB_RAYONS_ECHO - 1) * 2 * _demi_rad))
+            for i in range(NB_RAYONS_ECHO)
+        ]
+        # Gauche : cône centré sur 180° (angle pi rad)
+        self._directions_gauche = [
+            (math.cos(math.pi - _demi_rad + i / (NB_RAYONS_ECHO - 1) * 2 * _demi_rad),
+            math.sin(math.pi - _demi_rad + i / (NB_RAYONS_ECHO - 1) * 2 * _demi_rad))
+            for i in range(NB_RAYONS_ECHO)
+        ]
         # Charger le fichier JSON
         if os.path.exists(fichier_map):
             self.charger_json(fichier_map)
@@ -214,6 +230,49 @@ class Carte:
         tuile_depart_x = int(centre_x // TAILLE_TUILE)
         tuile_depart_y = int(centre_y // TAILLE_TUILE)
         for cos_a, sin_a in self._directions:
+            dir_x = cos_a if cos_a != 0 else 1e-10
+            dir_y = sin_a if sin_a != 0 else 1e-10
+            t_delta_x = abs(TAILLE_TUILE / dir_x)
+            t_delta_y = abs(TAILLE_TUILE / dir_y)
+            step_x = 1 if dir_x > 0 else -1
+            step_y = 1 if dir_y > 0 else -1
+            if dir_x > 0:
+                t_max_x = ((tuile_depart_x + 1) * TAILLE_TUILE - centre_x) / dir_x
+            else:
+                t_max_x = (centre_x - tuile_depart_x * TAILLE_TUILE) / abs(dir_x)
+            if dir_y > 0:
+                t_max_y = ((tuile_depart_y + 1) * TAILLE_TUILE - centre_y) / dir_y
+            else:
+                t_max_y = (centre_y - tuile_depart_y * TAILLE_TUILE) / abs(dir_y)
+            tuile_actuelle_x = tuile_depart_x
+            tuile_actuelle_y = tuile_depart_y
+            distance_parcourue = 0
+            if 0 <= tuile_actuelle_x < self.largeur_map and 0 <= tuile_actuelle_y < self.hauteur_map:
+                vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
+            while True:
+                if t_max_x < t_max_y:
+                    distance_parcourue = t_max_x
+                    t_max_x += t_delta_x
+                    tuile_actuelle_x += step_x
+                else:
+                    distance_parcourue = t_max_y
+                    t_max_y += t_delta_y
+                    tuile_actuelle_y += step_y
+                if distance_parcourue > portee:
+                    break
+                if not (0 <= tuile_actuelle_x < self.largeur_map and 0 <= tuile_actuelle_y < self.hauteur_map):
+                    break
+                vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
+                if self.map_data[tuile_actuelle_y][tuile_actuelle_x] in [1, 3]:
+                    break
+    def reveler_par_echo_dir_partiel(self, centre_x, centre_y, portee, vis_map, direction):
+        """Révélation progressive DDA dans un cône directionnel de ±15°.
+        direction : 1 = droite (0°), -1 = gauche (180°)."""
+        directions_cone = self._directions_droite if direction >= 0 else self._directions_gauche
+        tuile_depart_x = int(centre_x // TAILLE_TUILE)
+        tuile_depart_y = int(centre_y // TAILLE_TUILE)
+
+        for cos_a, sin_a in directions_cone:
             dir_x = cos_a if cos_a != 0 else 1e-10
             dir_y = sin_a if sin_a != 0 else 1e-10
             t_delta_x = abs(TAILLE_TUILE / dir_x)

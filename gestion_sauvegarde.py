@@ -30,8 +30,9 @@ def creer_sauvegarde_vierge():
         "items": [],
         "ameliorations": {
             "double_saut": False,
-            "dash": False  # <-- AJOUT
-        }
+            "dash": False,
+            "echo_dir": False,
+        },
     }
 
 def sauvegarder_partie(id_slot, donnees_partie):
