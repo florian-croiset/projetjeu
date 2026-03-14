@@ -37,9 +37,9 @@ import gestion_sauvegarde
 def dessiner_fond_echo(surface, largeur, hauteur, temps):
     """
     Fond animé style Echo :
-      - dégradé vertical bleu-nuit
-      - grille de particules subtile
-      - lueur centrale pulsante
+    - dégradé vertical bleu-nuit
+    - grille de particules subtile
+    - lueur centrale pulsante
     """
     # 1. Fond de base dégradé vertical
     if FOND_MENU:
@@ -137,8 +137,8 @@ def dessiner_panneau(surface, rect, couleur_bordure=None, alpha_fond=220):
     fond_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
     r_fond = (COULEUR_FOND_PANEL[0], COULEUR_FOND_PANEL[1], COULEUR_FOND_PANEL[2], alpha_fond)
     pygame.draw.rect(fond_surf, r_fond,
-                     pygame.Rect(0, 0, rect.width, rect.height),
-                     border_radius=12)
+                    pygame.Rect(0, 0, rect.width, rect.height),
+                    border_radius=12)
     surface.blit(fond_surf, rect.topleft)
 
     # Bordure extérieure
@@ -304,6 +304,18 @@ class Client:
         self.creer_widgets_menu_confirmation()
 
         self._mort_depuis = None
+        self._codes_touches = {}
+        self._recalculer_codes_touches()
+
+
+    def _recalculer_codes_touches(self):
+        ctrl = self.parametres.get('controles', {})
+        self._codes_touches = {}
+        for nom, val in ctrl.items():
+            try:
+                self._codes_touches[nom] = pygame.key.key_code(val)
+            except Exception:
+                self._codes_touches[nom] = None
 
     # ------------------------------------------------------------------
     #  PROPRIÉTÉS DE MISE EN PAGE (tout calculé depuis la taille réelle)
@@ -371,11 +383,11 @@ class Client:
         self.input_ip_actif = False
 
         self.btn_connecter       = Bouton(cx - lw // 2, cy + 40, lw, bh,
-                                          langue.get_texte("rejoindre_connecter"),
-                                          self.police_bouton)
+                                        langue.get_texte("rejoindre_connecter"),
+                                        self.police_bouton)
         self.btn_retour_rejoindre = Bouton(cx - lw // 2, cy + 40 + bh + 12, lw, bh,
-                                           langue.get_texte("rejoindre_retour"),
-                                           self.police_bouton, style="ghost")
+                                        langue.get_texte("rejoindre_retour"),
+                                        self.police_bouton, style="ghost")
         self.btn_erreur_ok = Bouton(cx - 60, cy + 90, 120, bh, "OK",
                                     self.police_bouton, style="danger")
 
@@ -412,11 +424,11 @@ class Client:
         y_bas = self.hauteur_ecran - max(70, self.hauteur_ecran // 14)
 
         self.btn_appliquer_params = Bouton(cx - lw - 10, y_bas, lw, bh,
-                                           langue.get_texte("param_appliquer"),
-                                           self.police_bouton, style="confirm")
+                                        langue.get_texte("param_appliquer"),
+                                        self.police_bouton, style="confirm")
         self.btn_retour_params    = Bouton(cx + 10, y_bas, lw, bh,
-                                           langue.get_texte("param_retour"),
-                                           self.police_bouton, style="ghost")
+                                        langue.get_texte("param_retour"),
+                                        self.police_bouton, style="ghost")
 
         self.boutons_menu_params_scrollables = [
             self.btn_changer_langue,
@@ -437,7 +449,7 @@ class Client:
         w_popup = max(400, min(520, self.largeur_ecran // 4))
         h_popup = max(220, min(280, self.hauteur_ecran // 4))
         self.rect_popup = pygame.Rect(cx - w_popup // 2, cy - h_popup // 2,
-                                      w_popup, h_popup)
+                                    w_popup, h_popup)
         bh = self._hauteur_bouton()
         lw_btn = w_popup // 3
         self.btn_popup_oui = Bouton(cx - lw_btn - 10, cy + h_popup // 2 - bh - 16,
@@ -458,11 +470,11 @@ class Client:
         y0 = self.cy - esp
 
         self.btn_pause_reprendre    = Bouton(cx - lw // 2, y0,            lw, bh,
-                                             langue.get_texte("pause_reprendre"),
-                                             self.police_bouton)
+                                            langue.get_texte("pause_reprendre"),
+                                            self.police_bouton)
         self.btn_pause_parametres   = Bouton(cx - lw // 2, y0 + esp,      lw, bh,
-                                             langue.get_texte("pause_parametres"),
-                                             self.police_bouton)
+                                            langue.get_texte("pause_parametres"),
+                                            self.police_bouton)
         # DÉSACTIVÉ — bouton inutile pour l'instant
         # self.btn_pause_activer_multi = Bouton(cx - lw // 2, y0 + esp * 2, lw, bh,
         #                                       "Activer Multijoueur (Bientôt)",
@@ -470,8 +482,8 @@ class Client:
 
         # Le bouton quitter remonte d'un cran (index esp * 2 au lieu de esp * 3)
         self.btn_pause_quitter      = Bouton(cx - lw // 2, y0 + esp * 2,  lw, bh,
-                                             langue.get_texte("pause_quitter_session"),
-                                             self.police_bouton, style="ghost")
+                                            langue.get_texte("pause_quitter_session"),
+                                            self.police_bouton, style="ghost")
 
         self.boutons_menu_pause = [
             self.btn_pause_reprendre, self.btn_pause_parametres,
@@ -497,14 +509,14 @@ class Client:
 
         for i in range(nb):
             btn = Bouton(cx - lw // 2, y_start + i * esp, lw, bh,
-                         f"Slot {i+1}", self.police_bouton)
+                        f"Slot {i+1}", self.police_bouton)
             self.boutons_slots.append(btn)
 
         y_retour = y_start + nb * esp + 16
         self.btn_retour_slots = Bouton(cx - self._largeur_bouton() // 2, y_retour,
-                                       self._largeur_bouton(), self._hauteur_bouton(),
-                                       langue.get_texte("rejoindre_retour"),
-                                       self.police_bouton, style="ghost")
+                                    self._largeur_bouton(), self._hauteur_bouton(),
+                                    langue.get_texte("rejoindre_retour"),
+                                    self.police_bouton, style="ghost")
 
     # ------------------------------------------------------------------
     #  BOUCLE PRINCIPALE
@@ -669,8 +681,8 @@ class Client:
         # Séparateur
         marge = self.largeur_ecran // 6
         dessiner_separateur_neon(self.ecran,
-                                 marge, cy_titre + police_grand_titre.get_height() // 2 + 50,
-                                 self.largeur_ecran - marge)
+                                marge, cy_titre + police_grand_titre.get_height() // 2 + 50,
+                                self.largeur_ecran - marge)
 
         # Boutons
         for btn in self.boutons_menu_principal:
@@ -679,7 +691,7 @@ class Client:
         # Version (coin bas droite)
         ver = self.police_petit.render("v1.2 — Beta", True, COULEUR_TEXTE_SOMBRE)
         self.ecran.blit(ver, (self.largeur_ecran - ver.get_width() - 20,
-                              self.hauteur_ecran - ver.get_height() - 12))
+                            self.hauteur_ecran - ver.get_height() - 12))
         
         # Lien site (coin bas gauche) avec survol
         lien_texte = "https://florian-croiset.github.io/jeusite/"
@@ -754,7 +766,7 @@ class Client:
 
     def dessiner_menu_rejoindre(self):
         dessiner_fond_echo(self.ecran, self.largeur_ecran, self.hauteur_ecran,
-                           self.temps_anim)
+                        self.temps_anim)
 
         # Titre
         dessiner_titre_neon(self.ecran, self.police_titre,
@@ -765,8 +777,8 @@ class Client:
         pan_w = self._largeur_bouton() + 80
         pan_h = 220
         pan_rect = pygame.Rect(self.cx - pan_w // 2,
-                               self.cy - pan_h // 2 - 20,
-                               pan_w, pan_h)
+                            self.cy - pan_h // 2 - 20,
+                            pan_w, pan_h)
         dessiner_panneau(self.ecran, pan_rect)
 
         # Label
@@ -778,21 +790,21 @@ class Client:
         # Input box
         bord_color = COULEUR_CYAN if self.input_ip_actif else COULEUR_CYAN_SOMBRE
         pygame.draw.rect(self.ecran, COULEUR_INPUT_BOX,
-                         self.input_box_ip, border_radius=6)
+                        self.input_box_ip, border_radius=6)
         pygame.draw.rect(self.ecran, bord_color,
-                         self.input_box_ip, width=1, border_radius=6)
+                        self.input_box_ip, width=1, border_radius=6)
 
         ip_surf = self.police_texte.render(self.input_ip_texte, True, COULEUR_TEXTE)
         self.ecran.blit(ip_surf, (self.input_box_ip.x + 12,
-                                  self.input_box_ip.y + 10))
+                                self.input_box_ip.y + 10))
 
         # Curseur clignotant
         if self.input_ip_actif and int(time.time() * 2) % 2 == 0:
             cx_cur = self.input_box_ip.x + 14 + ip_surf.get_width()
             cy_cur = self.input_box_ip.y + 8
             pygame.draw.rect(self.ecran, COULEUR_CYAN,
-                             pygame.Rect(cx_cur, cy_cur, 2,
-                                         self.police_texte.get_height() - 6))
+                            pygame.Rect(cx_cur, cy_cur, 2,
+                                        self.police_texte.get_height() - 6))
 
         self.btn_coller_ip.dessiner(self.ecran)
         self.btn_connecter.dessiner(self.ecran)
@@ -852,13 +864,16 @@ class Client:
 
         # Texte visible dès 600ms
         if elapsed > 600:
-            police_mort = pygame.font.Font(None, 48)
-            police_sub  = pygame.font.Font(None, 28)
-            lw, lh = surface.get_size()
-            txt1 = police_mort.render("VOUS ETES MORT", True, (220, 50, 50))
-            txt2 = police_sub.render("Respawn en cours...", True, (160, 100, 100))
-            surface.blit(txt1, txt1.get_rect(center=(lw // 2, lh // 2 - 20)))
-            surface.blit(txt2, txt2.get_rect(center=(lw // 2, lh // 2 + 20)))
+            if not hasattr(self, '_police_mort'):
+                self._police_mort = pygame.font.Font(None, 48)
+                self._police_sub  = pygame.font.Font(None, 28)
+                police_mort = self._police_mort
+                police_sub  = self._police_sub
+                lw, lh = surface.get_size()
+                txt1 = police_mort.render("VOUS ETES MORT", True, (220, 50, 50))
+                txt2 = police_sub.render("Respawn en cours...", True, (160, 100, 100))
+                surface.blit(txt1, txt1.get_rect(center=(lw // 2, lh // 2 - 20)))
+                surface.blit(txt2, txt2.get_rect(center=(lw // 2, lh // 2 + 20)))
 
     # ------------------------------------------------------------------
     #  MENU SLOTS
@@ -887,11 +902,11 @@ class Client:
 
     def dessiner_menu_slots(self):
         dessiner_fond_echo(self.ecran, self.largeur_ecran, self.hauteur_ecran,
-                           self.temps_anim)
+                        self.temps_anim)
 
         titre_cle = ("slots_titre_nouvelle"
-                     if self.etat_jeu == "MENU_NOUVELLE_PARTIE"
-                     else "slots_titre_continuer")
+                    if self.etat_jeu == "MENU_NOUVELLE_PARTIE"
+                    else "slots_titre_continuer")
         dessiner_titre_neon(self.ecran, self.police_titre,
                             langue.get_texte(titre_cle),
                             self.cx, self.hauteur_ecran // 7)
@@ -934,7 +949,7 @@ class Client:
                 self.etat_jeu = "QUITTER"
             if self.btn_popup_oui.verifier_clic(event):
                 self.lancer_partie_locale(self.id_slot_a_ecraser,
-                                          est_nouvelle_partie=True)
+                                        est_nouvelle_partie=True)
             if self.btn_popup_non.verifier_clic(event):
                 self.id_slot_a_ecraser = None
                 self.etat_jeu = "MENU_NOUVELLE_PARTIE"
@@ -943,12 +958,12 @@ class Client:
         self.dessiner_menu_slots()
 
         overlay = pygame.Surface((self.largeur_ecran, self.hauteur_ecran),
-                                  pygame.SRCALPHA)
+                                pygame.SRCALPHA)
         overlay.fill((0, 0, 10, 180))
         self.ecran.blit(overlay, (0, 0))
 
         dessiner_panneau(self.ecran, self.rect_popup,
-                         couleur_bordure=COULEUR_VIOLET, alpha_fond=245)
+                        couleur_bordure=COULEUR_VIOLET, alpha_fond=245)
 
         titre = self.police_bouton.render(
             langue.get_texte("popup_titre"), True, COULEUR_VIOLET_CLAIR)
@@ -956,9 +971,9 @@ class Client:
             center=(self.rect_popup.centerx, self.rect_popup.y + 50)))
 
         dessiner_separateur_neon(self.ecran,
-                                 self.rect_popup.x + 20, self.rect_popup.y + 76,
-                                 self.rect_popup.right - 20,
-                                 couleur=COULEUR_VIOLET_SOMBRE, alpha=140)
+                                self.rect_popup.x + 20, self.rect_popup.y + 76,
+                                self.rect_popup.right - 20,
+                                couleur=COULEUR_VIOLET_SOMBRE, alpha=140)
 
         msg = self.police_texte.render(
             langue.get_texte("popup_message"), True, COULEUR_TEXTE)
@@ -1056,7 +1071,7 @@ class Client:
 
     def dessiner_menu_parametres(self):
         dessiner_fond_echo(self.ecran, self.largeur_ecran, self.hauteur_ecran,
-                           self.temps_anim)
+                        self.temps_anim)
 
         # Titre fixe — police normale (pas le grand titre du menu principal)
         police_titre_params = pygame.font.Font(None, max(48, self.hauteur_ecran // 14))
@@ -1074,8 +1089,8 @@ class Client:
         def section(titre_texte):
             nonlocal y
             dessiner_separateur_neon(self.ecran, col_gauche, y,
-                                     self.largeur_ecran - col_gauche,
-                                     alpha=100)
+                                    self.largeur_ecran - col_gauche,
+                                    alpha=100)
             y += 6
             s = self.police_bouton.render(titre_texte, True, COULEUR_VIOLET_CLAIR)
             self.ecran.blit(s, (col_gauche, y))
@@ -1130,15 +1145,15 @@ class Client:
         # ---- Vidéo ----
         section(langue.get_texte("param_section_video"))
         ligne_toggle(langue.get_texte("param_plein_ecran"),
-                     params['video']['plein_ecran'],
-                     self.btn_toggle_plein_ecran,
-                     langue.get_texte("param_oui"),
-                     langue.get_texte("param_non"))
+                    params['video']['plein_ecran'],
+                    self.btn_toggle_plein_ecran,
+                    langue.get_texte("param_oui"),
+                    langue.get_texte("param_non"))
         ligne_toggle("Musique",
-                     params['video'].get('musique', True),
-                     self.btn_toggle_musique,
-                     langue.get_texte("param_oui"),
-                     langue.get_texte("param_non"))
+                    params['video'].get('musique', True),
+                    self.btn_toggle_musique,
+                    langue.get_texte("param_oui"),
+                    langue.get_texte("param_non"))
 
         # ---- Contrôles ----
         section(langue.get_texte("param_section_controles"))
@@ -1152,11 +1167,11 @@ class Client:
         # ---- Réseau ----
         section(langue.get_texte("param_section_reseau"))
         ligne_ip("IP Locale (LAN) :",
-                 f"{self.obtenir_ip_locale()}   (copier)",
-                 self.btn_copier_ip_locale)
+                f"{self.obtenir_ip_locale()}   (copier)",
+                self.btn_copier_ip_locale)
         ligne_ip("IP Hamachi (VPN) :",
-                 f"{self.obtenir_ip_hamachi()}   (copier)",
-                 self.btn_copier_ip_hamachi)
+                f"{self.obtenir_ip_hamachi()}   (copier)",
+                self.btn_copier_ip_hamachi)
 
         aide = self.police_petit.render(
             "Cliquez pour copier dans le presse-papiers", True, COULEUR_TEXTE_SOMBRE)
@@ -1295,7 +1310,7 @@ class Client:
             fond_r = pygame.Rect(rx, y0, largeur_coeur, hauteur_coeur)
             pygame.draw.rect(self.ecran, COULEUR_PV_PERDU, fond_r, border_radius=4)
             pygame.draw.rect(self.ecran, COULEUR_CYAN_SOMBRE, fond_r,
-                             width=1, border_radius=4)
+                            width=1, border_radius=4)
 
         for i in range(pv):
             rx = x0 + i * (largeur_coeur + padding)
@@ -1341,7 +1356,7 @@ class Client:
             (f"Ennemis : {nb_ennemis}", COULEUR_TEXTE_SOMBRE),
             (f"Entités : {nb_entites}", COULEUR_TEXTE_SOMBRE),
             (f"Torche : {'ON' if self.torche.allumee else 'OFF'}",
-             (255, 160, 30) if self.torche.allumee else COULEUR_TEXTE_SOMBRE),
+            (255, 160, 30) if self.torche.allumee else COULEUR_TEXTE_SOMBRE),
             (f"Zoom : x{ZOOM_CAMERA}", COULEUR_TEXTE_SOMBRE),
         ]
 
@@ -1357,8 +1372,8 @@ class Client:
         panel = pygame.Surface((largeur_panel, hauteur_panel), pygame.SRCALPHA)
         panel.fill((8, 8, 20, 180))
         pygame.draw.rect(panel, COULEUR_CYAN_SOMBRE,
-                         pygame.Rect(0, 0, largeur_panel, hauteur_panel),
-                         width=1, border_radius=6)
+                        pygame.Rect(0, 0, largeur_panel, hauteur_panel),
+                        width=1, border_radius=6)
         self.ecran.blit(panel, (x0, y0))
 
         #dev_txt = self.police_petit.render("DEV", True, COULEUR_CYAN)
@@ -1381,8 +1396,11 @@ class Client:
         surface.blit(overlay, (0, 0))
 
         if elapsed > 600:
-            police_mort = pygame.font.Font(None, 48)
-            police_sub  = pygame.font.Font(None, 28)
+            if not hasattr(self, '_police_mort'):
+                self._police_mort = pygame.font.Font(None, 48)
+                self._police_sub  = pygame.font.Font(None, 28)
+            police_mort = self._police_mort
+            police_sub  = self._police_sub
             lw, lh = surface.get_size()
             txt1 = police_mort.render("VOUS ETES MORT", True, (220, 50, 50))
             txt2 = police_sub.render("Respawn en cours...", True, (160, 100, 100))
@@ -1395,15 +1413,9 @@ class Client:
 
     def gerer_evenements_jeu(self):
         commandes = {'clavier': {'gauche': False, 'droite': False, 'saut': False, 'attaque': False, 'dash': False},
-                     'echo': False, 'toggle_torche': False,}
-        params_ctrl = self.parametres.get('controles', {})
-
-        def key(nom):
-            k = params_ctrl.get(nom, '')
-            try:
-                return pygame.key.key_code(k)
-            except Exception:
-                return None
+                    'echo': False, 'toggle_torche': False,}
+    
+        key = self._codes_touches.get
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -1452,8 +1464,10 @@ class Client:
         zoom = ZOOM_CAMERA
         lv = int(self.largeur_ecran / zoom)
         hv = int(self.hauteur_ecran / zoom)
+        if not hasattr(self, '_surface_virtuelle') or self._surface_virtuelle.get_size() != (lv, hv):
+            self._surface_virtuelle = pygame.Surface((lv, hv))
         surface_virtuelle = self._surface_virtuelle
-        surface_virtuelle.fill(COULEUR_FOND)
+
         lm = self.carte.largeur_map * TAILLE_TUILE
         hm = self.carte.hauteur_map * TAILLE_TUILE
         camera_offset = calculer_camera(mon_joueur.rect,
@@ -1496,10 +1510,10 @@ class Client:
                 cx = ennemi.rect.centerx - off_x
                 cy = ennemi.rect.centery - off_y
                 halo = pygame.Surface((60, 60), pygame.SRCALPHA)
-                pygame.draw.circle(halo, (0, 212, 255, int(80 * ratio)), (30, 30), 30)
+                pygame.draw.circle(halo, (0, 212, 255, max(0, min(255, int(80 * ratio)))), (30, 30), 30)
                 surface_virtuelle.blit(halo, (cx - 30, cy - 30))
                 tmp = pygame.Surface((ennemi.rect.w, ennemi.rect.h), pygame.SRCALPHA)
-                tmp.fill((0, 212, 255, int(255 * ratio)))
+                tmp.fill((0, 212, 255, max(0, min(255, int(255 * ratio)))))
                 surface_virtuelle.blit(tmp, (ennemi.rect.x - off_x, ennemi.rect.y - off_y))
 
         # Reset timer de mort quand vivant
@@ -1523,16 +1537,19 @@ class Client:
 
         # -- Calque obscurité avec halo dégradé --
         if mon_joueur:
-            obscurite = pygame.Surface(surface_virtuelle.get_size(), pygame.SRCALPHA)
+            sz = surface_virtuelle.get_size()
+            if not hasattr(self, '_obscurite') or self._obscurite.get_size() != sz:
+                self._obscurite = pygame.Surface(sz, pygame.SRCALPHA)
+            obscurite = self._obscurite
             obscurite.fill((0, 0, 10, 220))
 
             cx = mon_joueur.rect.centerx - camera_offset[0]
             cy = mon_joueur.rect.centery - camera_offset[1]
             rayon = RAYON_HALO_JOUEUR
-            nb_couches = 32
+            nb_couches = 12
             for i in range(nb_couches, 0, -1):
                 r_couche = int(rayon * i / nb_couches)
-                alpha = int(220 * (1 - (i / nb_couches) ** 0.5))
+                alpha = max(0, min(255, int(220 * (1 - (i / nb_couches) ** 0.5))))
                 pygame.draw.circle(obscurite, (0, 0, 10, alpha), (cx, cy), r_couche)
 
             if self.torche.allumee:
@@ -1541,7 +1558,7 @@ class Client:
                 rayon_t = RAYON_LUMIERE_TORCHE
                 for i in range(nb_couches, 0, -1):
                     r_couche = int(rayon_t * i / nb_couches)
-                    alpha = int(220 * (1 - (i / nb_couches) ** 0.6))
+                    alpha = max(0, min(255, int(220 * (1 - (i / nb_couches) ** 0.6))))
                     pygame.draw.circle(obscurite, (0, 0, 10, alpha), (tx, ty), r_couche)
 
             surface_virtuelle.blit(obscurite, (0, 0))
@@ -1690,9 +1707,11 @@ class Client:
                 self.nettoyer_connexion()
                 self.etat_jeu = "MENU_PRINCIPAL"
                 break
-            except (pickle.UnpicklingError, ValueError) as e:
+            except (pickle.UnpicklingError,) as e:
                 print(f"[CLIENT] Paquet corrompu ignoré: {e}")
-                # On continue — un seul paquet corrompu ne doit pas crasher
+            except ValueError as e:
+                print(f"[CLIENT] Erreur valeur (probablement Pygame): {e}")
+                import traceback; traceback.print_exc()
 
             pygame.display.flip()
             self.horloge.tick(FPS)
@@ -1730,6 +1749,7 @@ class Client:
             print(f"[CLIENT] Connexion a {hote}:{PORT_SERVEUR}...")
             self.client_socket.connect((hote, PORT_SERVEUR))
             self.client_socket.settimeout(10.0)  # timeout 10s : détecte serveur mort
+            self.client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             reponse = self._recv_complet(self.client_socket)
 
             if isinstance(reponse, dict) and "erreur" in reponse:
@@ -1769,11 +1789,11 @@ class Client:
                 pass
         self.client_socket = None
         self.mon_id = -1
-        self.joueurs_locaux       = {}
-        self.ennemis_locaux       = {}
+        self.joueurs_locaux = {}
+        self.ennemis_locaux = {}
         self.ames_perdues_locales = {}
-        self.ames_libres_locales  = {}
-        self.cle_locale           = None
+        self.ames_libres_locales = {}
+        self.cle_locale  = None
         self.carte = None
         self.vis_map_locale = None
         self.etat_jeu_interne = "JEU"

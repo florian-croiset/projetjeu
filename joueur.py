@@ -7,30 +7,31 @@ import os   # AJOUTER
 from parametres import *
 
 # Charger le sprite du joueur
-def charger_sprite_joueur():
-    """Charge le sprite du personnage."""
+def charger_sprite(nom_fichier):
     try:
         if getattr(sys, 'frozen', False):
             base_path = sys._MEIPASS
         else:
             base_path = os.path.dirname(__file__)
-        
-        sprite_path = os.path.join(base_path, 'assets', 'perso.png')
-        sprite = pygame.image.load(sprite_path)
-        # Adapter la taille au personnage (TAILLE_TUILE - 8)
-        sprite = pygame.transform.scale(sprite, (TAILLE_TUILE - 8, TAILLE_TUILE - 4))
-        return sprite
+        path = os.path.join(base_path, 'assets', nom_fichier)
+        sprite = pygame.image.load(path)
+        return pygame.transform.scale(sprite, (TAILLE_TUILE - 8, TAILLE_TUILE - 4))
     except Exception as e:
-        print(f"Impossible de charger le sprite: {e}")
+        print(f"Impossible de charger le sprite {nom_fichier}: {e}")
         return None
 
-SPRITE_JOUEUR = charger_sprite_joueur()
+SPRITES_JOUEURS = [
+    charger_sprite('sprite_perso1.png'),
+    charger_sprite('sprite_perso2.png'),
+    charger_sprite('sprite_perso3.png'),
+]
+
 class Joueur:
     def __init__(self, x, y, id, couleur=COULEUR_JOUEUR):
         self.id = id
         self.rect = pygame.Rect(x, y, TAILLE_TUILE - 8, TAILLE_TUILE - 4)
         self.couleur = couleur
-        self.sprite = SPRITE_JOUEUR  # AJOUTER CETTE LIGNE
+        self.sprite = SPRITES_JOUEURS[self.id % 3]
         
         # Mouvement
         self.vel_y = 0
@@ -46,7 +47,8 @@ class Joueur:
         # Mécaniques
         self.dernier_echo_temps = 0
         self.ame_perdue = None
-        self.have_key = False  # True si le joueur possède une clé
+        self.have_key = False
+        self.temps_mort = None
         
         # Combat
         self.dernier_attaque_temps = 0
