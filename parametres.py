@@ -134,4 +134,4 @@ HALOS_MENU = False  # Passer à False pour désactiver les halos animés des men
 FOND_MENU = False  # Passer à False pour un fond noir uni
 
 
-TICK_RATE_RESEAU = 60  # envois réseau par seconde (vs 60 pour la physique)
+TICK_RATE_RESEAU = 30  # envois réseau par seconde (vs 60 pour la physique)
