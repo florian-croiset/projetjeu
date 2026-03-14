@@ -15,7 +15,7 @@ def charger_sprite(nom_fichier):
             base_path = os.path.dirname(__file__)
         path = os.path.join(base_path, 'assets', nom_fichier)
         sprite = pygame.image.load(path)
-        return pygame.transform.scale(sprite, (TAILLE_TUILE - 8, TAILLE_TUILE - 4))
+        return pygame.transform.scale(sprite, (25, 58))
     except Exception as e:
         print(f"Impossible de charger le sprite {nom_fichier}: {e}")
         return None
@@ -29,7 +29,7 @@ SPRITES_JOUEURS = [
 class Joueur:
     def __init__(self, x, y, id, couleur=COULEUR_JOUEUR):
         self.id = id
-        self.rect = pygame.Rect(x, y, TAILLE_TUILE - 8, TAILLE_TUILE - 4)
+        self.rect = pygame.Rect(x, y, 25, 58)
         self.couleur = couleur
         self.sprite = SPRITES_JOUEURS[self.id % 3]
         
