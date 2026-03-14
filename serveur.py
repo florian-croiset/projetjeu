@@ -177,6 +177,10 @@ class Serveur:
         nouveau_joueur.peut_dash = ameliorations.get("dash", False)
         nouveau_joueur.peut_echo_dir = ameliorations.get("echo_dir", False)
 
+        if MODE_DEV:
+            nouveau_joueur.peut_double_saut = True
+            nouveau_joueur.peut_dash = True
+
         self.joueurs[id_joueur] = nouveau_joueur
 
         if id_joueur == 0:
