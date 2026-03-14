@@ -3,7 +3,7 @@
 from parametres import *
 import envoyer_logs
 if MODE_DEV:
-    envoyer_logs.activer_capture()   # ← UNE seule ligne, c'est tout
+    envoyer_logs.activer_capture() 
 
 import pygame
 import socket
@@ -1597,7 +1597,7 @@ class Client:
         while len(data) < n:
             paquet = sock.recv(n - len(data))
             if not paquet:
-                raise EOFError("Connexion fermée par le serveur")
+                raise EOFError("Connexion fermee par le serveur")
             data += paquet
         return data
 
