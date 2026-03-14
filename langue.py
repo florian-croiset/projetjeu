@@ -48,6 +48,7 @@ FR = {
     "param_echo": "Écho",
     "param_attaque": "Attaque",
     "param_dash": "Dash",  # <-- AJOUT
+    "param_echo_dir": "Écho Directionnel",
     "param_appliquer": "Appliquer",
     "param_retour": "Retour",
     "param_attente_touche": "[ ... ]",
@@ -107,6 +108,7 @@ EN = {
     "param_echo": "Echo",
     "param_attaque": "Attack",
     "param_dash": "Dash",  # <-- AJOUT
+    "param_echo_dir": "Directional Echo",
     "param_appliquer": "Apply",
     "param_retour": "Back",
     "param_attente_touche": "[ ... ]",

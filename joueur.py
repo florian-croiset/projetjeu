@@ -46,6 +46,8 @@ class Joueur:
         
         # Mécaniques
         self.dernier_echo_temps = 0
+        self.dernier_echo_dir_temps = -COOLDOWN_ECHO_DIR  # Prêt dès le départ
+        self.peut_echo_dir = False  # Débloquable via amélioration
         self.ame_perdue = None
         self.have_key = False
         self.temps_mort = None
@@ -291,8 +293,9 @@ class Joueur:
             'peut_dash': self.peut_dash,
             'est_en_dash': self.est_en_dash,
             'have_key': self.have_key,
+            'peut_echo_dir': self.peut_echo_dir,
         }
-
+    
     def set_etat(self, data):
         """Mise à jour depuis le réseau."""
         self.rect.x = data['x']
@@ -307,6 +310,7 @@ class Joueur:
         self.peut_dash = data.get('peut_dash', False)
         self.est_en_dash = data.get('est_en_dash', False)
         self.have_key = data.get('have_key', False)
+        self.peut_echo_dir = data.get('peut_echo_dir', False)
         
         # Gestion visuelle de l'attaque distante
         etat_attaque = data.get('attaque')

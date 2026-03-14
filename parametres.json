@@ -14,6 +14,7 @@
         "saut": "space",
         "echo": "e",
         "attaque": "k",
-        "dash": "c"
+        "dash": "c",
+        "echo_dir": "y"
     }
 }
