@@ -75,15 +75,13 @@ def get_infos_slots():
             nom_checkpoint = points_sauvegarde.get_nom_par_id(donnees.get("id_dernier_checkpoint", "spawn_01"))
             infos.append({
                 "nom": nom_slot,
-                #"description": f"Checkpoint: {nom_checkpoint}",
-                "description": f"",
+                "description": f"Checkpoint: {nom_checkpoint}",
                 "est_vide": False
             })
         else:
             infos.append({
                 "nom": nom_slot,
-                #"description": "[ Emplacement Vide ]",
-                "description": f"",
+                "description": "[ Emplacement Vide ]",
                 "est_vide": True
             })
     return infos

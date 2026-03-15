@@ -929,12 +929,13 @@ class Client:
             btn_slot.texte = info["nom"]
             btn_slot.dessiner(self.ecran)
 
-            # Description en dessous du bouton
-            desc_c = COULEUR_TEXTE_SOMBRE if (mode_continuer and est_vide) else COULEUR_TEXTE
-            desc = self.police_petit.render(info["description"], True, desc_c)
-            self.ecran.blit(desc, desc.get_rect(
-                center=(btn_slot.rect.centerx,
-                        btn_slot.rect.bottom + 14)))
+            # Description à l'intérieur du bouton, sous le nom
+            if info["description"]:
+                desc_c = COULEUR_TEXTE_SOMBRE if (mode_continuer and est_vide) else COULEUR_TEXTE
+                desc = self.police_petit.render(info["description"], True, desc_c)
+                self.ecran.blit(desc, desc.get_rect(
+                    center=(btn_slot.rect.centerx,
+                            btn_slot.rect.centery + 14)))
 
         self.btn_retour_slots.dessiner(self.ecran)
 

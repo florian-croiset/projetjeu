@@ -22,6 +22,10 @@ YELLOW = (255, 255, 0)
 GRAY = (128, 128, 128)
 ORANGE = (255, 165, 0)
 PURPLE = (128, 0, 128)
+GOLD = (255, 215, 0)   # Jaune Or : Très lisible, chaleureux
+CYAN  = (0, 255, 255)   # Cyan / Turquoise : Moderne, électrique
+MAGENTA = (255, 0, 255)   # Magenta / Rose vif : Dynamique, artistique
+NEON_GREEN  = (57, 255, 20)   # Vert Néon : Sportif, technologique
 
 # Création de la fenêtre
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -237,7 +241,7 @@ class Game:
         ]
         
         for i, text in enumerate(stats):
-            text_surface = font.render(text, True, WHITE)
+            text_surface = font.render(text, True, GOLD)
             screen.blit(text_surface, (10, 10 + i * 30))
             
         # Afficher message
@@ -269,6 +273,6 @@ while running:
     pygame.display.flip()
     
     # Contrôler la vitesse de la boucle
-    clock.tick(10)  # Ajustez cette valeur pour contrôler la vitesse
+    clock.tick(30)  # Ajustez cette valeur pour contrôler la vitesse
 
 pygame.quit()

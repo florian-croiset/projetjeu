@@ -197,7 +197,7 @@ class Carte:
         for y, rangee in enumerate(self.map_data):
             vis_map.append([])
             for x, tuile in enumerate(rangee):
-                vis_map[y].append(True)
+                vis_map[y].append(False)
         return vis_map
 
     def est_mur(self, x, y):
