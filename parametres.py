@@ -129,9 +129,9 @@ DUREE_FLASH_ECHO_ENNEMI = 1500   # ms, durée d'apparition après écho
 RAYON_HALO_JOUEUR = 80
 
 # -- Debug --
-MODE_DEV = False  # Passer à False pour désactiver le compteur FPS/debug et à True pour l'activer
+MODE_DEV = True  # Passer à False pour désactiver le compteur FPS/debug et à True pour l'activer
 HALOS_MENU = False  # Passer à False pour désactiver les halos animés des menus
 FOND_MENU = False  # Passer à False pour un fond noir uni
 
 
-TICK_RATE_RESEAU = 30  # envois réseau par seconde (vs 60 pour la physique)
+TICK_RATE_RESEAU = 60  # envois réseau par seconde (vs 60 pour la physique)
