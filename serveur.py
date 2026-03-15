@@ -180,6 +180,7 @@ class Serveur:
         if MODE_DEV:
             nouveau_joueur.peut_double_saut = True
             nouveau_joueur.peut_dash = True
+            nouveau_joueur.peut_echo_dir = True
 
         self.joueurs[id_joueur] = nouveau_joueur
 
