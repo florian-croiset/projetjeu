@@ -13,9 +13,8 @@ NOMS_CHECKPOINTS = {
 
 def get_point_depart():
     """Renvoie l'ID et les coordonnées du tout premier point de spawn."""
-    # Position AU MILIEU DE LA MAP, LIGNE 20 (juste au-dessus du sol ligne 22)
-    id_depart = "15_20"
-    coords = (15 * TAILLE_TUILE, 20 * TAILLE_TUILE)
+    id_depart = "32_12"
+    coords = (32 * TAILLE_TUILE, 12 * TAILLE_TUILE)
     return id_depart, coords
 
 def get_coords_par_id(id_point):

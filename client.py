@@ -1775,7 +1775,7 @@ class Client:
 
             import os
             dossier_script = os.path.dirname(os.path.abspath(__file__))
-            chemin_map = os.path.join(dossier_script, "map.json")
+            chemin_map = os.path.join(dossier_script, "assets/MapS2.tmx")
             self.carte = Carte(chemin_map)
             self.vis_map_locale = self.carte.creer_carte_visibilite_vierge()
             self.joueurs_locaux      = {}

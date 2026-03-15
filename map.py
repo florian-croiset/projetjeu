@@ -14,12 +14,28 @@ COULEUR_VIDE       = (20, 20, 35)
 COULEUR_GRILLE     = (30, 30, 50)
 COULEUR_CLÉ        = (255, 215, 0)   # repère doré pour positionner la clé
 
-def charger_map(fichier="map.json"):
+def charger_map(fichier="assets/MapS2.tmx"):
+    import xml.etree.ElementTree as ET
     dossier = os.path.dirname(os.path.abspath(__file__))
     chemin  = os.path.join(dossier, fichier)
-    with open(chemin, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    return data["largeur"], data["hauteur"], data["data"]
+    tree = ET.parse(chemin)
+    root = tree.getroot()
+    largeur = int(root.attrib['width'])
+    hauteur = int(root.attrib['height'])
+    map_data = [[0] * largeur for _ in range(hauteur)]
+    layers_murs = {'Wall.1', 'Sol.1'}
+    for layer in root.findall('layer'):
+        nom = layer.attrib.get('name', '')
+        data_el = layer.find('data')
+        if data_el is None or nom not in layers_murs:
+            continue
+        valeurs = [int(v) for v in data_el.text.strip().split(',')]
+        for y in range(hauteur):
+            for x in range(largeur):
+                gid = valeurs[y * largeur + x]
+                if gid != 0:
+                    map_data[y][x] = 1
+    return largeur, hauteur, map_data
 
 def afficher_map():
     pygame.init()
