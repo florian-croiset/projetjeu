@@ -213,7 +213,15 @@ class Carte:
         """Vérifie si une tuile est solide (pour l'ennemi)."""
         if 0 <= tuile_x < self.largeur_map and 0 <= tuile_y < self.hauteur_map:
             return self.map_data[tuile_y][tuile_x] in [1, 3]
-        return False 
+        return False
+
+    def _reveler_voisins(self, tuile_x, tuile_y, vis_map):
+            """Révèle le bloc touché + les voisins dans un rayon de 2 blocs (carré 5x5)."""
+            for dy in range(-2, 3):
+                for dx in range(-2, 3):
+                    nx, ny = tuile_x + dx, tuile_y + dy
+                    if 0 <= nx < self.largeur_map and 0 <= ny < self.hauteur_map:
+                        vis_map[ny][nx] = True
 
     def reveler_par_echo(self, centre_x, centre_y, vis_map):
         """Lance des rayons via l'algorithme DDA (rapide et précis)."""
@@ -240,7 +248,7 @@ class Carte:
 
                 tuile_type = self.map_data[tuile_actuelle_y][tuile_actuelle_x]
                 if tuile_type in [1, 3]:
-                    vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
+                    self._reveler_voisins(tuile_actuelle_x, tuile_actuelle_y, vis_map)
                     break
                 vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
 
@@ -375,6 +383,7 @@ class Carte:
                     break
                 vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
                 if self.map_data[tuile_actuelle_y][tuile_actuelle_x] in [1, 3]:
+                    self._reveler_voisins(tuile_actuelle_x, tuile_actuelle_y, vis_map)
                     break
     def reveler_par_echo_dir_partiel(self, centre_x, centre_y, portee, vis_map, direction):
         """Révélation progressive DDA dans un cône directionnel de ±15°.
@@ -418,7 +427,9 @@ class Carte:
                     break
                 vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
                 if self.map_data[tuile_actuelle_y][tuile_actuelle_x] in [1, 3]:
+                    self._reveler_voisins(tuile_actuelle_x, tuile_actuelle_y, vis_map)
                     break
+    
     
 
     def get_tile_surface(self, gid):

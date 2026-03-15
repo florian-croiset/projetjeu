@@ -93,13 +93,13 @@ DASH_EN_AIR_MAX = 1
 FORCE_DOUBLE_SAUT = 10
 
 # -- Paramètres de l'Écho (Raycasting) --
-PORTEE_ECHO = 250
+PORTEE_ECHO = 150
 NB_RAYONS_ECHO = 360
 COOLDOWN_ECHO = 2500            # Réduit : 2.5s entre chaque écho
 ECHO_DUREE_REVEAL = 600         # Durée révélation progressive (ms)
 
 # -- Paramètres de l'Écho Directionnel --
-PORTEE_ECHO_DIR = PORTEE_ECHO * 2   # 500px (portée double)
+PORTEE_ECHO_DIR = PORTEE_ECHO * 2   # 300px (portée double)
 COOLDOWN_ECHO_DIR = 4000            # 4s de cooldown indépendant
 ECHO_DIR_DEMI_ANGLE = 25           # ±15° autour de la direction (cône de 30°)
 
