@@ -28,6 +28,7 @@ import gestion_parametres
 import langue
 from bouton import Bouton
 import gestion_sauvegarde
+import music
 
 
 # ======================================================================
@@ -241,11 +242,10 @@ class Client:
         except Exception as e:
             print(f"Impossible de charger l'icône: {e}")
 
-        # Musique
-        self._init_musique()
-
         self.parametres = gestion_parametres.charger_parametres()
         langue.set_langue(self.parametres['jouabilite']['langue'])
+
+        music.init(self.parametres)
 
         self.largeur_ecran = LARGEUR_ECRAN
         self.hauteur_ecran = HAUTEUR_ECRAN
@@ -412,6 +412,7 @@ class Client:
         self.btn_changer_langue      = _p()
         self.btn_toggle_plein_ecran  = _p()
         self.btn_toggle_musique      = _p()
+        self.btn_toggle_sfx          = _p()
         self.btn_changer_gauche      = _p()
         self.btn_changer_droite      = _p()
         self.btn_changer_saut        = _p()
@@ -435,6 +436,7 @@ class Client:
             self.btn_changer_langue,
             self.btn_toggle_plein_ecran,
             self.btn_toggle_musique,
+            self.btn_toggle_sfx, 
             self.btn_changer_gauche, self.btn_changer_droite,
             self.btn_changer_saut, self.btn_changer_echo,
             self.btn_changer_attaque, self.btn_changer_dash,
@@ -1019,6 +1021,8 @@ class Client:
                     self.parametres = copy.deepcopy(self.parametres_temp)
                     gestion_parametres.sauvegarder_parametres(self.parametres)
                     self.appliquer_parametres_video()
+                    music.toggle(self.parametres['video'].get('musique', True))
+                    music.activer_sfx(self.parametres['sons'].get('activer_sfx', True))
                     self.actualiser_langues_widgets()
                     self.touche_a_modifier = None
                     self.scroll_y_params = 0
@@ -1029,18 +1033,10 @@ class Client:
                         not self.parametres_temp['video']['plein_ecran']
 
                 if self.btn_toggle_musique.verifier_clic(event):
-                    nouvelle_val = not self.parametres_temp['video'].get('musique', True)
-                    self.parametres_temp['video']['musique'] = nouvelle_val
-                    # Appliquer immédiatement
-                    if self._musique_ok:
-                        if nouvelle_val:
-                            if not self._musique_jouee:
-                                pygame.mixer.music.play(-1)
-                                self._musique_jouee = True
-                            else:
-                                pygame.mixer.music.unpause()
-                        else:
-                            pygame.mixer.music.pause()
+                    self.parametres_temp['video']['musique'] = not self.parametres_temp['video'].get('musique', True)
+
+                if self.btn_toggle_sfx.verifier_clic(event):
+                    self.parametres_temp['sons']['activer_sfx'] = not self.parametres_temp['sons'].get('activer_sfx', True)
 
                 if self.btn_changer_langue.verifier_clic(event):
                     langues = ['fr', 'en']
@@ -1163,6 +1159,11 @@ class Client:
                     self.btn_toggle_musique,
                     langue.get_texte("param_oui"),
                     langue.get_texte("param_non"))
+        ligne_toggle("Sons (SFX)",
+            params['sons'].get('activer_sfx', True),
+            self.btn_toggle_sfx,
+            langue.get_texte("param_oui"),
+            langue.get_texte("param_non"))
 
         # ---- Contrôles ----
         section(langue.get_texte("param_section_controles"))
@@ -1222,53 +1223,16 @@ class Client:
                 self.running = False
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.etat_jeu_interne = "JEU"
-                self._reprendre_musique()
+                music.reprendre()
             if self.btn_pause_reprendre.verifier_clic(event):
                 self.etat_jeu_interne = "JEU"
-                self._reprendre_musique()
+                music.reprendre()
             if self.btn_pause_parametres.verifier_clic(event):
                 self.etat_jeu_precedent = "EN_JEU"
                 self.parametres_temp = copy.deepcopy(self.parametres)
                 self.etat_jeu = "MENU_PARAMETRES"
             if self.btn_pause_quitter.verifier_clic(event):
                 self.etat_jeu = "MENU_PRINCIPAL"
-
-    # ------------------------------------------------------------------
-    #  MUSIQUE
-    # ------------------------------------------------------------------
-
-    def _init_musique(self):
-        """Initialise le mixer et charge musique.mp3."""
-        try:
-            import os, sys
-            if getattr(sys, 'frozen', False):
-                base = sys._MEIPASS
-            else:
-                base = os.path.dirname(__file__)
-            chemin = os.path.join(base, 'musique.mp3')
-            pygame.mixer.init()
-            pygame.mixer.music.load(chemin)
-            pygame.mixer.music.set_volume(0.5)
-            self._musique_ok = True
-        except Exception as e:
-            print(f'[MUSIQUE] Impossible de charger musique.mp3 : {e}')
-            self._musique_ok = False
-        self._musique_jouee = False
-
-    def _demarrer_musique(self):
-        """Lance la musique si activée dans les paramètres."""
-        musique_activee = self.parametres.get('video', {}).get('musique', True)
-        if self._musique_ok and not self._musique_jouee and musique_activee:
-            pygame.mixer.music.play(-1)  # -1 = boucle infinie
-            self._musique_jouee = True
-
-    def _pause_musique(self):
-        if self._musique_ok and self._musique_jouee:
-            pygame.mixer.music.pause()
-
-    def _reprendre_musique(self):
-        if self._musique_ok and self._musique_jouee:
-            pygame.mixer.music.unpause()
 
     def _dessiner_icone_cle(self, x, y):
         """Dessine l'icône de clé dans le HUD avec texte."""
@@ -1436,20 +1400,28 @@ class Client:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.etat_jeu_interne = "PAUSE"
-                    self._pause_musique()
+                    music.pause()
                 if event.key == key('attaque'):
                     commandes['clavier']['attaque'] = True
+                    music.jouer_sfx('attaque')
                 if event.key == key('echo'):
                     commandes['echo'] = True
+                    music.jouer_sfx('echo')
                 if event.key == key('dash'):
                     commandes['clavier']['dash'] = True
+                    music.jouer_sfx('dash')
                 if event.key == key('echo_dir'):
                     commandes['echo_dir'] = True
+                    music.jouer_sfx('echo_dir')                
                 if event.key == pygame.K_l:
                     if self.mon_id not in self.joueurs_locaux:
                         continue
                     joueur = self.joueurs_locaux[self.mon_id]
                     vient_dallumer = self.torche.toggle()
+                    if vient_dallumer:
+                        music.torche_boucle_start()
+                    else:
+                        music.torche_boucle_stop()
                     commandes['toggle_torche'] = True  # envoyé au serveur (ON et OFF)
                     if vient_dallumer:
                         dx = joueur.rect.centerx - self.torche.x
@@ -1555,6 +1527,13 @@ class Client:
         self.torche.mettre_a_jour(temps_ms)
         self.torche.dessiner(surface_virtuelle, camera_offset, temps_ms)
 
+        # Audio spatial torche — mise à jour volume chaque frame
+        if self.torche.allumee and mon_joueur:
+            dx = mon_joueur.rect.centerx - self.torche.x
+            dy = mon_joueur.rect.centery - self.torche.y
+            dist = (dx**2 + dy**2) ** 0.5
+            music.torche_mettre_a_jour_volume(dist)
+
 
         # -- Calque obscurité avec halo dégradé --
         if mon_joueur and ASSOMBRISSEMENT:
@@ -1585,6 +1564,8 @@ class Client:
             surface_virtuelle.blit(obscurite, (0, 0))
 
         if mon_joueur and mon_joueur.pv <= 0:
+            if self._mort_depuis is None:
+                music.jouer_sfx('mort')
             self._dessiner_ecran_mort(surface_virtuelle)
         elif mon_joueur and mon_joueur.pv > 0:
             self._mort_depuis = None  # reset seulement si vivant ET on ne dessine pas la mort
@@ -1629,7 +1610,7 @@ class Client:
         if not self.client_socket:
             self.etat_jeu = "MENU_PRINCIPAL"
             return
-        self._demarrer_musique()
+        music.demarrer()
 
         while self.etat_jeu == "EN_JEU" and self.running:
             pos_souris = pygame.mouse.get_pos()
@@ -1664,6 +1645,12 @@ class Client:
                         self.joueurs_locaux[dj['id']] = Joueur(dj['x'], dj['y'], dj['id'])
                     self.joueurs_locaux[dj['id']].set_etat(dj)
 
+                mon_joueur_local = self.joueurs_locaux.get(self.mon_id)
+                if mon_joueur_local:
+                    for nom_son in mon_joueur_local.sons_a_jouer:
+                        music.jouer_sfx(nom_son)
+                    mon_joueur_local.sons_a_jouer.clear()
+
                 ids_e = {e['id'] for e in donnees_recues['ennemis']}
                 for id_local in list(self.ennemis_locaux.keys()):
                     if id_local not in ids_e:
@@ -1672,6 +1659,11 @@ class Client:
                     if de['id'] not in self.ennemis_locaux:
                         self.ennemis_locaux[de['id']] = Ennemi(de['x'], de['y'], de['id'])
                     self.ennemis_locaux[de['id']].set_etat(de)
+
+                for ennemi_local in self.ennemis_locaux.values():
+                    for nom_son in ennemi_local.sons_a_jouer:
+                        music.jouer_sfx(nom_son)
+                    ennemi_local.sons_a_jouer.clear()
 
                 ids_a = {a['id'] for a in donnees_recues.get('ames_perdues', [])}
                 for id_local in list(self.ames_perdues_locales.keys()):

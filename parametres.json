@@ -16,5 +16,10 @@
         "attaque": "k",
         "dash": "c",
         "echo_dir": "y"
+    },
+    "sons": {
+        "volume_sfx": 0.8,
+        "volume_musique": 0.5,
+        "activer_sfx": true
     }
 }
