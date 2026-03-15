@@ -7,6 +7,8 @@ LARGEUR_ECRAN = 1920
 HAUTEUR_ECRAN = 1080
 TITRE_FENETRE = "Écho - Team Nightberry"
 FPS = 60
+seconde=1000
+minute=60*seconde
 
 # -- Paramètres de Sauvegarde --
 NB_SLOTS_SAUVEGARDE = 3
@@ -84,6 +86,7 @@ DEGATS_JOUEUR = 1
 VITESSE_ENNEMI = 1.5
 PV_ENNEMI_BASE = 3
 ARGENT_PAR_ENNEMI = 10
+TEMPS_RESPAWN_ENNEMI = minute*3  # 3 minutes en ms
 
 # -- Paramètres des Capacités --
 DISTANCE_DASH = TAILLE_TUILE * 4

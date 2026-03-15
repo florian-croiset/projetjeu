@@ -26,6 +26,13 @@ class Ennemi:
         # Sons — événements à envoyer au client ce tick
         self.sons_a_jouer = []
 
+        # Respawn
+        self.x_depart = x
+        self.y_depart = y
+        self.est_mort = False
+        self.temps_mort = None
+
+
     def appliquer_logique(self, rects_collision, carte):
         """Gère la physique et l'IA de patrouille."""
         dx = 0
@@ -72,18 +79,34 @@ class Ennemi:
                     self.rect.top = mur.bottom
                     self.vel_y = 0
 
-    def prendre_degat(self, montant):
+    def prendre_degat(self, montant, temps_actuel):
         """Inflige des dégâts à l'ennemi."""
         self.pv -= montant
-        self.dernier_coup_recu = pygame.time.get_ticks()
+        self.dernier_coup_recu = temps_actuel
         self.clignotement = True
-        est_mort = self.pv <= 0
-        # Événement son → client
-        self.sons_a_jouer.append('ennemi_mort' if est_mort else 'ennemi_degat')
-        return est_mort
+        if self.pv <= 0:
+            self.est_mort = True
+            self.temps_mort = temps_actuel
+            self.sons_a_jouer.append('ennemi_mort')
+            return True
+        self.sons_a_jouer.append('ennemi_degat')
+        return False
+
+    def respawn(self):
+        """Réinitialise l'ennemi à sa position de départ."""
+        self.rect.topleft = (self.x_depart, self.y_depart)
+        self.pv = PV_ENNEMI_BASE
+        self.vel_y = 0
+        self.sur_le_sol = False
+        self.est_mort = False
+        self.temps_mort = None
+        self.clignotement = False
+        self.sons_a_jouer = []
 
     def dessiner(self, surface, camera_offset=(0, 0)):
         """Dessine l'ennemi en tenant compte de la caméra."""
+        if self.est_mort:
+            return
         couleur = self.couleur
         if self.clignotement:
             if pygame.time.get_ticks() - self.dernier_coup_recu < 100:
@@ -109,15 +132,17 @@ class Ennemi:
             'x': self.rect.x,
             'y': self.rect.y,
             'pv': self.pv,
+            'est_mort': self.est_mort,
             'clignotement': self.clignotement,
             'flash_echo_temps': self.flash_echo_temps,
-            'sons': sons,  # ← événements sonores pour le client
+            'sons': sons,
         }
 
     def set_etat(self, data):
         self.rect.x = data['x']
         self.rect.y = data['y']
         self.pv = data['pv']
+        self.est_mort = data.get('est_mort', False)
         self.clignotement = data.get('clignotement', False)
         self.flash_echo_temps = data.get('flash_echo_temps', 0)
         self.sons_a_jouer = data.get('sons', [])

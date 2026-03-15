@@ -350,9 +350,14 @@ class Serveur:
                         joueur.have_key = True
                         print(f"[SERVEUR] Joueur {id_joueur} a ramasse la cle !")
 
-            # 3. Ennemis
+            # 3. Ennemis — physique + respawn
             for id_ennemi, ennemi in list(self.ennemis.items()):
-                ennemi.appliquer_logique(self.rects_collision, self.carte_jeu)
+                if ennemi.est_mort:
+                    if temps_actuel - ennemi.temps_mort >= TEMPS_RESPAWN_ENNEMI:
+                        ennemi.respawn()
+                        print(f"[SERVEUR] Ennemi {id_ennemi} respawn !")
+                else:
+                    ennemi.appliquer_logique(self.rects_collision, self.carte_jeu)
 
             # 4. Joueurs
             for id_joueur, joueur in list(self.joueurs.items()):
@@ -364,12 +369,11 @@ class Serveur:
                 if joueur.est_en_attaque and joueur.rect_attaque:
                     # Contre les Ennemis
                     for id_ennemi, ennemi in list(self.ennemis.items()):
-                        if joueur.rect_attaque.colliderect(ennemi.rect):
-                            mort = ennemi.prendre_degat(DEGATS_JOUEUR)
+                        if not ennemi.est_mort and joueur.rect_attaque.colliderect(ennemi.rect):
+                            mort = ennemi.prendre_degat(DEGATS_JOUEUR, temps_actuel)
                             if mort:
                                 print(f"[SERVEUR] Ennemi {id_ennemi} tue par Joueur {id_joueur}")
                                 joueur.argent += ARGENT_PAR_ENNEMI
-                                del self.ennemis[id_ennemi]
 
                     # Contre les Âmes Perdues
                     for id_ame, ame in list(self.ames_perdues.items()):
@@ -382,7 +386,7 @@ class Serveur:
 
                 # B. Dégâts reçus
                 for id_ennemi, ennemi in list(self.ennemis.items()):
-                    if joueur.rect.colliderect(ennemi.rect):
+                    if not ennemi.est_mort and joueur.rect.colliderect(ennemi.rect):
                         joueur.prendre_degat(1, temps_actuel)
 
                 # C. Mort et Respawn
