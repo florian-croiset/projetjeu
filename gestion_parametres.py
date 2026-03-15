@@ -30,6 +30,11 @@ def creer_parametres_defaut():
             "attaque": "k",
             "dash": "c",
             "echo_dir": "y"   # <-- AJOUT écho directionnel
+        },
+        "sons": {
+            "volume_sfx": 0.8,
+            "volume_musique": 0.5,
+            "activer_sfx": True
         }
     }
 
