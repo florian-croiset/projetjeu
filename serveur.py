@@ -88,7 +88,7 @@ class Serveur:
         # ===== CARTE =====
         import os
         dossier_script = os.path.dirname(os.path.abspath(__file__))
-        chemin_map = os.path.join(dossier_script, "map.json")
+        chemin_map = os.path.join(dossier_script, "assets/MapS2.tmx")
         self.carte_jeu = Carte(chemin_map)
 
         self.rects_collision = self.carte_jeu.get_rects_collisions()
@@ -127,7 +127,7 @@ class Serveur:
         # ===== INIT FINALE =====
         self.creer_ennemis()
         self.creer_ames_libres()
-        self.cle = Cle(x=806, y=80)
+        self.cle = Cle(x=1034, y=399)
         self._ids_pool = list(range(3))  # IDs réutilisables : 0, 1, 2
         self.torche_allumee = False
         self.torche_x = 32
@@ -185,9 +185,11 @@ class Serveur:
 
         if id_joueur == 0:
             # Copie profonde pour éviter la mutation de la sauvegarde
-            self.cartes_visibilite[id_joueur] = [row[:] for row in self.donnees_partie["vis_map"]]
-        else:
-            self.cartes_visibilite[id_joueur] = self.carte_jeu.creer_carte_visibilite_vierge()
+            vis_sauvegarde = self.donnees_partie["vis_map"]
+            if (len(vis_sauvegarde) != self.carte_jeu.hauteur_map or len(vis_sauvegarde[0]) != self.carte_jeu.largeur_map):
+                self.cartes_visibilite[id_joueur] = self.carte_jeu.creer_carte_visibilite_vierge()
+            else:
+                self.cartes_visibilite[id_joueur] = [row[:] for row in vis_sauvegarde]
         # Version précédente pour détecter les changements (delta vis_map)
         self.vis_map_precedente[id_joueur] = None
 

@@ -33,29 +33,124 @@ class Carte:
         ]
         # Charger le fichier JSON
         if os.path.exists(fichier_map):
-            self.charger_json(fichier_map)
+            if fichier_map.endswith('.tmx'):
+                self.charger_tmx(fichier_map)
         else:
             print(f"[CARTE] Fichier {fichier_map} introuvable, utilisation de la carte par défaut")
             self.charger_carte_par_defaut()
         
         self.visibility_map = self.creer_carte_visibilite_vierge()
 
-    def charger_json(self, fichier_map):
-        """Charge la carte depuis un fichier JSON."""
+    def charger_tmx(self, fichier_map):
+        """Charge la carte depuis un fichier TMX Tiled (multi-layers).
+        Wall.1 et Sol.1 = murs solides (type 1), tout le reste = vide (type 0)."""
         try:
-            with open(fichier_map, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            self.largeur_map = data['largeur']
-            self.hauteur_map = data['hauteur']
-            self.map_data = data['data']
-            
-            print(f"[CARTE] Map JSON chargee : {self.largeur_map}x{self.hauteur_map}")
-            print(f"[CARTE] Premiere ligne : {self.map_data[0][:10]}...")
-            print(f"[CARTE] Derniere ligne : {self.map_data[-1][:10]}...")
-            
+            import xml.etree.ElementTree as ET
+            import sys
+
+            if getattr(sys, 'frozen', False):
+                base = sys._MEIPASS
+            else:
+                base = os.path.dirname(os.path.abspath(fichier_map))
+
+            tree = ET.parse(fichier_map)
+            root = tree.getroot()
+
+            self.largeur_map = int(root.attrib['width'])
+            self.hauteur_map = int(root.attrib['height'])
+
+            self.map_data = [[0] * self.largeur_map for _ in range(self.hauteur_map)]
+
+            layers_murs = {'Wall.1', 'Sol.1'}
+            for layer in root.findall('layer'):
+                nom = layer.attrib.get('name', '')
+                data_el = layer.find('data')
+                if data_el is None:
+                    continue
+                valeurs = [int(v) for v in data_el.text.strip().split(',')]
+                if nom in layers_murs:
+                    for y in range(self.hauteur_map):
+                        for x in range(self.largeur_map):
+                            gid = valeurs[y * self.largeur_map + x]
+                            if gid != 0 and self.map_data[y][x] == 0:
+                                self.map_data[y][x] = 1
+
+            self.spawn = None
+            for og in root.findall('objectgroup'):
+                if og.attrib.get('name') == 'Spawn':
+                    obj = og.find('object')
+                    if obj is not None:
+                        self.spawn = (int(float(obj.attrib['x'])),
+                                    int(float(obj.attrib['y'])))
+
+            self.layers_gids = []
+            for layer in root.findall('layer'):
+                data_el = layer.find('data')
+                if data_el is None:
+                    continue
+                valeurs = [int(v) for v in data_el.text.strip().split(',')]
+                grille = []
+                for row_y in range(self.hauteur_map):
+                    grille.append(valeurs[row_y * self.largeur_map:(row_y + 1) * self.largeur_map])
+                self.layers_gids.append(grille)
+
+            # Tileset
+            ts_el = root.find('tileset')
+            self.tileset_firstgid = int(ts_el.attrib.get('firstgid', 1))
+            self.tileset = None
+
+            tsx_src = ts_el.attrib.get('source', '')
+            if tsx_src:
+                tsx_path = os.path.join(base, tsx_src)
+                tsx_tree = ET.parse(tsx_path)
+                tsx_root = tsx_tree.getroot()
+                self.tileset_taille   = int(tsx_root.attrib.get('tilewidth', 32))
+                self.tileset_spacing  = int(tsx_root.attrib.get('spacing', 0))
+                self.tileset_margin   = int(tsx_root.attrib.get('margin', 0))
+                img_el = tsx_root.find('image')
+                img_w  = int(img_el.attrib.get('width', 0))
+                self.tileset_colonnes = (img_w - 2 * self.tileset_margin + self.tileset_spacing) // (self.tileset_taille + self.tileset_spacing)
+                tileset_img_src = img_el.attrib.get('source', 'tileset.png')
+            else:
+                self.tileset_taille   = int(ts_el.attrib.get('tilewidth', 32))
+                self.tileset_spacing  = int(ts_el.attrib.get('spacing', 0))
+                self.tileset_margin   = int(ts_el.attrib.get('margin', 0))
+                self.tileset_colonnes = 11
+                tileset_img_src = 'tileset.png'
+
+            try:
+                self.tileset = pygame.image.load(
+                    os.path.join(base, tileset_img_src)).convert_alpha()
+                print("[CARTE] Tileset chargé")
+            except Exception as e:
+                print(f"[CARTE] Tileset introuvable : {e}")
+
+            # Image layers (midground, background PNG)
+            self.image_layers = []
+            for il in root.findall('imagelayer'):
+                src = il.find('image')
+                if src is None:
+                    continue
+                chemin_img = os.path.join(base, src.attrib['source'])
+                offset_x = float(il.attrib.get('offsetx', 0))
+                offset_y = float(il.attrib.get('offsety', 0))
+                try:
+                    img = pygame.image.load(chemin_img).convert_alpha()
+                    self.image_layers.append({
+                        'surface': img,
+                        'offset_x': offset_x,
+                        'offset_y': offset_y,
+                    })
+                    print(f"[CARTE] Image layer chargé : {src.attrib['source']}")
+                except Exception as e:
+                    print(f"[CARTE] Image layer introuvable : {e}")
+
+            print(f"[CARTE] Map TMX chargee : {self.largeur_map}x{self.hauteur_map}")
+            if self.spawn:
+                print(f"[CARTE] Spawn : {self.spawn}")
+
         except Exception as e:
-            print(f"[CARTE] ERREUR lors du chargement du JSON: {e}")
+            print(f"[CARTE] ERREUR lors du chargement du TMX: {e}")
             import traceback
             traceback.print_exc()
             self.charger_carte_par_defaut()
@@ -90,6 +185,10 @@ class Carte:
         ]
         self.largeur_map = len(self.map_data[0])
         self.hauteur_map = len(self.map_data)
+        self.layers_gids = []        
+        self.tileset = None
+        self.layers_gids = []
+        self.image_layers = []
         print(f"[CARTE] Carte par défaut chargee : {self.largeur_map}x{self.hauteur_map}")
 
     def creer_carte_visibilite_vierge(self):
@@ -98,10 +197,7 @@ class Carte:
         for y, rangee in enumerate(self.map_data):
             vis_map.append([])
             for x, tuile in enumerate(rangee):
-                if tuile == 2:
-                    vis_map[y].append(True) 
-                else:
-                    vis_map[y].append(False)
+                vis_map[y].append(True)
         return vis_map
 
     def est_mur(self, x, y):
@@ -178,22 +274,37 @@ class Carte:
     def dessiner_carte(self, surface, vis_map, camera_offset=(0,0)):
         surface.fill(COULEUR_FOND)
         off_x, off_y = camera_offset
-        
-        off_x, off_y = camera_offset
         lv, hv = surface.get_size()
         x_min = max(0, off_x // TAILLE_TUILE)
         y_min = max(0, off_y // TAILLE_TUILE)
         x_max = min(self.largeur_map, (off_x + lv) // TAILLE_TUILE + 1)
         y_max = min(self.hauteur_map, (off_y + hv) // TAILLE_TUILE + 1)
 
+        # Image layers
+        for il in getattr(self, 'image_layers', []):
+            pos_x = int(il['offset_x']) - off_x
+            pos_y = int(il['offset_y']) - off_y
+            surface.blit(il['surface'], (pos_x, pos_y))
+
         for y in range(y_min, y_max):
             for x in range(x_min, x_max):
-                if vis_map[y][x]:
-                    pos_x = (x * TAILLE_TUILE) - off_x
-                    pos_y = (y * TAILLE_TUILE) - off_y
-                    
-                    tuile_type = self.map_data[y][x]
-                    rect = pygame.Rect(pos_x, pos_y, TAILLE_TUILE, TAILLE_TUILE)
+                if not vis_map[y][x]:
+                    continue
+                pos_x = x * TAILLE_TUILE - off_x
+                pos_y = y * TAILLE_TUILE - off_y
+                rect = pygame.Rect(pos_x, pos_y, TAILLE_TUILE, TAILLE_TUILE)
+
+                # Chercher le GID dans tous les layers dans l'ordre d'affichage
+                tile_dessine = False
+                for gids_layer in self.layers_gids:
+                    gid = gids_layer[y][x]
+                    if gid != 0 and self.tileset:
+                        tile_surf = self.get_tile_surface(gid)
+                        if tile_surf:
+                            surface.blit(tile_surf, (pos_x, pos_y))
+                            tile_dessine = True
+
+                if not tile_dessine:
                     tuile_type = self.map_data[y][x]
                     if tuile_type == 1:
                         pygame.draw.rect(surface, COULEUR_MUR_VISIBLE, rect)
@@ -308,3 +419,19 @@ class Carte:
                 vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
                 if self.map_data[tuile_actuelle_y][tuile_actuelle_x] in [1, 3]:
                     break
+    
+
+    def get_tile_surface(self, gid):
+        if self.tileset is None or gid <= 0:
+            return None
+        idx = gid - self.tileset_firstgid  # ← était gid - 1, faux si firstgid != 1
+        if idx < 0:
+            return None
+        col = idx % self.tileset_colonnes
+        row = idx // self.tileset_colonnes
+        x = self.tileset_margin + col * (self.tileset_taille + self.tileset_spacing)
+        y = self.tileset_margin + row * (self.tileset_taille + self.tileset_spacing)
+        ts_w, ts_h = self.tileset.get_size()
+        if x + self.tileset_taille > ts_w or y + self.tileset_taille > ts_h:
+            return None  # ← évite le crash au lieu de lever ValueError
+        return self.tileset.subsurface(pygame.Rect(x, y, self.tileset_taille, self.tileset_taille))
