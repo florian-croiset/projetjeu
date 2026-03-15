@@ -1465,6 +1465,15 @@ class Client:
         if key('saut')    and touches[key('saut')]:
             commandes['clavier']['saut'] = True
 
+        # -- Bloquer toutes les actions si le joueur est mort --
+        mon_joueur = self.joueurs_locaux.get(self.mon_id)
+        if mon_joueur and mon_joueur.pv <= 0:
+            commandes['clavier'] = {'gauche': False, 'droite': False, 'saut': False,
+                                    'attaque': False, 'dash': False}
+            commandes['echo']         = False
+            commandes['echo_dir']     = False
+            commandes['toggle_torche'] = False
+
         return commandes
 
     def dessiner_jeu(self):
