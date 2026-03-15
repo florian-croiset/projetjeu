@@ -1548,7 +1548,7 @@ class Client:
 
 
         # -- Calque obscurité avec halo dégradé --
-        if mon_joueur:
+        if mon_joueur and ASSOMBRISSEMENT:
             sz = surface_virtuelle.get_size()
             if not hasattr(self, '_obscurite') or self._obscurite.get_size() != sz:
                 self._obscurite = pygame.Surface(sz, pygame.SRCALPHA)
