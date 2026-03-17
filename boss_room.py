@@ -103,7 +103,13 @@ class BossRoom:
                     continue
                 if self.boss.attack_hitbox.colliderect(joueur.rect):
                     if not self._a_touche_ce_swing:
-                        joueur.prendre_degat(self.BOSS_ATTACK_DAMAGE, temps_actuel)
+                        # Bypass du TEMPS_INVINCIBILITE — le boss force les dégâts
+                        joueur.pv -= self.BOSS_ATTACK_DAMAGE
+                        joueur.dernier_degat_temps = temps_actuel
+                        joueur.sons_a_jouer.append('degat')
+                        if joueur.pv <= 0:
+                            joueur.pv = 0
+                            joueur.sons_a_jouer.append('mort')
                         self._a_touche_ce_swing = True
                         print(f"[BossRoom] Boss touche joueur — PV restants : {joueur.pv}")
         else:
