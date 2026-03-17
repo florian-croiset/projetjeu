@@ -128,8 +128,8 @@ class Serveur:
         # ===== INIT FINALE =====
         self.creer_ennemis()
         self.creer_ames_libres()
-        self.boss_room = BossRoom(room_rect = pygame.Rect(18*32, 22*32, (25-18)*32, (22-18)*32),  # ← adapte à ta map
-                                  boss_x    = 9*32, boss_y = 28*32,                              # ← position spawn du boss
+        self.boss_room = BossRoom(room_rect = pygame.Rect(72*32, 13*32, (93-72)*32, (20-13)*32),  # ← adapte à ta map
+                                  boss_x    = 87*32, boss_y = 19*32,                              # ← position spawn du boss
                                   json_path = "demon_slime.json",
                                   png_path  = "assets/demon_slime.png",
                                   rects_collision = self.rects_collision)

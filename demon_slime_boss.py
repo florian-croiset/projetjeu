@@ -128,8 +128,8 @@ class DemonSlimeBoss:
 
     # Indices des frames pendant lesquelles la hitbox d'attaque est ACTIVE.
     # Ajuste selon ton animation (ouvre-la dans Aseprite pour compter les frames).
-    CLEAVE_ACTIVE_FRAME_START = 2
-    CLEAVE_ACTIVE_FRAME_END   = 5
+    CLEAVE_ACTIVE_FRAME_START = 9
+    CLEAVE_ACTIVE_FRAME_END   = 12
 
     def __init__(self, x: int, y: int, json_path: str, png_path: str):
         # Position en float pour un mouvement fluide
@@ -268,8 +268,8 @@ class DemonSlimeBoss:
 
         # ── Hitboxes de debug (décommente pour tester) ──────────
         pygame.draw.rect(surface, (255, 0, 0), self.body_rect, 1)
-        # if self.attack_hitbox:
-        #     pygame.draw.rect(surface, (255, 140, 0), self.attack_hitbox, 1)
+        if self.attack_hitbox:
+            pygame.draw.rect(surface, (255, 140, 0), self.attack_hitbox, 2)
 
     # ────────────────────────────────────────────────────────────
     #  API PUBLIQUE
@@ -314,15 +314,23 @@ class DemonSlimeBoss:
         - Dans DETECT_RADIUS  → WALK (poursuite)
         - Dans ATTACK_RADIUS  → CLEAVE si cooldown écoulé
         """
-        if distance <= self.ATTACK_RADIUS and self.attack_cooldown_timer <= 0:
+        portee_reelle = int(self.sprite_w * 0.4)
+
+        if distance <= portee_reelle and self.attack_cooldown_timer <= 0:
+            # Le joueur est exactement à portée de machette → s'arrête et frappe
             self._change_state(BossState.CLEAVE)
 
         elif distance <= self.DETECT_RADIUS:
-            if self.state != BossState.WALK:
-                self._change_state(BossState.WALK)
+            if distance > portee_reelle:
+                # Pas encore à portée → marche vers le joueur
+                if self.state != BossState.WALK:
+                    self._change_state(BossState.WALK)
+            else:
+                # À portée mais cooldown pas écoulé → attend sur place
+                if self.state != BossState.IDLE:
+                    self._change_state(BossState.IDLE)
 
         else:
-            # Joueur trop loin → le boss retourne en idle et ne bouge plus
             if self.state != BossState.IDLE:
                 self._change_state(BossState.IDLE)
 
@@ -337,26 +345,25 @@ class DemonSlimeBoss:
             self.velocity = pygame.Vector2(0, 0)
 
     def _update_attack_hitbox(self):
-        """
-        La hitbox d'attaque n'existe QUE pendant les frames actives du cleave.
-        Elle est placée devant le boss (à droite ou gauche selon l'orientation).
-        """
         if self.state != BossState.CLEAVE:
             self.attack_hitbox = None
             return
 
-        # On vérifie si la frame courante est dans la fenêtre active
         active = (self.CLEAVE_ACTIVE_FRAME_START
-                  <= self.current_frame_index
-                  <= self.CLEAVE_ACTIVE_FRAME_END)
+                <= self.current_frame_index
+                <= self.CLEAVE_ACTIVE_FRAME_END)
 
         if active:
-            hw = self.sprite_w       # largeur de la hitbox d'attaque
-            hh = self.sprite_h // 2  # hauteur de la hitbox d'attaque
+            hw = int(self.sprite_w * 0.4)
+            hh = int(self.sprite_h * 0.4)
+            hy = int(self.pos.y) + int(self.sprite_h * 0.3)
 
-            # Place la hitbox devant le sprite selon l'orientation
-            hx = int(self.pos.x) + self.sprite_w if self.facing_right else int(self.pos.x) - hw
-            hy = int(self.pos.y) + self.sprite_h // 4
+            if self.facing_right:
+                # Flippé vers droite → machette sur la moitié gauche du sprite
+                hx = int(self.pos.x)
+            else:
+                # Par défaut vers gauche → machette sur la moitié gauche du sprite
+                hx = int(self.pos.x)
 
             self.attack_hitbox = pygame.Rect(hx, hy, hw, hh)
         else:
