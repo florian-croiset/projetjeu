@@ -14,6 +14,7 @@ from parametres import *
 import gestion_sauvegarde
 import points_sauvegarde
 from ennemi import Ennemi
+from boss_room import BossRoom
 from ame_perdue import AmePerdue
 from ame_libre import AmeLibre
 from cle import Cle
@@ -127,6 +128,11 @@ class Serveur:
         # ===== INIT FINALE =====
         self.creer_ennemis()
         self.creer_ames_libres()
+        self.boss_room = BossRoom(room_rect = pygame.Rect(18*32, 22*32, (25-18)*32, (22-18)*32),  # ← adapte à ta map
+                                  boss_x    = 9*32, boss_y = 28*32,                              # ← position spawn du boss
+                                  json_path = "demon_slime.json",
+                                  png_path  = "assets/demon_slime.png",
+                                  rects_collision = self.rects_collision)
         self.cle = Cle(x=1034, y=399)
         self._ids_pool = list(range(3))  # IDs réutilisables : 0, 1, 2
         self.torche_allumee = False
@@ -359,7 +365,12 @@ class Serveur:
                 else:
                     ennemi.appliquer_logique(self.rects_collision, self.carte_jeu)
 
-            # 4. Joueurs
+            # 4. Boss Room
+            if not self.boss_room.boss_defeated:
+                self.boss_room.update(temps_actuel - getattr(self, '_temps_precedent', temps_actuel), self.joueurs)
+            self._temps_precedent = temps_actuel
+
+            # 5. Joueurs
             for id_joueur, joueur in list(self.joueurs.items()):
                 joueur.appliquer_physique(self.rects_collision)
 
@@ -383,6 +394,9 @@ class Serveur:
                                 joueur.argent += ame.argent
                                 joueur.ame_perdue = None
                                 del self.ames_perdues[id_ame]
+
+                    # Boss
+                    self.boss_room.recevoir_attaque_joueur(joueur.rect_attaque, DEGATS_JOUEUR)
 
                 # B. Dégâts reçus
                 for id_ennemi, ennemi in list(self.ennemis.items()):
@@ -436,6 +450,7 @@ class Serveur:
                         'ames_libres':    [a.get_etat() for a in self.ames_libres.values()],
                         'cle':            self.cle.get_etat() if self.cle else None,
                         'torche_allumee': self.torche_allumee,
+                        'boss_room':      self.boss_room.get_etat(),
                     }
                 with self._broadcast_lock:
                     self._etat_broadcast = etat_commun

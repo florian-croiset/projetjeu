@@ -20,6 +20,7 @@ from parametres import *
 from carte import Carte
 from joueur import Joueur
 from ennemi import Ennemi
+from demon_slime_boss import DemonSlimeBoss
 from ame_perdue import AmePerdue
 from ame_libre import AmeLibre
 from cle import Cle
@@ -275,6 +276,7 @@ class Client:
         self.ames_libres_locales = {}
         self.cle_locale = None
         self.torche = Torche(x=0, y=672)
+        self.boss_local = None
 
         # Polices — tailles relatives à la hauteur d'écran
         h = self.hauteur_ecran
@@ -1291,6 +1293,15 @@ class Client:
             plein_r = pygame.Rect(rx, y0, largeur_coeur, hauteur_coeur)
             pygame.draw.rect(self.ecran, COULEUR_PV, plein_r, border_radius=4)
 
+        # Barre de vie du boss (seulement si le combat a commencé)
+        data_boss = None
+        # On récupère les dernières données reçues via un attribut qu'on stocke
+        if hasattr(self, '_derniere_data_boss') and self._derniere_data_boss:
+            d = self._derniere_data_boss
+            if d.get('fight_started') and not d.get('boss_defeated'):
+                boss_data = d['boss']
+                self._dessiner_barre_boss(boss_data['hp'], boss_data['hp_max'])
+
         # Argent / âmes
         argent_txt = self.police_texte.render(
             f"Âmes : {mon_joueur.argent}", True, COULEUR_VIOLET_CLAIR)
@@ -1509,6 +1520,16 @@ class Client:
                 tmp.fill((0, 212, 255, max(0, min(255, int(255 * ratio)))))
                 surface_virtuelle.blit(tmp, (ennemi.rect.x - off_x, ennemi.rect.y - off_y))
 
+        # Boss
+        if self.boss_local and not getattr(self.boss_local, 'is_dead', False):
+            # Applique le décalage caméra pour le rendu
+            off_x, off_y = camera_offset
+            self.boss_local.pos.x -= off_x
+            self.boss_local.pos.y -= off_y
+            self.boss_local.draw(surface_virtuelle)
+            self.boss_local.pos.x += off_x
+            self.boss_local.pos.y += off_y
+
         # Reset timer de mort quand vivant
         if mon_joueur and mon_joueur.pv > 0:
             self._mort_depuis = None
@@ -1581,6 +1602,21 @@ class Client:
             btn.dessiner(self.ecran)
 
         self.dessiner_hud()
+
+    def _dessiner_barre_boss(self, hp, hp_max):
+        """Barre de vie du boss fixée en haut de l'écran."""
+        bar_w = 400
+        bar_h = 16
+        bar_x = self.largeur_ecran // 2 - bar_w // 2
+        bar_y = 20
+        ratio = max(0.0, hp / hp_max)
+
+        pygame.draw.rect(self.ecran, (40, 10, 10),    (bar_x-2, bar_y-2, bar_w+4, bar_h+4))
+        pygame.draw.rect(self.ecran, (90, 20, 20),    (bar_x, bar_y, bar_w, bar_h))
+        pygame.draw.rect(self.ecran, (200, 50, 50),   (bar_x, bar_y, int(bar_w * ratio), bar_h))
+        pygame.draw.rect(self.ecran, (220, 180, 180), (bar_x, bar_y, bar_w, bar_h), 1)
+        nom = self.police_petit.render("Demon Slime", True, (220, 180, 180))
+        self.ecran.blit(nom, (bar_x, bar_y - 18))
 
     def _recvall(self, sock, n):
         """Lit exactement n octets (TCP peut fragmenter les paquets)."""
@@ -1685,6 +1721,16 @@ class Client:
                         self.ames_libres_locales[dal['id']] = AmeLibre(dal['x'], dal['y'], dal.get('valeur'))
                     self.ames_libres_locales[dal['id']].set_etat(dal)
 
+                # Boss
+                data_boss = donnees_recues.get('boss_room')
+                if data_boss and not data_boss['boss_defeated']:
+                    if self.boss_local is None:
+                        # Création à la première réception
+                        self.boss_local = DemonSlimeBoss(x=0, y=0,
+                                                        json_path="demon_slime.json",
+                                                        png_path="assets/demon_slime.png")
+                        self.boss_local.set_etat(data_boss['boss'])
+
                 # Clé
                 data_cle = donnees_recues.get('cle')
                 if data_cle:
@@ -1692,11 +1738,23 @@ class Client:
                         self.cle_locale = Cle(data_cle['x'], data_cle['y'])
                     self.cle_locale.set_etat(data_cle)
 
+                # Torche
                 torche_serveur = donnees_recues.get('torche_allumee', False)
                 if torche_serveur != self.torche.allumee:
                     self.torche.allumee = torche_serveur
                     if torche_serveur:
                         self.torche.particules = []
+
+                # Boss
+                self._derniere_data_boss = donnees_recues.get('boss_room')
+
+                data_boss = self._derniere_data_boss
+                if data_boss and not data_boss['boss_defeated']:
+                    if self.boss_local is None:
+                        self.boss_local = DemonSlimeBoss(x=0, y=0,
+                                                        json_path="demon_slime.json",
+                                                        png_path="assets/demon_slime.png")
+                    self.boss_local.set_etat(data_boss['boss'])
 
                 self.dessiner_jeu()
                 if self.etat_jeu_interne == "PAUSE":
