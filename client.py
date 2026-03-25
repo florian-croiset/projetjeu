@@ -1350,7 +1350,6 @@ class Client:
         # Barre de vie du boss (seulement si le combat a commencé)
         data_boss = None
 
-        print(f"Position joueur: {mon_joueur.rect.centerx}, {mon_joueur.rect.centery}")
 
         # On récupère les dernières données reçues via un attribut qu'on stocke
         if hasattr(self, '_derniere_data_boss') and self._derniere_data_boss:
