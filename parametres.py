@@ -129,7 +129,9 @@ DISTANCE_DETECTION_ENNEMI = 120  # pixels, ennemi visible si joueur proche
 DUREE_FLASH_ECHO_ENNEMI = 1500   # ms, durée d'apparition après écho
 
 # -- Halo joueur --
-RAYON_HALO_JOUEUR = 80
+RAYON_HALO_JOUEUR    = 80   # Rayon total du halo en pixels
+HALO_DEGRADE_ETENDUE = 20   # Largeur de la zone de dégradé (= rayon → dégradé sur tout le rayon)
+HALO_NB_NIVEAUX      = 0    # 0 = parfait pixel/pixel (numpy), entier > 0 = couches discrètes
 
 # -- Debug --
 MODE_DEV = True  # Passer à False pour désactiver le compteur FPS/debug et à True pour l'activer

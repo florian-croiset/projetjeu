@@ -133,7 +133,7 @@ class Serveur:
                                   json_path = "demon_slime.json",
                                   png_path  = "assets/demon_slime.png",
                                   rects_collision = self.rects_collision)
-        self.cle = Cle(x=1034, y=399)
+        self.cle = Cle(x=1011, y=1027)
         self._ids_pool = list(range(3))  # IDs réutilisables : 0, 1, 2
         self.torche_allumee = False
         self.torche_x = 32
@@ -153,15 +153,15 @@ class Serveur:
         return points
 
     def creer_ennemis(self):
-        self.ennemis[0] = Ennemi(x=200, y=680, id=0)
-        self.ennemis[1] = Ennemi(x=500, y=420, id=1)
-        self.ennemis[2] = Ennemi(x=800, y=260, id=2)
+        self.ennemis[0] = Ennemi(x=587,  y=1251, id=0)   # gauche du spawn
+        self.ennemis[1] = Ennemi(x=1867, y=1123, id=1)   # droite du spawn
+        self.ennemis[2] = Ennemi(x=1191, y=707, id=2)   # encore plus à droite
 
     def creer_ames_libres(self):
         """Place des âmes libres à divers endroits de la map."""
         positions = [
-            (320, 320), (640, 320), (900, 200),
-            (250, 640), (480, 380), (730, 640), (960, 420),
+            (680,  515), (747, 1123), (1021, 1251),
+            (1333,  995), (1510, 515), (2427, 163), (2851,  259),
         ]
         for x, y in positions:
             ame = AmeLibre(x, y)
