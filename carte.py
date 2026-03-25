@@ -49,7 +49,7 @@ class Carte:
             import sys
 
             if getattr(sys, 'frozen', False):
-                base = sys._MEIPASS
+                base = os.path.join(sys._MEIPASS, 'assets')
             else:
                 base = os.path.dirname(os.path.abspath(fichier_map))
 

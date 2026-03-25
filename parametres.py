@@ -134,7 +134,7 @@ HALO_DEGRADE_ETENDUE = 20   # Largeur de la zone de dégradé (= rayon → dégr
 HALO_NB_NIVEAUX      = 0    # 0 = parfait pixel/pixel (numpy), entier > 0 = couches discrètes
 
 # -- Debug --
-MODE_DEV = True  # Passer à False pour désactiver le compteur FPS/debug et à True pour l'activer
+MODE_DEV = False  # Passer à False pour désactiver le compteur FPS/debug et à True pour l'activer
 HALOS_MENU = False  # Passer à False pour désactiver les halos animés des menus
 FOND_MENU = False  # Passer à False pour un fond noir uni
 REVELATION = False
