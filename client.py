@@ -172,6 +172,57 @@ def calculer_camera(rect_cible, largeur_ecran, hauteur_ecran, zoom,
     offset_y = min(offset_y, hauteur_monde - hauteur_vue)
     return int(offset_x), int(offset_y)
 
+# ======================================================================
+#  HALO — MASQUE PRÉCALCULÉ
+# ======================================================================
+
+def creer_masque_halo(rayon, etendue, alpha_max=220):
+    """
+    Précalcule une surface circulaire avec dégradé linéaire d'obscurité.
+    À blitter avec BLEND_RGBA_MIN sur le calque d'obscurité chaque frame.
+
+    rayon     : rayon total du halo (pixels)
+    etendue   : largeur de la zone de dégradé depuis le bord vers le centre
+                (etendue == rayon → dégradé sur tout le rayon, centre transparent)
+    alpha_max : niveau maximal d'obscurité (0–255)
+    """
+    diameter = rayon * 2 + 2
+    centre   = rayon + 1
+    surf     = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
+    depart   = max(0, rayon - int(etendue))   # début du dégradé depuis le centre
+
+    if HALO_NB_NIVEAUX == 0:
+        # Dégradé parfait pixel par pixel via numpy
+        try:
+            import numpy as np
+            x_idx, y_idx = np.ogrid[:diameter, :diameter]
+            dist  = np.sqrt((x_idx - centre) ** 2 + (y_idx - centre) ** 2)
+            alpha = np.clip(
+                (dist - depart) / max(1, etendue) * alpha_max,
+                0, alpha_max
+            ).astype(np.uint8)
+
+            arr_a        = pygame.surfarray.pixels_alpha(surf)
+            arr_a[:]     = alpha
+            del arr_a
+
+            arr_rgb      = pygame.surfarray.pixels3d(surf)
+            arr_rgb[:, :] = (0, 0, 10)
+            del arr_rgb
+
+            return surf
+        except (ImportError, pygame.error):
+            print("[HALO] numpy indisponible — fallback couches discrètes")
+
+    # Fallback ou mode discret (HALO_NB_NIVEAUX > 0)
+    nb = HALO_NB_NIVEAUX if HALO_NB_NIVEAUX > 0 else max(32, rayon)
+    surf.fill((0, 0, 10, alpha_max))             # tout sombre par défaut
+    for i in range(nb, -1, -1):                  # du plus grand cercle au plus petit
+        r = depart + int(etendue * i / nb)
+        a = int(alpha_max * i / nb)
+        pygame.draw.circle(surf, (0, 0, 10, a), (centre, centre), r)
+
+    return surf
 
 # ======================================================================
 #  SPLASH SCREEN
@@ -229,6 +280,9 @@ def afficher_splash_screen(ecran, duree=3000):
 class Client:
     def __init__(self):
         pygame.init()
+        # Précalcul des masques de halo — une seule fois au démarrage
+        self._masque_halo_joueur = creer_masque_halo(RAYON_HALO_JOUEUR, HALO_DEGRADE_ETENDUE)
+        self._masque_halo_torche = creer_masque_halo(RAYON_LUMIERE_TORCHE, HALO_DEGRADE_ETENDUE)
         zoom = ZOOM_CAMERA
         self._surface_virtuelle = pygame.Surface((int(LARGEUR_ECRAN / zoom), int(HAUTEUR_ECRAN / zoom)))
         # Icône
@@ -275,7 +329,7 @@ class Client:
         self.ames_perdues_locales = {}
         self.ames_libres_locales = {}
         self.cle_locale = None
-        self.torche = Torche(x=0, y=672)
+        self.torche = Torche(x=551, y=1025)
         self.boss_local = None
 
         # Polices — tailles relatives à la hauteur d'écran
@@ -1295,6 +1349,9 @@ class Client:
 
         # Barre de vie du boss (seulement si le combat a commencé)
         data_boss = None
+
+        print(f"Position joueur: {mon_joueur.rect.centerx}, {mon_joueur.rect.centery}")
+
         # On récupère les dernières données reçues via un attribut qu'on stocke
         if hasattr(self, '_derniere_data_boss') and self._derniere_data_boss:
             d = self._derniere_data_boss
@@ -1556,7 +1613,7 @@ class Client:
             music.torche_mettre_a_jour_volume(dist)
 
 
-        # -- Calque obscurité avec halo dégradé --
+        # -- Calque obscurité avec halo dégradé linéaire (optimisé) --
         if mon_joueur and ASSOMBRISSEMENT:
             sz = surface_virtuelle.get_size()
             if not hasattr(self, '_obscurite') or self._obscurite.get_size() != sz:
@@ -1564,23 +1621,22 @@ class Client:
             obscurite = self._obscurite
             obscurite.fill((0, 0, 10, 220))
 
+            # Halo joueur — 1 seul blit au lieu de 12 draw.circle
+            rayon = RAYON_HALO_JOUEUR
             cx = mon_joueur.rect.centerx - camera_offset[0]
             cy = mon_joueur.rect.centery - camera_offset[1]
-            rayon = RAYON_HALO_JOUEUR
-            nb_couches = 12
-            for i in range(nb_couches, 0, -1):
-                r_couche = int(rayon * i / nb_couches)
-                alpha = max(0, min(255, int(220 * (1 - (i / nb_couches) ** 0.5))))
-                pygame.draw.circle(obscurite, (0, 0, 10, alpha), (cx, cy), r_couche)
+            obscurite.blit(self._masque_halo_joueur,
+                           (cx - rayon - 1, cy - rayon - 1),
+                           special_flags=pygame.BLEND_RGBA_MIN)
 
+            # Halo torche — même comportement
             if self.torche.allumee:
+                rayon_t = RAYON_LUMIERE_TORCHE
                 tx = self.torche.x + TAILLE_TUILE // 2 - camera_offset[0]
                 ty = self.torche.y + TAILLE_TUILE - camera_offset[1]
-                rayon_t = RAYON_LUMIERE_TORCHE
-                for i in range(nb_couches, 0, -1):
-                    r_couche = int(rayon_t * i / nb_couches)
-                    alpha = max(0, min(255, int(220 * (1 - (i / nb_couches) ** 0.6))))
-                    pygame.draw.circle(obscurite, (0, 0, 10, alpha), (tx, ty), r_couche)
+                obscurite.blit(self._masque_halo_torche,
+                               (tx - rayon_t - 1, ty - rayon_t - 1),
+                               special_flags=pygame.BLEND_RGBA_MIN)
 
             surface_virtuelle.blit(obscurite, (0, 0))
 
