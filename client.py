@@ -1781,9 +1781,8 @@ class Client:
                 if data_boss and not data_boss['boss_defeated']:
                     if self.boss_local is None:
                         # Création à la première réception
-                        self.boss_local = DemonSlimeBoss(x=0, y=0,
-                                                        json_path="demon_slime.json",
-                                                        png_path="assets/demon_slime.png")
+                        _base = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+                        self.boss_local = DemonSlimeBoss(x=0, y=0,json_path=os.path.join(_base, "demon_slime.json"),png_path=os.path.join(_base, "assets", "demon_slime.png"))
                         self.boss_local.set_etat(data_boss['boss'])
 
                 # Clé
@@ -1806,9 +1805,10 @@ class Client:
                 data_boss = self._derniere_data_boss
                 if data_boss and not data_boss['boss_defeated']:
                     if self.boss_local is None:
+                        _base = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
                         self.boss_local = DemonSlimeBoss(x=0, y=0,
-                                                        json_path="demon_slime.json",
-                                                        png_path="assets/demon_slime.png")
+                                json_path=os.path.join(_base, "demon_slime.json"),
+                                png_path=os.path.join(_base, "assets", "demon_slime.png"))
                     self.boss_local.set_etat(data_boss['boss'])
 
                 self.dessiner_jeu()
@@ -1889,7 +1889,10 @@ class Client:
             self.message_erreur_connexion = None
 
             import os
-            dossier_script = os.path.dirname(os.path.abspath(__file__))
+            if getattr(sys, 'frozen', False):
+                dossier_script = sys._MEIPASS
+            else:
+                dossier_script = os.path.dirname(os.path.abspath(__file__))
             chemin_map = os.path.join(dossier_script, "assets/MapS2.tmx")
             self.carte = Carte(chemin_map)
             self.vis_map_locale = self.carte.creer_carte_visibilite_vierge()

@@ -88,7 +88,10 @@ class Serveur:
 
         # ===== CARTE =====
         import os
-        dossier_script = os.path.dirname(os.path.abspath(__file__))
+        if getattr(sys, 'frozen', False):
+            dossier_script = sys._MEIPASS
+        else:
+            dossier_script = os.path.dirname(os.path.abspath(__file__))
         chemin_map = os.path.join(dossier_script, "assets/MapS2.tmx")
         self.carte_jeu = Carte(chemin_map)
 
@@ -130,8 +133,8 @@ class Serveur:
         self.creer_ames_libres()
         self.boss_room = BossRoom(room_rect = pygame.Rect(72*32, 13*32, (93-72)*32, (20-13)*32),  # ← adapte à ta map
                                   boss_x    = 87*32, boss_y = 19*32,                              # ← position spawn du boss
-                                  json_path = "demon_slime.json",
-                                  png_path  = "assets/demon_slime.png",
+                                  json_path = os.path.join(dossier_script, "demon_slime.json"),
+                                  png_path  = os.path.join(dossier_script, "assets", "demon_slime.png"),
                                   rects_collision = self.rects_collision)
         self.cle = Cle(x=1011, y=1027)
         self._ids_pool = list(range(3))  # IDs réutilisables : 0, 1, 2
