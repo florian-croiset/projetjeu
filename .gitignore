@@ -1,0 +1,16 @@
+__pycache__/
+.venv/
+build/
+dist/
+*.py[codz]
+*$py.class
+settings.json
+client.spec
+controls.json
+slot_1.json
+slot_2.json
+slot_3.json
+save_slots.json
+*.iss
+*.log
+hamachi.txt
