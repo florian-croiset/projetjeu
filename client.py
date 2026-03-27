@@ -1,7 +1,7 @@
 # client.py
 
 from parametres import *
-import envoyer_logs
+from utils import envoyer_logs
 if MODE_DEV:
     envoyer_logs.activer_capture() 
 
@@ -10,267 +10,31 @@ import socket
 import pickle
 import sys
 import threading
-import serveur
+from reseau import serveur
 import time
 import copy
 import os
 import math
 
 from parametres import *
-from carte import Carte
-from joueur import Joueur
-from ennemi import Ennemi
-from demon_slime_boss import DemonSlimeBoss
-from ame_perdue import AmePerdue
-from ame_libre import AmeLibre
-from cle import Cle
-from torche import Torche
-import gestion_parametres
-import langue
-from bouton import Bouton
-import gestion_sauvegarde
-import music
+from core.carte import Carte
+from core.joueur import Joueur
+from core.ennemi import Ennemi
+from core.demon_slime_boss import DemonSlimeBoss
+from core.ame_perdue import AmePerdue
+from core.ame_libre import AmeLibre
+from core.cle import Cle
+from core.torche import Torche
+from sauvegarde import gestion_parametres
+from utils import langue
+from ui.bouton import Bouton
+from sauvegarde import gestion_sauvegarde
+from utils import music
+from reseau.protocole import obtenir_ip_locale, obtenir_ip_hamachi, recv_complet, send_complet, recvall
+from ui.effets_visuels import dessiner_fond_echo, dessiner_separateur_neon, dessiner_titre_neon, dessiner_panneau
+from ui.camera import calculer_camera, creer_masque_halo
+from ui.splash_screen import afficher_splash_screen
 
-
-# ======================================================================
-#  UTILITAIRES VISUELS ECHO
-# ======================================================================
-
-def dessiner_fond_echo(surface, largeur, hauteur, temps):
-    """
-    Fond animé style Echo :
-    - dégradé vertical bleu-nuit
-    - grille de particules subtile
-    - lueur centrale pulsante
-    """
-    # 1. Fond de base dégradé vertical
-    if FOND_MENU:
-        for y in range(hauteur):
-            ratio = y / hauteur
-            r = int(8  + ratio * 4)
-            g = int(8  + ratio * 2)
-            b = int(20 + ratio * 15)
-            pygame.draw.line(surface, (r, g, b), (0, y), (largeur, y))
-    else:
-        surface.fill((0, 0, 0))
-
-    # 2. Grille en perspective (lignes horizontales fines)
-    if HALOS_MENU:
-        nb_lignes = 12
-        grille_surf = pygame.Surface((largeur, hauteur), pygame.SRCALPHA)
-        for i in range(nb_lignes):
-            ratio = (i + 1) / nb_lignes
-            y_pos = int(hauteur * 0.55 + ratio * hauteur * 0.6)
-            if y_pos >= hauteur:
-                break
-            alpha = int(12 + ratio * 25)
-            epaisseur = 1 if ratio < 0.6 else 2
-            pygame.draw.line(grille_surf, (0, 180, 255, alpha),
-                            (0, y_pos), (largeur, y_pos), epaisseur)
-
-        # Lignes verticales de la grille
-        nb_v = 20
-        for i in range(nb_v + 1):
-            ratio_x = i / nb_v
-            x_vanish = largeur // 2
-            y_vanish = int(hauteur * 0.55)
-            x_bas = int(ratio_x * largeur)
-            alpha = int(8 + abs(ratio_x - 0.5) * 20)
-            pygame.draw.line(grille_surf, (0, 150, 220, alpha),
-                            (x_vanish, y_vanish), (x_bas, hauteur), 1)
-        surface.blit(grille_surf, (0, 0))
-
-    # 3. Lueur centrale pulsante (cyan)
-    if HALOS_MENU:
-        pulse = 0.75 + 0.25 * math.sin(temps / 1200)
-        glow_surf = pygame.Surface((largeur, hauteur), pygame.SRCALPHA)
-        cx, cy = largeur // 2, int(hauteur * 0.38)
-        for rayon, alpha_base in [(420, 18), (280, 30), (150, 45), (70, 25)]:
-            a = int(alpha_base * pulse)
-            pygame.draw.circle(glow_surf, (0, 180, 255, a), (cx, cy), rayon)
-        surface.blit(glow_surf, (0, 0))
-
-
-def dessiner_separateur_neon(surface, x1, y, x2, couleur=None, alpha=180):
-    """Ligne séparatrice style néon avec dégradé de transparence."""
-    if couleur is None:
-        couleur = COULEUR_CYAN
-    sep_surf = pygame.Surface((x2 - x1, 2), pygame.SRCALPHA)
-    r, g, b = couleur
-    largeur = x2 - x1
-    for px in range(largeur):
-        ratio = px / largeur
-        dist_centre = abs(ratio - 0.5) * 2   # 0 au centre, 1 aux bords
-        a = int(alpha * (1 - dist_centre ** 1.5))
-        sep_surf.set_at((px, 0), (r, g, b, a))
-        sep_surf.set_at((px, 1), (r, g, b, a // 3))
-    surface.blit(sep_surf, (x1, y))
-
-
-def dessiner_titre_neon(surface, police, texte, cx, cy, couleur_neon=None):
-    """Titre avec effet de lueur néon multicouche."""
-    if couleur_neon is None:
-        couleur_neon = COULEUR_CYAN
-    r, g, b = couleur_neon
-
-    # Couches de glow (de la plus grande à la plus petite)
-    for decal, alpha in [(6, 15), (4, 25), (2, 40)]:
-        for dx in (-decal, 0, decal):
-            for dy in (-decal, 0, decal):
-                if dx == 0 and dy == 0:
-                    continue
-                glow = police.render(texte, True, (r, g, b))
-                glow.set_alpha(alpha)
-                rect = glow.get_rect(center=(cx + dx, cy + dy))
-                surface.blit(glow, rect)
-
-    # Texte principal
-    surf = police.render(texte, True, couleur_neon)
-    rect = surf.get_rect(center=(cx, cy))
-    surface.blit(surf, rect)
-
-
-def dessiner_panneau(surface, rect, couleur_bordure=None, alpha_fond=220):
-    """Panneau semi-transparent avec bordure néon et coin biseautés."""
-    if couleur_bordure is None:
-        couleur_bordure = COULEUR_CYAN_SOMBRE
-
-    # Fond
-    fond_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-    r_fond = (COULEUR_FOND_PANEL[0], COULEUR_FOND_PANEL[1], COULEUR_FOND_PANEL[2], alpha_fond)
-    pygame.draw.rect(fond_surf, r_fond,
-                    pygame.Rect(0, 0, rect.width, rect.height),
-                    border_radius=12)
-    surface.blit(fond_surf, rect.topleft)
-
-    # Bordure extérieure
-    pygame.draw.rect(surface, couleur_bordure, rect, width=1, border_radius=12)
-
-    # Reflet du haut (ligne lumineuse)
-    reflet = pygame.Surface((rect.width - 20, 1), pygame.SRCALPHA)
-    for px in range(rect.width - 20):
-        ratio = px / (rect.width - 20)
-        dist = abs(ratio - 0.5) * 2
-        a = int(50 * (1 - dist ** 2))
-        reflet.set_at((px, 0), (200, 230, 255, a))
-    surface.blit(reflet, (rect.x + 10, rect.y + 8))
-
-
-# ======================================================================
-#  CAMÉRA
-# ======================================================================
-
-def calculer_camera(rect_cible, largeur_ecran, hauteur_ecran, zoom,
-                    largeur_monde, hauteur_monde):
-    largeur_vue = largeur_ecran / zoom
-    hauteur_vue = hauteur_ecran / zoom
-    offset_x = rect_cible.centerx - (largeur_vue / 2)
-    offset_y = rect_cible.centery - (hauteur_vue / 2)
-    offset_x = max(0, offset_x)
-    offset_y = max(0, offset_y)
-    offset_x = min(offset_x, largeur_monde - largeur_vue)
-    offset_y = min(offset_y, hauteur_monde - hauteur_vue)
-    return int(offset_x), int(offset_y)
-
-# ======================================================================
-#  HALO — MASQUE PRÉCALCULÉ
-# ======================================================================
-
-def creer_masque_halo(rayon, etendue, alpha_max=220):
-    """
-    Précalcule une surface circulaire avec dégradé linéaire d'obscurité.
-    À blitter avec BLEND_RGBA_MIN sur le calque d'obscurité chaque frame.
-
-    rayon     : rayon total du halo (pixels)
-    etendue   : largeur de la zone de dégradé depuis le bord vers le centre
-                (etendue == rayon → dégradé sur tout le rayon, centre transparent)
-    alpha_max : niveau maximal d'obscurité (0–255)
-    """
-    diameter = rayon * 2 + 2
-    centre   = rayon + 1
-    surf     = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
-    depart   = max(0, rayon - int(etendue))   # début du dégradé depuis le centre
-
-    if HALO_NB_NIVEAUX == 0:
-        # Dégradé parfait pixel par pixel via numpy
-        try:
-            import numpy as np
-            x_idx, y_idx = np.ogrid[:diameter, :diameter]
-            dist  = np.sqrt((x_idx - centre) ** 2 + (y_idx - centre) ** 2)
-            alpha = np.clip(
-                (dist - depart) / max(1, etendue) * alpha_max,
-                0, alpha_max
-            ).astype(np.uint8)
-
-            arr_a        = pygame.surfarray.pixels_alpha(surf)
-            arr_a[:]     = alpha
-            del arr_a
-
-            arr_rgb      = pygame.surfarray.pixels3d(surf)
-            arr_rgb[:, :] = (0, 0, 10)
-            del arr_rgb
-
-            return surf
-        except (ImportError, pygame.error):
-            print("[HALO] numpy indisponible — fallback couches discrètes")
-
-    # Fallback ou mode discret (HALO_NB_NIVEAUX > 0)
-    nb = HALO_NB_NIVEAUX if HALO_NB_NIVEAUX > 0 else max(32, rayon)
-    surf.fill((0, 0, 10, alpha_max))             # tout sombre par défaut
-    for i in range(nb, -1, -1):                  # du plus grand cercle au plus petit
-        r = depart + int(etendue * i / nb)
-        a = int(alpha_max * i / nb)
-        pygame.draw.circle(surf, (0, 0, 10, a), (centre, centre), r)
-
-    return surf
-
-# ======================================================================
-#  SPLASH SCREEN
-# ======================================================================
-
-def afficher_splash_screen(ecran, duree=3000):
-    """Affiche un splash screen avec le logo du jeu (70% de l'écran)."""
-    try:
-        if getattr(sys, 'frozen', False):
-            base_path = sys._MEIPASS
-        else:
-            base_path = os.path.dirname(__file__)
-
-        logo_path = os.path.join(base_path, 'favicon.png')
-        logo_original = pygame.image.load(logo_path).convert_alpha()
-        taille_ref = min(LARGEUR_ECRAN, HAUTEUR_ECRAN)
-        cote_cible = int(taille_ref * 0.7)
-        logo = pygame.transform.smoothscale(logo_original, (cote_cible, cote_cible))
-        fond = pygame.Surface((LARGEUR_ECRAN, HAUTEUR_ECRAN))
-        fond.fill((0, 0, 0))
-        logo_rect = logo.get_rect(center=(LARGEUR_ECRAN // 2, HAUTEUR_ECRAN // 2))
-        debut = pygame.time.get_ticks()
-        horloge = pygame.time.Clock()
-        while pygame.time.get_ticks() - debut < duree:
-            temps_ecoule = pygame.time.get_ticks() - debut
-            if temps_ecoule < duree * 0.3:
-                alpha = int((temps_ecoule / (duree * 0.3)) * 255)
-            elif temps_ecoule > duree * 0.7:
-                alpha = int((1 - (temps_ecoule - duree * 0.7) / (duree * 0.3)) * 255)
-            else:
-                alpha = 255
-            ecran.blit(fond, (0, 0))
-            logo_temp = logo.copy()
-            logo_temp.set_alpha(alpha)
-            ecran.blit(logo_temp, logo_rect)
-            pygame.display.flip()
-            horloge.tick(60)
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-                if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
-                    return
-                if MODE_DEV and envoyer_logs.get_bouton().verifier_clic(event):
-                    envoyer_logs.envoyer_maintenant()
-                    print("[LOG] Envoi manuel déclenché depuis le bouton HUD")
-    except Exception as e:
-        print(f"Impossible d'afficher le splash screen: {e}")
 
 
 # ======================================================================
@@ -651,29 +415,8 @@ class Client:
         self.btn_popup_non.texte       = langue.get_texte("popup_non")
 
     # ------------------------------------------------------------------
-    #  RÉSEAU & IP
+    #  RÉSEAU & IP (fonctions dans reseau/protocole.py)
     # ------------------------------------------------------------------
-
-    def obtenir_ip_locale(self):
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except Exception:
-            return "Non disponible"
-
-    def obtenir_ip_hamachi(self):
-        try:
-            hostname = socket.gethostname()
-            all_ips = socket.gethostbyname_ex(hostname)[2]
-            for ip in all_ips:
-                if ip.startswith("25."):
-                    return ip
-            return "Non connecté"
-        except Exception:
-            return "Non connecté"
 
     def copier_dans_presse_papier(self, texte):
         try:
@@ -910,29 +653,6 @@ class Client:
         self.btn_erreur_ok.rect.center = (cx, rect_popup.bottom - 36)
         self.btn_erreur_ok.dessiner(self.ecran)
 
-    def _dessiner_ecran_mort(self, surface):
-        if not hasattr(self, '_mort_depuis') or self._mort_depuis is None:
-            self._mort_depuis = pygame.time.get_ticks()
-
-        elapsed = pygame.time.get_ticks() - self._mort_depuis
-        alpha = min(200, int(200 * min(elapsed, 800) / 800))  # monte sur 0.8s puis reste stable
-
-        overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-        overlay.fill((80, 0, 0, alpha))
-        surface.blit(overlay, (0, 0))
-
-        # Texte visible dès 600ms
-        if elapsed > 600:
-            if not hasattr(self, '_police_mort'):
-                self._police_mort = pygame.font.Font(None, 48)
-                self._police_sub  = pygame.font.Font(None, 28)
-                police_mort = self._police_mort
-                police_sub  = self._police_sub
-                lw, lh = surface.get_size()
-                txt1 = police_mort.render("VOUS ETES MORT", True, (220, 50, 50))
-                txt2 = police_sub.render("Respawn en cours...", True, (160, 100, 100))
-                surface.blit(txt1, txt1.get_rect(center=(lw // 2, lh // 2 - 20)))
-                surface.blit(txt2, txt2.get_rect(center=(lw // 2, lh // 2 + 20)))
 
     # ------------------------------------------------------------------
     #  MENU SLOTS
@@ -1119,10 +839,10 @@ class Client:
                 if self.btn_changer_echo_dir.verifier_clic(event):
                     self.touche_a_modifier = 'echo_dir'
                 if self.btn_copier_ip_locale.verifier_clic(event):
-                    ip = self.obtenir_ip_locale()
+                    ip = obtenir_ip_locale()
                     self.copier_dans_presse_papier(ip)
                 if self.btn_copier_ip_hamachi.verifier_clic(event):
-                    ip = self.obtenir_ip_hamachi()
+                    ip = obtenir_ip_hamachi()
                     if ip != "Non connecté":
                         self.copier_dans_presse_papier(ip)
 
@@ -1234,10 +954,10 @@ class Client:
         # ---- Réseau ----
         section(langue.get_texte("param_section_reseau"))
         ligne_ip("IP Locale (LAN) :",
-                f"{self.obtenir_ip_locale()}   (copier)",
+                f"{obtenir_ip_locale()}   (copier)",
                 self.btn_copier_ip_locale)
         ligne_ip("IP Hamachi (VPN) :",
-                f"{self.obtenir_ip_hamachi()}   (copier)",
+                f"{obtenir_ip_hamachi()}   (copier)",
                 self.btn_copier_ip_hamachi)
 
         aide = self.police_petit.render(
@@ -1673,29 +1393,8 @@ class Client:
         nom = self.police_petit.render("Demon Slime", True, (220, 180, 180))
         self.ecran.blit(nom, (bar_x, bar_y - 18))
 
-    def _recvall(self, sock, n):
-        """Lit exactement n octets (TCP peut fragmenter les paquets)."""
-        data = b""
-        while len(data) < n:
-            paquet = sock.recv(n - len(data))
-            if not paquet:
-                raise EOFError("Connexion fermee par le serveur")
-            data += paquet
-        return data
 
-    def _recv_complet(self, sock):
-        """Reçoit un paquet complet : 4 octets taille + payload pickle."""
-        header = self._recvall(sock, 4)
-        taille = int.from_bytes(header, 'big')
-        if taille > 10_000_000:  # sécurité : max 10 MB
-            raise ValueError(f"Paquet suspect trop grand : {taille} octets")
-        return pickle.loads(self._recvall(sock, taille))
-
-    def _send_complet(self, sock, obj):
-        """Envoie un objet pickle précédé de 4 octets de taille."""
-        data = pickle.dumps(obj)
-        sock.sendall(len(data).to_bytes(4, 'big') + data)
-
+    # Méthodes réseau : utilise reseau.protocole (recv_complet, send_complet)
 
     def boucle_jeu_reseau(self):
         if not self.client_socket:
@@ -1720,8 +1419,8 @@ class Client:
                 break
 
             try:
-                self._send_complet(self.client_socket, commandes_a_envoyer)
-                donnees_recues = self._recv_complet(self.client_socket)
+                send_complet(self.client_socket, commandes_a_envoyer)
+                donnees_recues = recv_complet(self.client_socket)
 
                 # Delta vis_map : le serveur n'envoie une vis_map que si elle a changé
                 if donnees_recues.get('vis_map') is not None:
@@ -1876,7 +1575,7 @@ class Client:
             self.client_socket.connect((hote, PORT_SERVEUR))
             self.client_socket.settimeout(10.0)  # timeout 10s : détecte serveur mort
             self.client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            reponse = self._recv_complet(self.client_socket)
+            reponse = recv_complet(self.client_socket)
 
             if isinstance(reponse, dict) and "erreur" in reponse:
                 if reponse["erreur"] == "SERVEUR_PLEIN":

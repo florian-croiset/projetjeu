@@ -12,7 +12,7 @@ def charger_sprite(nom_fichier):
         if getattr(sys, 'frozen', False):
             base_path = sys._MEIPASS
         else:
-            base_path = os.path.dirname(__file__)
+            base_path = os.path.dirname(os.path.dirname(__file__))
         path = os.path.join(base_path, 'assets', nom_fichier)
         sprite = pygame.image.load(path)
         return pygame.transform.scale(sprite, (25, 58))

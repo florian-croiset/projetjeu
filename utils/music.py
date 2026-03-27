@@ -62,7 +62,7 @@ _VOLUMES_SFX = {
 def _get_base() -> str:
     if getattr(sys, 'frozen', False):
         return sys._MEIPASS
-    return os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 # ======================================================================

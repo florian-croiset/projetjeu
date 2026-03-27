@@ -1,4 +1,4 @@
-# serveur.py
+# reseau/serveur.py
 # Gestion centrale : Physique, IA, Combat, Sauvegarde.
 
 import socket
@@ -8,52 +8,20 @@ import time
 import sys
 import pygame
 
-from joueur import Joueur
-from carte import Carte
+from core.joueur import Joueur
+from core.carte import Carte
 from parametres import *
-import gestion_sauvegarde
-import points_sauvegarde
-from ennemi import Ennemi
-from boss_room import BossRoom
-from ame_perdue import AmePerdue
-from ame_libre import AmeLibre
-from cle import Cle
+from sauvegarde import gestion_sauvegarde
+from sauvegarde import points_sauvegarde
+from core.ennemi import Ennemi
+from core.boss_room import BossRoom
+from core.ame_perdue import AmePerdue
+from core.ame_libre import AmeLibre
+from core.cle import Cle
+from reseau.protocole import obtenir_ip_locale, recvall, recv_complet, send_complet
 
 
-def obtenir_ip_locale():
-    """Retourne l'IP locale de la machine sur le réseau."""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip_locale = s.getsockname()[0]
-        s.close()
-        return ip_locale
-    except Exception:
-        return "127.0.0.1"
-
-
-def _recvall(sock, n):
-    """Lit exactement n octets depuis le socket (TCP peut fragmenter)."""
-    data = b""
-    while len(data) < n:
-        paquet = sock.recv(n - len(data))
-        if not paquet:
-            raise EOFError("Connexion fermee")
-        data += paquet
-    return data
-
-def _recv_complet_serveur(sock):
-    """Reçoit un paquet complet : 4 octets taille + payload."""
-    header = _recvall(sock, 4)
-    taille = int.from_bytes(header, 'big')
-    if taille > 10_000_000:  # sécurité : max 10 MB
-        raise ValueError(f"Paquet trop grand : {taille} octets")
-    return pickle.loads(_recvall(sock, taille))
-
-def _send_complet(sock, obj):
-    """Envoie un objet pickle précédé de 4 octets de taille."""
-    data = pickle.dumps(obj)
-    sock.sendall(len(data).to_bytes(4, 'big') + data)
+# Fonctions réseau : utilise reseau.protocole (voir protocole.py)
 
 
 class Serveur:
@@ -91,7 +59,7 @@ class Serveur:
         if getattr(sys, 'frozen', False):
             dossier_script = sys._MEIPASS
         else:
-            dossier_script = os.path.dirname(os.path.abspath(__file__))
+            dossier_script = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         chemin_map = os.path.join(dossier_script, "assets/MapS2.tmx")
         self.carte_jeu = Carte(chemin_map)
 
@@ -203,7 +171,7 @@ class Serveur:
         # Version précédente pour détecter les changements (delta vis_map)
         self.vis_map_precedente[id_joueur] = None
 
-        _send_complet(connexion_client, id_joueur)
+        send_complet(connexion_client, id_joueur)
         connexion_client.settimeout(10.0)  # kick si inactif > 10s
         connexion_client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
@@ -211,7 +179,7 @@ class Serveur:
             while self.running:
                 # ← ICI : appel correct de la fonction au niveau module
                 try:
-                    commandes = _recv_complet_serveur(connexion_client)
+                    commandes = recv_complet(connexion_client)
                 except EOFError:
                     break
 
@@ -275,7 +243,7 @@ class Serveur:
                         vis_a_envoyer = None
 
                 donnees_pour_client = {**etat_commun, 'vis_map': vis_a_envoyer}
-                _send_complet(connexion_client, donnees_pour_client)
+                send_complet(connexion_client, donnees_pour_client)
 
         except socket.error as e:
             print(f"[SERVEUR] Erreur socket {id_joueur}: {e}")
@@ -475,7 +443,7 @@ class Serveur:
             if not self._ids_pool:
                 print(f"[SERVEUR] Connexion refusee de {adresse} - Serveur plein (3/3)")
                 try:
-                    _send_complet(connexion_client, {"erreur": "SERVEUR_PLEIN"})
+                    send_complet(connexion_client, {"erreur": "SERVEUR_PLEIN"})
                     time.sleep(0.1)
                     connexion_client.close()
                 except Exception as e:

@@ -16,7 +16,7 @@ def _charger_sprite_cristal():
         if getattr(sys, 'frozen', False):
             base = sys._MEIPASS
         else:
-            base = os.path.dirname(__file__)
+            base = os.path.dirname(os.path.dirname(__file__))
         chemin = os.path.join(base, 'assets', 'cristal_purifié.png')
         img = pygame.image.load(chemin).convert_alpha()
         return pygame.transform.scale(img, (16, 24))

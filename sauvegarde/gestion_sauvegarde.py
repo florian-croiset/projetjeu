@@ -5,15 +5,16 @@
 import json
 import os
 from parametres import NB_SLOTS_SAUVEGARDE
-import points_sauvegarde
-from carte import Carte
+from sauvegarde import points_sauvegarde
+from core.carte import Carte
+
+# Racine du projet (un niveau au-dessus de sauvegarde/)
+_RACINE_PROJET = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def get_chemin_absolu_slot(id_slot):
     """Renvoie le chemin complet vers le fichier de sauvegarde."""
     nom_fichier = f"slot_{id_slot + 1}.json"
-    # On récupère le dossier où se trouve CE script (gestion_sauvegarde.py)
-    dossier_script = os.path.dirname(os.path.abspath(__file__))
-    chemin_complet = os.path.join(dossier_script, nom_fichier)
+    chemin_complet = os.path.join(_RACINE_PROJET, nom_fichier)
     return chemin_complet
 
 def creer_sauvegarde_vierge():
