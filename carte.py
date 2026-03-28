@@ -13,6 +13,11 @@ class Carte:
         self.map_data = []
         self.largeur_map = 0
         self.hauteur_map = 0
+
+        # Optimisation rendu : cache GID→Surface + surface pré-cuite
+        self._cache_tuiles = {}        # Évite subsurface() à chaque frame
+        self._carte_prebake = None     # Surface monde entier pré-rendue
+        self._prebake_vis_hash = None  # Hash de la vis_map au dernier rendu
         
         self._directions = [(math.cos(i/NB_RAYONS_ECHO * 2*math.pi), math.sin(i/NB_RAYONS_ECHO * 2*math.pi)) for i in range(NB_RAYONS_ECHO)]
         
@@ -124,6 +129,8 @@ class Carte:
                 print("[CARTE] Tileset chargé")
             except Exception as e:
                 print(f"[CARTE] Tileset introuvable : {e}")
+
+            self._cache_tuiles = {}   # Reset cache si tileset rechargé
 
             # Image layers (midground, background PNG)
             self.image_layers = []
@@ -280,47 +287,56 @@ class Carte:
                     break  # Stop au premier mur : pas de traversée
 
     def dessiner_carte(self, surface, vis_map, camera_offset=(0,0)):
-        surface.fill(COULEUR_FOND)
         off_x, off_y = camera_offset
         lv, hv = surface.get_size()
-        x_min = max(0, off_x // TAILLE_TUILE)
-        y_min = max(0, off_y // TAILLE_TUILE)
-        x_max = min(self.largeur_map, (off_x + lv) // TAILLE_TUILE + 1)
-        y_max = min(self.hauteur_map, (off_y + hv) // TAILLE_TUILE + 1)
 
-        # Image layers
-        for il in getattr(self, 'image_layers', []):
-            pos_x = int(il['offset_x']) - off_x
-            pos_y = int(il['offset_y']) - off_y
-            surface.blit(il['surface'], (pos_x, pos_y))
+        # Hash de la vis_map pour détecter tout changement de visibilité
+        vis_hash = hash(bytes(b for row in vis_map for b in row))
 
-        for y in range(y_min, y_max):
-            for x in range(x_min, x_max):
-                if not vis_map[y][x]:
-                    continue
-                pos_x = x * TAILLE_TUILE - off_x
-                pos_y = y * TAILLE_TUILE - off_y
-                rect = pygame.Rect(pos_x, pos_y, TAILLE_TUILE, TAILLE_TUILE)
+        map_w = self.largeur_map * TAILLE_TUILE
+        map_h = self.hauteur_map * TAILLE_TUILE
 
-                # Chercher le GID dans tous les layers dans l'ordre d'affichage
-                tile_dessine = False
-                for gids_layer in self.layers_gids:
-                    gid = gids_layer[y][x]
-                    if gid != 0 and self.tileset:
-                        tile_surf = self.get_tile_surface(gid)
-                        if tile_surf:
-                            surface.blit(tile_surf, (pos_x, pos_y))
-                            tile_dessine = True
+        if (self._carte_prebake is None
+                or self._carte_prebake.get_size() != (map_w, map_h)
+                or vis_hash != self._prebake_vis_hash):
+            # Reconstruction de la surface pré-cuite (espace monde, une seule fois par changement de vis_map)
+            self._carte_prebake = pygame.Surface((map_w, map_h))
+            self._carte_prebake.fill(COULEUR_FOND)
 
-                if not tile_dessine:
-                    tuile_type = self.map_data[y][x]
-                    if tuile_type == 1:
-                        pygame.draw.rect(surface, COULEUR_MUR_VISIBLE, rect)
-                    elif tuile_type == 2:
-                        pygame.draw.rect(surface, COULEUR_GUIDE, rect)
-                    elif tuile_type == 3:
-                        pygame.draw.rect(surface, COULEUR_SAUVEGARDE, rect)
+            for il in getattr(self, 'image_layers', []):
+                self._carte_prebake.blit(
+                    il['surface'], (int(il['offset_x']), int(il['offset_y'])))
 
+            for y in range(self.hauteur_map):
+                for x in range(self.largeur_map):
+                    if not vis_map[y][x]:
+                        continue
+                    px = x * TAILLE_TUILE
+                    py = y * TAILLE_TUILE
+                    tile_dessine = False
+                    for gids_layer in self.layers_gids:
+                        gid = gids_layer[y][x]
+                        if gid != 0 and self.tileset:
+                            tile_surf = self.get_tile_surface(gid)
+                            if tile_surf:
+                                self._carte_prebake.blit(tile_surf, (px, py))
+                                tile_dessine = True
+                    if not tile_dessine:
+                        tuile_type = self.map_data[y][x]
+                        rect = pygame.Rect(px, py, TAILLE_TUILE, TAILLE_TUILE)
+                        if tuile_type == 1:
+                            pygame.draw.rect(self._carte_prebake, COULEUR_MUR_VISIBLE, rect)
+                        elif tuile_type == 2:
+                            pygame.draw.rect(self._carte_prebake, COULEUR_GUIDE, rect)
+                        elif tuile_type == 3:
+                            pygame.draw.rect(self._carte_prebake, COULEUR_SAUVEGARDE, rect)
+
+            self._prebake_vis_hash = vis_hash
+
+        # Simple blit de la fenêtre caméra depuis la surface pré-cuite
+        surface.fill(COULEUR_FOND)
+        surface.blit(self._carte_prebake, (0, 0), pygame.Rect(off_x, off_y, lv, hv))
+        
     def get_rects_collisions(self):
         """Renvoie une liste de Rect pour tous les murs (type 1)."""
         rects = []
@@ -435,8 +451,12 @@ class Carte:
     def get_tile_surface(self, gid):
         if self.tileset is None or gid <= 0:
             return None
-        idx = gid - self.tileset_firstgid  # ← était gid - 1, faux si firstgid != 1
+        # Lookup cache — subsurface() n'est appelé qu'une seule fois par GID
+        if gid in self._cache_tuiles:
+            return self._cache_tuiles[gid]
+        idx = gid - self.tileset_firstgid
         if idx < 0:
+            self._cache_tuiles[gid] = None
             return None
         col = idx % self.tileset_colonnes
         row = idx // self.tileset_colonnes
@@ -444,5 +464,8 @@ class Carte:
         y = self.tileset_margin + row * (self.tileset_taille + self.tileset_spacing)
         ts_w, ts_h = self.tileset.get_size()
         if x + self.tileset_taille > ts_w or y + self.tileset_taille > ts_h:
-            return None  # ← évite le crash au lieu de lever ValueError
-        return self.tileset.subsurface(pygame.Rect(x, y, self.tileset_taille, self.tileset_taille))
+            self._cache_tuiles[gid] = None
+            return None
+        surf = self.tileset.subsurface(pygame.Rect(x, y, self.tileset_taille, self.tileset_taille))
+        self._cache_tuiles[gid] = surf
+        return surf

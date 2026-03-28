@@ -106,13 +106,15 @@ class AmeLibre:
         pulse = 0.7 + 0.3 * math.sin(temps_ms / 600 + self.phase)
         r, g, b = self.couleur
 
-        # Halo externe pulsant
-        halo_surf = pygame.Surface((60, 60), pygame.SRCALPHA)
+        # Halo externe pulsant — surface réutilisée, zéro allocation par frame
+        if not hasattr(self, '_halo_surf'):
+            self._halo_surf = pygame.Surface((60, 60), pygame.SRCALPHA)
+        self._halo_surf.fill((0, 0, 0, 0))
         for rayon, alpha_base in [(28, 18), (20, 35), (13, 60)]:
             a = int(alpha_base * pulse)
-            pygame.draw.ellipse(halo_surf, (r, g, b, a),
+            pygame.draw.ellipse(self._halo_surf, (r, g, b, a),
                                 pygame.Rect(30 - rayon, 30 - rayon, rayon * 2, rayon * 2))
-        surface.blit(halo_surf, (cx - 30, cy - 30))
+        surface.blit(self._halo_surf, (cx - 30, cy - 30))
 
         if self.sprite:
             # Légère variation d'alpha pour effet de pulsation
@@ -122,7 +124,9 @@ class AmeLibre:
             r_spr = spr.get_rect(center=(cx, cy))
             surface.blit(spr, r_spr)
         else:
-            # Fallback : ellipse colorée
-            corps_surf = pygame.Surface((12, 18), pygame.SRCALPHA)
-            pygame.draw.ellipse(corps_surf, (r, g, b, 220), pygame.Rect(0, 0, 12, 18))
-            surface.blit(corps_surf, (cx - 6, cy - 9))
+            # Fallback : ellipse colorée — surface réutilisée
+            if not hasattr(self, '_corps_surf'):
+                self._corps_surf = pygame.Surface((12, 18), pygame.SRCALPHA)
+            self._corps_surf.fill((0, 0, 0, 0))
+            pygame.draw.ellipse(self._corps_surf, (r, g, b, 220), pygame.Rect(0, 0, 12, 18))
+            surface.blit(self._corps_surf, (cx - 6, cy - 9))
