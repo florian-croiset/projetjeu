@@ -6,9 +6,9 @@ import json
 import os
 
 def get_chemin_absolu_parametres():
-    """Renvoie le chemin complet vers parametres.json dans le dossier du script."""
-    dossier_script = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(dossier_script, "parametres.json")
+    """Renvoie le chemin complet vers parametres.json à la racine du projet."""
+    racine_projet = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(racine_projet, "parametres.json")
 
 def creer_parametres_defaut():
     """Crée un dictionnaire de paramètres par défaut."""

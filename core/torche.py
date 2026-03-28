@@ -8,7 +8,7 @@ from parametres import *
 
 def _charger_sprite_torche():
     try:
-        base = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(__file__)
+        base = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(__file__))
         img = pygame.image.load(os.path.join(base, 'assets', 'Torche.png')).convert_alpha()
         return pygame.transform.scale(img, (TAILLE_TUILE, TAILLE_TUILE * 2))
     except Exception as e:

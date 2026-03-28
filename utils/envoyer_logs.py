@@ -338,7 +338,7 @@ def _creer_bouton_logs():
     """Crée le bouton pygame si pygame est disponible, sinon retourne un stub."""
     try:
         import pygame
-        from bouton import Bouton
+        from ui.bouton import Bouton
         police = pygame.font.Font(None, 28)
         return Bouton(0, 0, 160, 36, "Envoyer logs", police, style="confirm")
     except Exception:
