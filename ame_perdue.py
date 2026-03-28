@@ -76,13 +76,15 @@ class AmePerdue:
         pulse = 0.7 + 0.3 * math.sin(temps_ms / 600 + self.phase)
         r, g, b = self.couleur
 
-        # Halo violet
-        halo = pygame.Surface((60, 60), pygame.SRCALPHA)
+        # Halo violet — surface réutilisée, zéro allocation par frame
+        if not hasattr(self, '_halo_surf'):
+            self._halo_surf = pygame.Surface((60, 60), pygame.SRCALPHA)
+        self._halo_surf.fill((0, 0, 0, 0))
         for rayon, alpha_base in [(26, 20), (18, 40), (11, 70)]:
             a = int(alpha_base * pulse)
-            pygame.draw.ellipse(halo, (r, g, b, a),
+            pygame.draw.ellipse(self._halo_surf, (r, g, b, a),
                                 pygame.Rect(30 - rayon, 30 - rayon, rayon * 2, rayon * 2))
-        surface.blit(halo, (cx - 30, cy - 30))
+        surface.blit(self._halo_surf, (cx - 30, cy - 30))
 
         if self.sprite:
             alpha = int(160 + 95 * pulse)
