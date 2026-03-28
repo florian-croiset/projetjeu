@@ -15,8 +15,8 @@ def _charger_sprite_cle():
         if getattr(sys, 'frozen', False):
             base = sys._MEIPASS
         else:
-            base = os.path.dirname(__file__)
-        chemin = os.path.join(base, 'assets', '../cristal_purifié.png')
+            base = os.path.dirname(os.path.dirname(__file__))
+        chemin = os.path.join(base, 'assets', 'cristal_purifié.png')
         img = pygame.image.load(chemin).convert_alpha()
         return pygame.transform.scale(img, (20, 28))
     except Exception:
