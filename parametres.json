@@ -4,9 +4,13 @@
         "sensibilite_souris": 0.5
     },
     "video": {
-        "plein_ecran": true,
+        "plein_ecran": false,
         "vsync": false,
-        "musique": false
+        "musique": false,
+        "resolution": [
+            1600,
+            900
+        ]
     },
     "controles": {
         "gauche": "q",

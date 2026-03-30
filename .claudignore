@@ -23,3 +23,5 @@ temp/
 .venv
 .vscode/
 .idea/
+favicon.ico
+favicon.png

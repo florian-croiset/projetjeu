@@ -33,6 +33,10 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
     def __init__(self):
         pygame.init()
 
+        # Résolution native de l'écran (avant tout set_mode)
+        _info = pygame.display.Info()
+        self.resolution_native = (_info.current_w, _info.current_h)
+
         # Précalcul des masques de halo
         self._masque_halo_joueur = creer_masque_halo(RAYON_HALO_JOUEUR, HALO_DEGRADE_ETENDUE)
         self._masque_halo_torche = creer_masque_halo(RAYON_LUMIERE_TORCHE, HALO_DEGRADE_ETENDUE)
@@ -56,9 +60,10 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
         langue.set_langue(self.parametres['jouabilite']['langue'])
         music.init(self.parametres)
 
-        # Écran
+        # Écran — la résolution et le zoom effectif sont calculés par appliquer_parametres_video
         self.largeur_ecran = LARGEUR_ECRAN
         self.hauteur_ecran = HAUTEUR_ECRAN
+        self.zoom_effectif = ZOOM_CAMERA
         self.appliquer_parametres_video(premiere_fois=True)
         pygame.display.set_caption(langue.get_texte("titre_jeu"))
         self.horloge = pygame.time.Clock()
@@ -186,11 +191,32 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
             return False
 
     def appliquer_parametres_video(self, premiere_fois=False):
-        flags = pygame.SCALED
         if self.parametres['video']['plein_ecran']:
-            flags |= pygame.FULLSCREEN
+            self.largeur_ecran = self.resolution_native[0]
+            self.hauteur_ecran = self.resolution_native[1]
+            flags = pygame.SCALED | pygame.FULLSCREEN
+        else:
+            res = self.parametres['video'].get('resolution', [LARGEUR_ECRAN, HAUTEUR_ECRAN])
+            self.largeur_ecran = res[0]
+            self.hauteur_ecran = res[1]
+            flags = pygame.SCALED
+
+        self.zoom_effectif = ZOOM_CAMERA * (self.largeur_ecran / LARGEUR_ECRAN)
         self.ecran = pygame.display.set_mode(
             (self.largeur_ecran, self.hauteur_ecran), flags)
+
+        if not premiere_fois:
+            h = self.hauteur_ecran
+            self.police_titre  = pygame.font.Font(None, max(96, h // 7))
+            self.police_bouton = pygame.font.Font(None, max(30, h // 28))
+            self.police_texte  = pygame.font.Font(None, max(24, h // 36))
+            self.police_petit  = pygame.font.Font(None, max(18, h // 48))
+            self.creer_widgets_menu_principal()
+            self.creer_widgets_menu_rejoindre()
+            self.creer_widgets_menu_parametres()
+            self.creer_widgets_menu_pause()
+            self.creer_widgets_menu_slots()
+            self.creer_widgets_menu_confirmation()
 
 
 # ======================================================================

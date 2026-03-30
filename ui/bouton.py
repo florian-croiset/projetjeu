@@ -43,6 +43,14 @@ class Bouton:
             self.couleur_texte       = COULEUR_VIOLET_CLAIR
             self.couleur_texte_survol = COULEUR_BLANC
 
+        elif style == "disabled":
+            self.couleur_fond        = (10, 10, 15)
+            self.couleur_fond_survol = (10, 10, 15)
+            self.couleur_bordure     = (30, 30, 40)
+            self.couleur_bordure_survol = (30, 30, 40)
+            self.couleur_texte       = COULEUR_TEXTE_SOMBRE
+            self.couleur_texte_survol = COULEUR_TEXTE_SOMBRE
+
         elif style == "ghost":
             self.couleur_fond        = (0, 0, 0, 0)
             self.couleur_fond_survol = (14, 10, 35)

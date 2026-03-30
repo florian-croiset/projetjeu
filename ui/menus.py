@@ -84,6 +84,7 @@ class MenusMixin:
         self.btn_copier_ip_hamachi   = _p()
         self.btn_changer_langue      = _p()
         self.btn_toggle_plein_ecran  = _p()
+        self.btn_changer_resolution  = _p()
         self.btn_toggle_musique      = _p()
         self.btn_toggle_sfx          = _p()
         self.btn_changer_gauche      = _p()
@@ -108,6 +109,7 @@ class MenusMixin:
         self.boutons_menu_params_scrollables = [
             self.btn_changer_langue,
             self.btn_toggle_plein_ecran,
+            self.btn_changer_resolution,
             self.btn_toggle_musique,
             self.btn_toggle_sfx,
             self.btn_changer_gauche, self.btn_changer_droite,
@@ -515,6 +517,17 @@ class MenusMixin:
                 if self.btn_toggle_plein_ecran.verifier_clic(event):
                     self.parametres_temp['video']['plein_ecran'] = \
                         not self.parametres_temp['video']['plein_ecran']
+                if self.btn_changer_resolution.verifier_clic(event):
+                    if not self.parametres_temp['video']['plein_ecran']:
+                        resolutions = get_resolutions_compatibles(self.resolution_native)
+                        current = tuple(self.parametres_temp['video'].get(
+                            'resolution', [LARGEUR_ECRAN, HAUTEUR_ECRAN]))
+                        try:
+                            idx = resolutions.index(current)
+                            nouvelle = resolutions[(idx + 1) % len(resolutions)]
+                        except ValueError:
+                            nouvelle = resolutions[0]
+                        self.parametres_temp['video']['resolution'] = list(nouvelle)
                 if self.btn_toggle_musique.verifier_clic(event):
                     self.parametres_temp['video']['musique'] = not self.parametres_temp['video'].get('musique', True)
                 if self.btn_toggle_sfx.verifier_clic(event):
@@ -625,6 +638,27 @@ class MenusMixin:
                     self.btn_toggle_plein_ecran,
                     langue.get_texte("param_oui"),
                     langue.get_texte("param_non"))
+
+        # --- Résolution (grisé si plein écran) ---
+        est_plein_ecran = params['video']['plein_ecran']
+        if est_plein_ecran:
+            res_txt = f"{self.resolution_native[0]}x{self.resolution_native[1]}"
+            self.btn_changer_resolution.style = "disabled"
+            self.btn_changer_resolution._definir_style("disabled")
+        else:
+            res = params['video'].get('resolution', [LARGEUR_ECRAN, HAUTEUR_ECRAN])
+            res_txt = f"{res[0]}x{res[1]}"
+            self.btn_changer_resolution.style = "normal"
+            self.btn_changer_resolution._definir_style("normal")
+        lbl_res_color = COULEUR_TEXTE_SOMBRE if est_plein_ecran else COULEUR_TEXTE
+        lbl_res = self.police_texte.render(
+            langue.get_texte("param_resolution"), True, lbl_res_color)
+        self.ecran.blit(lbl_res, (col_gauche + 20, y + 6))
+        self.btn_changer_resolution.rect.y = y
+        self.btn_changer_resolution.texte = res_txt
+        self.btn_changer_resolution.dessiner(self.ecran)
+        y += esp_ligne
+
         ligne_toggle("Musique",
                     params['video'].get('musique', True),
                     self.btn_toggle_musique,
