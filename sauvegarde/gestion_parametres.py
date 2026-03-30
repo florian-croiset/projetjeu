@@ -20,7 +20,8 @@ def creer_parametres_defaut():
         "video": {
             "plein_ecran": False,
             "vsync": False,
-            "musique": True
+            "musique": True,
+            "resolution": [1920, 1080]
         },
         "controles": {
             "gauche": "q",

@@ -156,7 +156,7 @@ class BoucleJeuMixin:
             self.ecran.fill(COULEUR_FOND)
             return
 
-        zoom = ZOOM_CAMERA
+        zoom = self.zoom_effectif
         lv = int(self.largeur_ecran / zoom)
         hv = int(self.hauteur_ecran / zoom)
         if not hasattr(self, '_surface_virtuelle') or self._surface_virtuelle.get_size() != (lv, hv):

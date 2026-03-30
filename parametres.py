@@ -119,6 +119,39 @@ PORT_SERVEUR = 5555
 # -- Paramètres de la Caméra --
 ZOOM_CAMERA = 2.5
 
+# Toutes les résolutions habituelles, du plus petit au plus grand
+RESOLUTIONS_DISPONIBLES = [
+    (800, 600),    # SVGA
+    (1024, 600),   # WSVGA
+    (1280, 720),   # HD
+    (1024, 768),   # XGA
+    (1280, 768),   # WXGA
+    (1366, 768),   # HD (laptop)
+    (1280, 800),   # WXGA
+    (1152, 864),   # XGA+
+    (1536, 864),   # Chromebook
+    (1440, 900),   # WXGA+
+    (1600, 900),   # HD+
+    (1280, 960),   # SXGA-
+    (1280, 1024),  # SXGA
+    (1600, 1024),  # —
+    (1400, 1050),  # SXGA+
+    (1680, 1050),  # WSXGA+
+    (1920, 1080),  # Full HD
+    (2048, 1080),  # 2K DCI
+    (2560, 1080),  # Ultra-Wide FHD
+    (1920, 1200),  # WUXGA
+    (2560, 1440),  # 2K QHD
+    (3440, 1440),  # Ultra-Wide QHD
+    (2560, 1600),  # WQXGA
+    (3840, 2160),  # 4K UHD
+]
+
+def get_resolutions_compatibles(resolution_native):
+    """Retourne les résolutions ≤ à la résolution native de l'écran."""
+    larg_max, haut_max = resolution_native
+    return [r for r in RESOLUTIONS_DISPONIBLES if r[0] <= larg_max and r[1] <= haut_max]
+
 # -- Torche --
 COULEUR_TORCHE = (255, 140, 30)
 RAYON_LUMIERE_TORCHE = 120
