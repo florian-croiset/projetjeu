@@ -2,6 +2,9 @@
 # Mixin pour la boucle de jeu en réseau (input, rendu monde, connexion).
 # Hérité par la classe Client.
 
+from ui.tutoriel import Tutoriel
+from sauvegarde import gestion_parametres
+
 import pygame
 import socket
 import pickle
@@ -33,6 +36,16 @@ class BoucleJeuMixin:
     # ==================================================================
 
     def lancer_application(self):
+        if not self.parametres.get("meta", {}).get("tutoriel_vu", False):
+            tuto = Tutoriel(
+                self.ecran, self.largeur_ecran, self.hauteur_ecran,
+                self.parametres['controles'],
+                self.police_titre, self.police_texte,
+                self.police_bouton, self.police_petit
+            )
+            tuto.lancer()
+            self.parametres.setdefault("meta", {})["tutoriel_vu"] = True
+            gestion_parametres.sauvegarder_parametres(self.parametres)
         while self.running:
             self.temps_anim = pygame.time.get_ticks()
             pos_souris = pygame.mouse.get_pos()

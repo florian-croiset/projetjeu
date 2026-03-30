@@ -35,6 +35,9 @@ def creer_parametres_defaut():
             "volume_sfx": 0.8,
             "volume_musique": 0.5,
             "activer_sfx": True
+        },
+        "meta": {
+            "tutoriel_vu": False
         }
     }
 
