@@ -17,6 +17,7 @@ from core.ennemi import Ennemi
 from core.boss_room import BossRoom
 from core.ame_perdue import AmePerdue
 from core.ame_libre import AmeLibre
+from core.ame_loot import AmeLoot
 from core.cle import Cle
 from reseau.protocole import obtenir_ip_locale, recvall, recv_complet, send_complet
 
@@ -49,6 +50,7 @@ class Serveur:
         self.cartes_visibilite = {}
         self.ennemis = {}
         self.ames_perdues = {}
+        self.ames_loot = {}
         self.ames_libres = {}
         self.vis_map_precedente = {}  # pour delta vis_map
         self.cle = None
@@ -318,6 +320,19 @@ class Serveur:
                           print(f"[SERVEUR] Joueur {id_joueur} ramasse ame libre (+{ame.valeur})")
                           del self.ames_libres[id_ame]
 
+              # 1b. Âmes loot : physique + collecte + despawn
+              for id_ame, ame in list(self.ames_loot.items()):
+                  ame.mettre_a_jour(temps_actuel, self.rects_collision)
+                  if ame.est_expiree(temps_actuel):
+                      del self.ames_loot[id_ame]
+                      continue
+                  for id_joueur, joueur in self.joueurs.items():
+                      if joueur.rect.colliderect(ame.rect):
+                          joueur.argent += ame.valeur
+                          if id_ame in self.ames_loot:
+                              del self.ames_loot[id_ame]
+                          break
+
             # 2. Clé : animation + collecte
             if self.cle and not self.cle.est_ramassee:
                 self.cle.mettre_a_jour(temps_actuel)
@@ -355,7 +370,11 @@ class Serveur:
                             mort = ennemi.prendre_degat(DEGATS_JOUEUR, temps_actuel)
                             if mort:
                                 print(f"[SERVEUR] Ennemi {id_ennemi} tue par Joueur {id_joueur}")
-                                joueur.argent += ARGENT_PAR_ENNEMI
+                                cx, cy = ennemi.rect.centerx, ennemi.rect.centery
+                                for _ in range(ARGENT_PAR_ENNEMI):
+                                    ame = AmeLoot(cx, cy, valeur=1)
+                                    ame.temps_creation = temps_actuel
+                                    self.ames_loot[ame.id] = ame
 
                     # Contre les Âmes Perdues
                     for id_ame, ame in list(self.ames_perdues.items()):
@@ -419,6 +438,7 @@ class Serveur:
                         'ennemis':        [e.get_etat() for e in self.ennemis.values()],
                         'ames_perdues':   [a.get_etat() for a in self.ames_perdues.values()],
                         'ames_libres':    [a.get_etat() for a in self.ames_libres.values()],
+                        'ames_loot':      [a.get_etat() for a in self.ames_loot.values()],
                         'cle':            self.cle.get_etat() if self.cle else None,
                         'torche_allumee': self.torche_allumee,
                         'boss_room':      self.boss_room.get_etat(),
