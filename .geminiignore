@@ -1,0 +1,29 @@
+# --- Python & Cache ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+env/
+venv/
+
+# --- Dossiers de ressources volumineux ---
+assets/
+static/dist/
+media/
+
+# --- Données et Logs ---
+*.log
+*.sqlite3
+data/
+temp/
+
+# --- Configuration et Secrets ---
+.env
+.venv
+.vscode/
+.idea/
+favicon.ico
+favicon.png
+.claudeignore
+CLAUDE.md

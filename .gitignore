@@ -16,4 +16,6 @@ save_slots.json
 hamachi.txt
 CLAUDE.md
 .vscode/
+.gemini/
+GEMINI.md
 .claude/
