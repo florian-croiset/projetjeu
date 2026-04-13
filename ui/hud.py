@@ -1,6 +1,6 @@
 # ui/hud.py
-# Mixin pour le HUD en jeu (vie, argent, boss, mort, debug, cooldown Echo).
-# Hérité par la classe Client.
+# Mixin pour le HUD en jeu.
+# Indicateur Echo repensé : grand, lisible, avec label explicite et animation d'activation.
 
 import pygame
 import math
@@ -14,282 +14,324 @@ from utils import envoyer_logs
 class HudMixin:
     """Méthodes d'affichage du HUD en jeu."""
 
+    # ------------------------------------------------------------------
+    #  ENTRÉE PRINCIPALE
+    # ------------------------------------------------------------------
+
+    def dessiner_hud(self):
+        """Dessine le HUD complet."""
+        mon_joueur = self.joueurs_locaux.get(self.mon_id)
+        if not mon_joueur:
+            return
+
+        x0 = 24
+        y0 = 24
+
+        # PV
+        lc  = max(24, self.largeur_ecran // 60)   # largeur coeur
+        hc  = max(20, self.hauteur_ecran // 45)   # hauteur coeur
+        pad = 6
+        for i in range(mon_joueur.pv_max):
+            rx = x0 + i * (lc + pad)
+            pygame.draw.rect(self.ecran, COULEUR_PV_PERDU,
+                             pygame.Rect(rx, y0, lc, hc), border_radius=4)
+            pygame.draw.rect(self.ecran, COULEUR_CYAN_SOMBRE,
+                             pygame.Rect(rx, y0, lc, hc), width=1, border_radius=4)
+        for i in range(mon_joueur.pv):
+            rx = x0 + i * (lc + pad)
+            pygame.draw.rect(self.ecran, COULEUR_PV,
+                             pygame.Rect(rx, y0, lc, hc), border_radius=4)
+
+        # Barre boss
+        if hasattr(self, '_derniere_data_boss') and self._derniere_data_boss:
+            d = self._derniere_data_boss
+            if d.get('fight_started') and not d.get('boss_defeated'):
+                bd = d['boss']
+                self._dessiner_barre_boss(bd['hp'], bd['hp_max'])
+
+        # Argent
+        argent_surf = self.police_texte.render(
+            f"Âmes : {mon_joueur.argent}", True, COULEUR_VIOLET_CLAIR)
+        self.ecran.blit(argent_surf, (x0, y0 + hc + 10))
+
+        # Clé
+        y_cur = y0 + hc + 10 + argent_surf.get_height() + 6
+        if getattr(mon_joueur, 'have_key', False):
+            self._dessiner_icone_cle(x0, y_cur)
+            y_cur += 24
+
+        # Indicateur Echo (le plus important après les PV)
+        y_cur += 4
+        self._dessiner_indicateur_echo(x0, y_cur, mon_joueur)
+        y_cur += 68   # hauteur du widget echo
+
+        # Capacités débloquées
+        self._dessiner_indicateurs_capacites(x0, y_cur, mon_joueur)
+
+        if MODE_DEV:
+            self._dessiner_debug_hud()
+
+    # ------------------------------------------------------------------
+    #  INDICATEUR COOLDOWN ECHO — WIDGET COMPLET
+    # ------------------------------------------------------------------
+
+    def _dessiner_indicateur_echo(self, x, y, joueur):
+        """
+        Widget d'indicateur de cooldown Echo.
+
+        Layout :
+          [ cercle 28px ] [ label  ]
+                           ECHO
+                           PRÊT  ← vert quand dispo
+                           ou
+                           1.8s  ← décompte rouge→jaune→vert
+
+        Le cercle est un arc qui se remplit dans le sens horaire
+        depuis le haut (12h). Vide = vient d'être utilisé, plein = prêt.
+        Une animation de flash pulse brièvement à l'activation.
+        """
+        temps_actuel = pygame.time.get_ticks()
+        rayon        = 22
+        cx_cercle    = x + rayon
+        cy_cercle    = y + rayon
+
+        dernier_echo = getattr(joueur, 'dernier_echo_temps', 0)
+        elapsed      = temps_actuel - dernier_echo
+        ratio        = min(1.0, elapsed / COOLDOWN_ECHO)  # 0=juste utilisé, 1=prêt
+        pret         = ratio >= 1.0
+
+        # ---- Fond du widget (panneau semi-transparent) ----
+        widget_w = 130
+        widget_h = rayon * 2 + 4
+        widget_surf = pygame.Surface((widget_w, widget_h), pygame.SRCALPHA)
+        widget_surf.fill((8, 6, 20, 160))
+        pygame.draw.rect(widget_surf, (30, 20, 60, 180),
+                         widget_surf.get_rect(), width=1, border_radius=6)
+        self.ecran.blit(widget_surf, (x - 2, y - 2))
+
+        # ---- Cercle de cooldown ----
+        surf_c = pygame.Surface((rayon * 2 + 2, rayon * 2 + 2), pygame.SRCALPHA)
+        scx    = rayon + 1
+        scy    = rayon + 1
+
+        # Piste de fond (anneau gris)
+        pygame.draw.circle(surf_c, (25, 18, 45, 220), (scx, scy), rayon)
+        pygame.draw.circle(surf_c, (50, 35, 80, 255), (scx, scy), rayon, width=2)
+
+        if pret:
+            # Cercle plein cyan pulsant
+            pulse = 0.82 + 0.18 * math.sin(temps_actuel / 450)
+            r, g, b = COULEUR_CYAN
+            # Remplissage intérieur semi-transparent
+            pygame.draw.circle(surf_c, (r, g, b, int(60 * pulse)), (scx, scy), rayon - 3)
+            # Anneau lumineux
+            pygame.draw.circle(surf_c, (r, g, b, 255), (scx, scy), rayon, width=3)
+            # Halo externe pulsant
+            halo_r = int((rayon + 5) * pulse)
+            pygame.draw.circle(surf_c, (r, g, b, int(40 * pulse)), (scx, scy), halo_r, width=2)
+        else:
+            # Arc de progression — dessine N petits secteurs pour simuler l'arc
+            self._dessiner_arc_cooldown(surf_c, scx, scy, rayon - 2, ratio)
+            # Bord fixe de la piste
+            pygame.draw.circle(surf_c, (55, 38, 85, 200), (scx, scy), rayon, width=1)
+
+        # Flash d'activation (dans les 200ms suivant l'utilisation)
+        if elapsed < 200:
+            flash_alpha = int(180 * (1.0 - elapsed / 200))
+            pygame.draw.circle(surf_c, (255, 255, 255, flash_alpha), (scx, scy), rayon - 4)
+
+        # Icône centrale "E" (touche d'activation)
+        police_e = pygame.font.Font(None, max(20, rayon))
+        couleur_e = COULEUR_CYAN if pret else (100, 80, 140)
+        icone_e = police_e.render("E", True, couleur_e)
+        surf_c.blit(icone_e, icone_e.get_rect(center=(scx, scy)))
+
+        self.ecran.blit(surf_c, (cx_cercle - rayon - 1, cy_cercle - rayon - 1))
+
+        # ---- Labels à droite du cercle ----
+        lx = cx_cercle + rayon + 10
+        ly = cy_cercle - 18
+
+        # Ligne 1 : mot "ECHO" en petit gris
+        p_label = pygame.font.Font(None, 16)
+        label_titre = p_label.render("ECHO", True, (100, 85, 130))
+        self.ecran.blit(label_titre, (lx, ly))
+        ly += label_titre.get_height() + 2
+
+        # Ligne 2 : état principal — grand, lisible
+        p_etat = pygame.font.Font(None, 22)
+        if pret:
+            # "PRÊT" en vert/cyan lumineux
+            etat_surf = p_etat.render("PRÊT", True, COULEUR_CYAN)
+        else:
+            # Décompte en secondes avec couleur progressive
+            restant   = (COOLDOWN_ECHO - elapsed) / 1000
+            t_ratio   = 1.0 - ratio           # 1 = vient d'être utilisé, 0 = presque prêt
+            r_c = int(220 * t_ratio + 0   * (1 - t_ratio))
+            g_c = int(60  * t_ratio + 200 * (1 - t_ratio))
+            b_c = int(60  * t_ratio + 80  * (1 - t_ratio))
+            etat_surf = p_etat.render(f"{restant:.1f}s", True, (r_c, g_c, b_c))
+
+        self.ecran.blit(etat_surf, (lx, ly))
+        ly += etat_surf.get_height() + 2
+
+        # Ligne 3 : barre de progression linéaire fine sous le texte
+        bar_w   = 68
+        bar_h   = 3
+        bar_rect = pygame.Rect(lx, ly, bar_w, bar_h)
+        pygame.draw.rect(self.ecran, (40, 28, 60), bar_rect, border_radius=2)
+        if ratio > 0:
+            fill_w = int(bar_w * ratio)
+            r_b = int(180 * (1 - ratio) + 0   * ratio)
+            g_b = int(60  * (1 - ratio) + 210 * ratio)
+            b_b = int(60  * (1 - ratio) + 190 * ratio)
+            pygame.draw.rect(self.ecran, (r_b, g_b, b_b),
+                             pygame.Rect(lx, ly, fill_w, bar_h), border_radius=2)
+
+    def _dessiner_arc_cooldown(self, surf, cx, cy, rayon, ratio):
+        """
+        Dessine un arc de progression de 0° à ratio*360°, sens horaire depuis 12h.
+        Utilisé pendant le cooldown. Couleur : rouge vif → jaune → cyan.
+        """
+        if ratio <= 0:
+            return
+
+        nb_points = max(4, int(ratio * 48))  # résolution de l'arc
+        epaisseur  = 4                         # épaisseur de la piste colorée
+        angle_debut = -math.pi / 2             # 12h = -90°
+
+        for i in range(nb_points):
+            t_local = i / nb_points             # 0 à 1 sur la portion de l'arc
+            angle   = angle_debut + t_local * ratio * 2 * math.pi
+
+            # Couleur : rouge vif (début) → orange → jaune → cyan (fin)
+            # interpolée sur l'avancement de l'arc
+            r_c = int(220 * (1 - t_local * ratio) + 0   * (t_local * ratio))
+            g_c = int(50  * (1 - t_local * ratio) + 200 * (t_local * ratio))
+            b_c = int(50  * (1 - t_local * ratio) + 195 * (t_local * ratio))
+
+            # On dessine des petits cercles le long de l'arc pour éviter les gaps
+            px = int(cx + math.cos(angle) * rayon)
+            py = int(cy + math.sin(angle) * rayon)
+            pygame.draw.circle(surf, (r_c, g_c, b_c, 240), (px, py), epaisseur // 2 + 1)
+
+        # Point de tête (bout de l'arc) — plus lumineux
+        angle_fin = angle_debut + ratio * 2 * math.pi
+        px_fin    = int(cx + math.cos(angle_fin) * rayon)
+        py_fin    = int(cy + math.sin(angle_fin) * rayon)
+        pygame.draw.circle(surf, (255, 255, 255, 200), (px_fin, py_fin), epaisseur // 2)
+
+    # ------------------------------------------------------------------
+    #  CAPACITÉS DÉBLOQUÉES
+    # ------------------------------------------------------------------
+
+    def _dessiner_indicateurs_capacites(self, x, y, joueur):
+        """Petites pastilles pour les capacités actives."""
+        taille  = 16
+        espace  = 4
+        cx      = x
+        capacites = []
+        if getattr(joueur, 'peut_double_saut', False):
+            capacites.append(('↑↑', (80, 160, 255)))
+        if getattr(joueur, 'peut_dash',        False):
+            capacites.append(('»',  (180, 80, 255)))
+        if getattr(joueur, 'peut_echo_dir',    False):
+            capacites.append(('◎',  (0, 200, 180)))
+        for icone, couleur in capacites:
+            pygame.draw.circle(self.ecran, couleur,
+                               (cx + taille // 2, y + taille // 2), taille // 2)
+            s = pygame.font.Font(None, 13).render(icone, True, (255, 255, 255))
+            self.ecran.blit(s, s.get_rect(center=(cx + taille // 2, y + taille // 2)))
+            cx += taille + espace
+
+    # ------------------------------------------------------------------
+    #  CLÉ
+    # ------------------------------------------------------------------
+
     def _dessiner_icone_cle(self, x, y):
-        """Dessine l'icône de clé dans le HUD avec texte."""
         if not hasattr(self, '_sprite_cle_hud'):
             try:
-                if getattr(sys, 'frozen', False):
-                    base = sys._MEIPASS
-                else:
-                    base = os.path.dirname(os.path.dirname(__file__))
-                chemin = os.path.join(base, 'assets', 'cle.png')
-                img = pygame.image.load(chemin).convert_alpha()
+                base = (sys._MEIPASS if getattr(sys, 'frozen', False)
+                        else os.path.dirname(os.path.dirname(__file__)))
+                img  = pygame.image.load(os.path.join(base, 'assets', 'cle.png')).convert_alpha()
                 self._sprite_cle_hud = pygame.transform.scale(img, (18, 18))
             except Exception:
                 self._sprite_cle_hud = None
 
         if self._sprite_cle_hud:
             self.ecran.blit(self._sprite_cle_hud, (x, y))
-            lbl = self.police_texte.render("  Clé", True, (255, 215, 0))
-            self.ecran.blit(lbl, (x + 20, y))
         else:
             pygame.draw.rect(self.ecran, (255, 215, 0),
                              pygame.Rect(x, y, 14, 14), border_radius=3)
-            lbl = self.police_texte.render("  Clé", True, (255, 215, 0))
-            self.ecran.blit(lbl, (x + 16, y))
-
-    def dessiner_hud(self):
-        """Dessine le HUD complet (vie, argent, clé, echo, boss, debug)."""
-        mon_joueur = self.joueurs_locaux.get(self.mon_id)
-        if not mon_joueur:
-            return
-
-        pv     = mon_joueur.pv
-        pv_max = mon_joueur.pv_max
-
-        largeur_coeur = max(24, self.largeur_ecran // 60)
-        hauteur_coeur = max(20, self.hauteur_ecran // 45)
-        padding = 6
-        x0 = 24
-        y0 = 24
-
-        # --- Barres de PV ---
-        for i in range(pv_max):
-            rx = x0 + i * (largeur_coeur + padding)
-            fond_r = pygame.Rect(rx, y0, largeur_coeur, hauteur_coeur)
-            pygame.draw.rect(self.ecran, COULEUR_PV_PERDU, fond_r, border_radius=4)
-            pygame.draw.rect(self.ecran, COULEUR_CYAN_SOMBRE, fond_r,
-                             width=1, border_radius=4)
-
-        for i in range(pv):
-            rx = x0 + i * (largeur_coeur + padding)
-            plein_r = pygame.Rect(rx, y0, largeur_coeur, hauteur_coeur)
-            pygame.draw.rect(self.ecran, COULEUR_PV, plein_r, border_radius=4)
-
-        # --- Barre Boss ---
-        if hasattr(self, '_derniere_data_boss') and self._derniere_data_boss:
-            d = self._derniere_data_boss
-            if d.get('fight_started') and not d.get('boss_defeated'):
-                boss_data = d['boss']
-                self._dessiner_barre_boss(boss_data['hp'], boss_data['hp_max'])
-
-        # --- Argent ---
-        argent_txt = self.police_texte.render(
-            f"Âmes : {mon_joueur.argent}", True, COULEUR_VIOLET_CLAIR)
-        self.ecran.blit(argent_txt, (x0, y0 + hauteur_coeur + 10))
-
-        # --- Clé ---
-        if hasattr(mon_joueur, 'have_key') and mon_joueur.have_key:
-            y_inv = y0 + hauteur_coeur + 36
-            self._dessiner_icone_cle(x0, y_inv)
-
-        # --- Indicateur cooldown Echo ---
-        y_echo = y0 + hauteur_coeur + 62
-        self._dessiner_indicateur_echo(x0, y_echo, mon_joueur)
-
-        # --- Capacités débloquées ---
-        y_cap = y_echo + 46
-        self._dessiner_indicateurs_capacites(x0, y_cap, mon_joueur)
-
-        if MODE_DEV:
-            self._dessiner_debug_hud()
-
-    # ------------------------------------------------------------------
-    #  INDICATEUR COOLDOWN ECHO
-    # ------------------------------------------------------------------
-
-    def _dessiner_indicateur_echo(self, x, y, joueur):
-        """
-        Cercle de cooldown pour l'Echo.
-        - Plein et cyan  : Echo disponible.
-        - Arc qui se remplit progressivement : cooldown en cours.
-        - Animation de flash au déclenchement.
-        """
-        temps_actuel = pygame.time.get_ticks()
-        rayon        = 18
-        cx           = x + rayon
-        cy           = y + rayon
-
-        dernier_echo = getattr(joueur, 'dernier_echo_temps', 0)
-        elapsed      = temps_actuel - dernier_echo
-        ratio_rempli = min(1.0, elapsed / COOLDOWN_ECHO)   # 0 = juste utilisé, 1 = prêt
-        pret         = (ratio_rempli >= 1.0)
-
-        # Surface SRCALPHA pour les dessins transparents
-        taille_surf = (rayon * 2 + 4, rayon * 2 + 4)
-        surf = pygame.Surface(taille_surf, pygame.SRCALPHA)
-        scx  = rayon + 2
-        scy  = rayon + 2
-
-        # Fond sombre
-        pygame.draw.circle(surf, (10, 8, 25, 200), (scx, scy), rayon)
-
-        if pret:
-            # Disponible : cercle plein cyan avec légère pulsation
-            pulse = 0.8 + 0.2 * math.sin(temps_actuel / 600)
-            a     = int(220 * pulse)
-            pygame.draw.circle(surf, (*COULEUR_CYAN, a), (scx, scy), rayon - 3)
-            pygame.draw.circle(surf, (*COULEUR_CYAN, 255), (scx, scy), rayon, width=2)
-        else:
-            # Cooldown : arc progressif
-            # Arc de fond (gris)
-            pygame.draw.circle(surf, (40, 40, 60, 180), (scx, scy), rayon - 2)
-            pygame.draw.circle(surf, (60, 60, 90, 220), (scx, scy), rayon, width=2)
-
-            # Arc coloré indiquant la progression
-            if ratio_rempli > 0.02:
-                angle_fin  = -90 + ratio_rempli * 360   # commence en haut
-                # Dessin de l'arc avec des segments fins
-                nb_segs    = max(4, int(ratio_rempli * 32))
-                for i in range(nb_segs):
-                    a_deg_start = -90 + (i / nb_segs) * ratio_rempli * 360
-                    a_deg_end   = -90 + ((i + 1) / nb_segs) * ratio_rempli * 360
-                    a_start = math.radians(a_deg_start)
-                    a_end   = math.radians(a_deg_end)
-                    # Point sur le cercle
-                    p1 = (scx + math.cos(a_start) * (rayon - 2),
-                           scy + math.sin(a_start) * (rayon - 2))
-                    p2 = (scx + math.cos(a_end)   * (rayon - 2),
-                           scy + math.sin(a_end)   * (rayon - 2))
-                    p3 = (scx + math.cos(a_end)   * (rayon - 6),
-                           scy + math.sin(a_end)   * (rayon - 6))
-                    p4 = (scx + math.cos(a_start) * (rayon - 6),
-                           scy + math.sin(a_start) * (rayon - 6))
-                    # Couleur : cyan→violet selon progression
-                    t_col = i / max(1, nb_segs - 1)
-                    r_c   = int(COULEUR_CYAN[0] * (1 - t_col) + COULEUR_VIOLET[0] * t_col)
-                    g_c   = int(COULEUR_CYAN[1] * (1 - t_col) + COULEUR_VIOLET[1] * t_col)
-                    b_c   = int(COULEUR_CYAN[2] * (1 - t_col) + COULEUR_VIOLET[2] * t_col)
-                    pygame.draw.polygon(surf, (r_c, g_c, b_c, 230), [p1, p2, p3, p4])
-
-        # Icône "E" au centre
-        police_icone = pygame.font.Font(None, max(18, rayon))
-        icone        = police_icone.render("E", True,
-                                           COULEUR_CYAN if pret else COULEUR_TEXTE_SOMBRE)
-        icone_rect   = icone.get_rect(center=(scx, scy))
-        surf.blit(icone, icone_rect)
-
-        self.ecran.blit(surf, (cx - rayon - 2, cy - rayon - 2))
-
-        # Étiquette
-        label_couleur = COULEUR_CYAN if pret else COULEUR_TEXTE_SOMBRE
-        label_texte   = "Echo" if pret else f"Echo {(COOLDOWN_ECHO - elapsed) / 1000:.1f}s"
-        label         = pygame.font.Font(None, 16).render(label_texte, True, label_couleur)
-        self.ecran.blit(label, (cx + rayon + 6, cy - label.get_height() // 2))
-
-    # ------------------------------------------------------------------
-    #  INDICATEURS CAPACITÉS
-    # ------------------------------------------------------------------
-
-    def _dessiner_indicateurs_capacites(self, x, y, joueur):
-        """Petites icônes indiquant les capacités débloquées."""
-        taille = 16
-        espace  = 4
-        cx      = x
-
-        capacites = []
-        if getattr(joueur, 'peut_double_saut', False):
-            capacites.append(('⬆', (80, 160, 255), 'Dbl Saut'))
-        if getattr(joueur, 'peut_dash', False):
-            capacites.append(('»', (180, 80, 255), 'Dash'))
-        if getattr(joueur, 'peut_echo_dir', False):
-            capacites.append(('◎', (0, 200, 180), 'Echo Dir'))
-
-        for icone, couleur, nom in capacites:
-            # Pastille
-            pygame.draw.circle(self.ecran, couleur, (cx + taille // 2, y + taille // 2), taille // 2)
-            p = pygame.font.Font(None, 14)
-            s = p.render(icone, True, (255, 255, 255))
-            self.ecran.blit(s, s.get_rect(center=(cx + taille // 2, y + taille // 2)))
-            cx += taille + espace
+        lbl = self.police_texte.render("Clé", True, (255, 215, 0))
+        self.ecran.blit(lbl, (x + 20, y + 1))
 
     # ------------------------------------------------------------------
     #  DEBUG
     # ------------------------------------------------------------------
 
     def _dessiner_debug_hud(self):
-        """Affiche les infos de performance en haut à droite (MODE_DEV)."""
-        fps_actuel = self.horloge.get_fps()
-        nb_joueurs = len(self.joueurs_locaux)
-        nb_ennemis = len(self.ennemis_locaux)
-        nb_ames    = len(self.ames_perdues_locales) + len(self.ames_libres_locales)
-        nb_entites = nb_joueurs + nb_ennemis + nb_ames
-
-        if fps_actuel >= FPS * 0.85:
-            couleur_fps = (0, 220, 120)
-        elif fps_actuel >= FPS * 0.5:
-            couleur_fps = (255, 180, 0)
-        else:
-            couleur_fps = (255, 60, 60)
-
+        fps = self.horloge.get_fps()
+        couleur_fps = ((0, 220, 120) if fps >= FPS * 0.85
+                       else (255, 180, 0) if fps >= FPS * 0.5
+                       else (255, 60, 60))
         lignes = [
-            (f"FPS : {fps_actuel:.0f} / {FPS}", couleur_fps),
-            (f"Joueurs : {nb_joueurs}", COULEUR_TEXTE_SOMBRE),
-            (f"Ennemis : {nb_ennemis}", COULEUR_TEXTE_SOMBRE),
-            (f"Entités : {nb_entites}", COULEUR_TEXTE_SOMBRE),
+            (f"FPS : {fps:.0f} / {FPS}", couleur_fps),
+            (f"Joueurs : {len(self.joueurs_locaux)}",  COULEUR_TEXTE_SOMBRE),
+            (f"Ennemis : {len(self.ennemis_locaux)}",  COULEUR_TEXTE_SOMBRE),
+            (f"Entités : {len(self.joueurs_locaux)+len(self.ennemis_locaux)+len(self.ames_perdues_locales)+len(self.ames_libres_locales)}",
+             COULEUR_TEXTE_SOMBRE),
             (f"Torche : {'ON' if self.torche.allumee else 'OFF'}",
              (255, 160, 30) if self.torche.allumee else COULEUR_TEXTE_SOMBRE),
-            (f"Zoom : x{ZOOM_CAMERA}", COULEUR_TEXTE_SOMBRE),
         ]
-
-        police    = self.police_petit
-        ligne_h   = police.get_height() + 4
-        padding   = 8
-        larg_panel = 160
-        haut_panel = len(lignes) * ligne_h + padding * 2
-
-        x0 = self.largeur_ecran - larg_panel - 12
-        y0 = 12
-
-        panel = pygame.Surface((larg_panel, haut_panel), pygame.SRCALPHA)
+        p      = self.police_petit
+        lh     = p.get_height() + 4
+        pad    = 8
+        lw_pan = 160
+        ht_pan = len(lignes) * lh + pad * 2
+        x0     = self.largeur_ecran - lw_pan - 12
+        y0     = 12
+        panel  = pygame.Surface((lw_pan, ht_pan), pygame.SRCALPHA)
         panel.fill((8, 8, 20, 180))
         pygame.draw.rect(panel, COULEUR_CYAN_SOMBRE,
-                         pygame.Rect(0, 0, larg_panel, haut_panel),
-                         width=1, border_radius=6)
+                         panel.get_rect(), width=1, border_radius=6)
         self.ecran.blit(panel, (x0, y0))
-
         for i, (texte, couleur) in enumerate(lignes):
-            surf = police.render(texte, True, couleur)
-            self.ecran.blit(surf, (x0 + padding, y0 + padding + i * ligne_h))
+            self.ecran.blit(p.render(texte, True, couleur),
+                            (x0 + pad, y0 + pad + i * lh))
 
     # ------------------------------------------------------------------
     #  MORT
     # ------------------------------------------------------------------
 
     def _dessiner_ecran_mort(self, surface):
-        """Overlay de mort semi-transparent avec message."""
         if self._mort_depuis is None:
             self._mort_depuis = pygame.time.get_ticks()
-
         elapsed = pygame.time.get_ticks() - self._mort_depuis
         alpha   = min(200, int(200 * min(elapsed, 800) / 800))
-
         overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
         overlay.fill((80, 0, 0, alpha))
         surface.blit(overlay, (0, 0))
-
         if elapsed > 600:
             if not hasattr(self, '_police_mort'):
                 self._police_mort = pygame.font.Font(None, 48)
                 self._police_sub  = pygame.font.Font(None, 28)
             lw, lh = surface.get_size()
-            txt1 = self._police_mort.render("VOUS ETES MORT", True, (220, 50, 50))
-            txt2 = self._police_sub.render("Respawn en cours...", True, (160, 100, 100))
-            surface.blit(txt1, txt1.get_rect(center=(lw // 2, lh // 2 - 20)))
-            surface.blit(txt2, txt2.get_rect(center=(lw // 2, lh // 2 + 20)))
+            t1 = self._police_mort.render("VOUS ETES MORT", True, (220, 50, 50))
+            t2 = self._police_sub.render("Respawn en cours...", True, (160, 100, 100))
+            surface.blit(t1, t1.get_rect(center=(lw // 2, lh // 2 - 20)))
+            surface.blit(t2, t2.get_rect(center=(lw // 2, lh // 2 + 20)))
 
     # ------------------------------------------------------------------
     #  BOSS
     # ------------------------------------------------------------------
 
     def _dessiner_barre_boss(self, hp, hp_max):
-        """Barre de vie du boss fixée en haut de l'écran."""
         bar_w = 400
         bar_h = 16
         bar_x = self.largeur_ecran // 2 - bar_w // 2
         bar_y = 20
         ratio = max(0.0, hp / hp_max)
-
         pygame.draw.rect(self.ecran, (40, 10, 10),  (bar_x - 2, bar_y - 2, bar_w + 4, bar_h + 4))
         pygame.draw.rect(self.ecran, (90, 20, 20),  (bar_x, bar_y, bar_w, bar_h))
         pygame.draw.rect(self.ecran, (200, 50, 50), (bar_x, bar_y, int(bar_w * ratio), bar_h))
