@@ -1,6 +1,6 @@
 # boucle_jeu.py
 # Mixin pour la boucle de jeu en réseau (input, rendu monde, connexion).
-# Hérité par la classe Client.
+# MISE À JOUR : Rendu Porte interactive + Orbes de capacités.
 
 from ui.tutoriel import Tutoriel
 from sauvegarde import gestion_parametres
@@ -26,6 +26,8 @@ from core.demon_slime_boss import DemonSlimeBoss
 from core.ame_perdue import AmePerdue
 from core.ame_libre import AmeLibre
 from core.cle import Cle
+from core.porte import Porte
+from core.orbe_capacite import OrbeCapacite
 
 
 class BoucleJeuMixin:
@@ -46,9 +48,10 @@ class BoucleJeuMixin:
             tuto.lancer()
             self.parametres.setdefault("meta", {})["tutoriel_vu"] = True
             gestion_parametres.sauvegarder_parametres(self.parametres)
+
         while self.running:
             self.temps_anim = pygame.time.get_ticks()
-            pos_souris = pygame.mouse.get_pos()
+            pos_souris      = pygame.mouse.get_pos()
 
             if self.etat_jeu == "MENU_PRINCIPAL":
                 self.gerer_menu_principal(pos_souris)
@@ -78,7 +81,7 @@ class BoucleJeuMixin:
                 self.boucle_jeu_reseau()
                 if self.etat_jeu == "MENU_PARAMETRES":
                     self.etat_jeu_precedent = "EN_JEU"
-                    self.parametres_temp = copy.deepcopy(self.parametres)
+                    self.parametres_temp    = copy.deepcopy(self.parametres)
                 elif self.etat_jeu != "EN_JEU":
                     self.etat_jeu = "MENU_PRINCIPAL"
                     self.nettoyer_connexion()
@@ -98,8 +101,13 @@ class BoucleJeuMixin:
     # ==================================================================
 
     def gerer_evenements_jeu(self):
-        commandes = {'clavier': {'gauche': False, 'droite': False, 'saut': False, 'attaque': False, 'dash': False},
-                    'echo': False, 'echo_dir': False, 'toggle_torche': False,}
+        commandes = {
+            'clavier':        {'gauche': False, 'droite': False,
+                               'saut': False, 'attaque': False, 'dash': False},
+            'echo':           False,
+            'echo_dir':       False,
+            'toggle_torche':  False,
+        }
 
         key = self._codes_touches.get
 
@@ -107,7 +115,6 @@ class BoucleJeuMixin:
             if event.type == pygame.QUIT:
                 self.running = False
             if MODE_DEV and envoyer_logs.get_bouton().verifier_clic(event):
-                print("[LOG] Clic bouton detecte : envoi en cours...")
                 envoyer_logs.envoyer_maintenant()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
@@ -151,10 +158,10 @@ class BoucleJeuMixin:
 
         mon_joueur = self.joueurs_locaux.get(self.mon_id)
         if mon_joueur and mon_joueur.pv <= 0:
-            commandes['clavier'] = {'gauche': False, 'droite': False, 'saut': False,
-                                    'attaque': False, 'dash': False}
-            commandes['echo'] = False
-            commandes['echo_dir'] = False
+            commandes['clavier']       = {'gauche': False, 'droite': False,
+                                          'saut': False, 'attaque': False, 'dash': False}
+            commandes['echo']          = False
+            commandes['echo_dir']      = False
             commandes['toggle_torche'] = False
 
         return commandes
@@ -170,8 +177,8 @@ class BoucleJeuMixin:
             return
 
         zoom = self.zoom_effectif
-        lv = int(self.largeur_ecran / zoom)
-        hv = int(self.hauteur_ecran / zoom)
+        lv   = int(self.largeur_ecran / zoom)
+        hv   = int(self.hauteur_ecran / zoom)
         if not hasattr(self, '_surface_virtuelle') or self._surface_virtuelle.get_size() != (lv, hv):
             self._surface_virtuelle = pygame.Surface((lv, hv))
         surface_virtuelle = self._surface_virtuelle
@@ -184,22 +191,34 @@ class BoucleJeuMixin:
 
         self.carte.dessiner_carte(surface_virtuelle, self.vis_map_locale, camera_offset)
 
+        # --- Porte ---
+        if self.porte_locale:
+            self.porte_locale.dessiner(surface_virtuelle, camera_offset,
+                                       pygame.time.get_ticks())
+
+        # --- Orbes de capacité ---
+        for orbe in self.orbes_capacite_locaux.values():
+            if not orbe.est_ramasse:
+                orbe.dessiner(surface_virtuelle, camera_offset, pygame.time.get_ticks())
+
+        # --- Joueurs ---
         for joueur in self.joueurs_locaux.values():
             joueur.dessiner(surface_virtuelle, camera_offset)
 
         temps_ms = pygame.time.get_ticks()
 
+        # --- Ennemis ---
         for ennemi in self.ennemis_locaux.values():
             if mon_joueur:
-                dx = ennemi.rect.centerx - mon_joueur.rect.centerx
-                dy = ennemi.rect.centery - mon_joueur.rect.centery
+                dx   = ennemi.rect.centerx - mon_joueur.rect.centerx
+                dy   = ennemi.rect.centery - mon_joueur.rect.centery
                 dist = (dx**2 + dy**2) ** 0.5
             else:
                 dist = 9999
 
             temps_depuis_flash = temps_ms - getattr(ennemi, 'flash_echo_temps', 0)
-            flash_actif = temps_depuis_flash < DUREE_FLASH_ECHO_ENNEMI
-            proche = dist <= DISTANCE_DETECTION_ENNEMI
+            flash_actif        = temps_depuis_flash < DUREE_FLASH_ECHO_ENNEMI
+            proche             = dist <= DISTANCE_DETECTION_ENNEMI
 
             if proche:
                 ennemi.dessiner(surface_virtuelle, camera_offset)
@@ -209,13 +228,14 @@ class BoucleJeuMixin:
                 cx = ennemi.rect.centerx - off_x
                 cy = ennemi.rect.centery - off_y
                 halo = pygame.Surface((60, 60), pygame.SRCALPHA)
-                pygame.draw.circle(halo, (0, 212, 255, max(0, min(255, int(80 * ratio)))), (30, 30), 30)
+                pygame.draw.circle(halo, (0, 212, 255, max(0, min(255, int(80 * ratio)))),
+                                   (30, 30), 30)
                 surface_virtuelle.blit(halo, (cx - 30, cy - 30))
                 tmp = pygame.Surface((ennemi.rect.w, ennemi.rect.h), pygame.SRCALPHA)
                 tmp.fill((0, 212, 255, max(0, min(255, int(255 * ratio)))))
                 surface_virtuelle.blit(tmp, (ennemi.rect.x - off_x, ennemi.rect.y - off_y))
 
-        # Boss
+        # --- Boss ---
         if self.boss_local and not getattr(self.boss_local, 'is_dead', False):
             off_x, off_y = camera_offset
             self.boss_local.pos.x -= off_x
@@ -227,47 +247,46 @@ class BoucleJeuMixin:
         if mon_joueur and mon_joueur.pv > 0:
             self._mort_depuis = None
 
+        # --- Âmes ---
         for ame in self.ames_perdues_locales.values():
             ame.dessiner(surface_virtuelle, camera_offset, temps_ms)
-
         for ame in self.ames_libres_locales.values():
             ame.dessiner(surface_virtuelle, camera_offset, temps_ms)
 
+        # --- Clé ---
         if self.cle_locale and not self.cle_locale.est_ramassee:
             self.cle_locale.dessiner(surface_virtuelle, camera_offset, temps_ms)
 
+        # --- Torche ---
         self.torche.mettre_a_jour(temps_ms)
         self.torche.dessiner(surface_virtuelle, camera_offset, temps_ms)
 
         if self.torche.allumee and mon_joueur:
-            dx = mon_joueur.rect.centerx - self.torche.x
-            dy = mon_joueur.rect.centery - self.torche.y
+            dx   = mon_joueur.rect.centerx - self.torche.x
+            dy   = mon_joueur.rect.centery - self.torche.y
             dist = (dx**2 + dy**2) ** 0.5
             music.torche_mettre_a_jour_volume(dist)
 
-        # Calque obscurité avec halo
+        # --- Calque obscurité ---
         if mon_joueur and ASSOMBRISSEMENT:
             sz = surface_virtuelle.get_size()
             if not hasattr(self, '_obscurite') or self._obscurite.get_size() != sz:
                 self._obscurite = pygame.Surface(sz, pygame.SRCALPHA)
             obscurite = self._obscurite
             obscurite.fill((0, 0, 10, 220))
-
             rayon = RAYON_HALO_JOUEUR
             cx = mon_joueur.rect.centerx - camera_offset[0]
             cy = mon_joueur.rect.centery - camera_offset[1]
             obscurite.blit(self._masque_halo_joueur,
                            (cx - rayon - 1, cy - rayon - 1),
                            special_flags=pygame.BLEND_RGBA_MIN)
-
             if self.torche.allumee:
                 rayon_t = RAYON_LUMIERE_TORCHE
                 tx = self.torche.x + TAILLE_TUILE // 2 - camera_offset[0]
-                ty = self.torche.y + TAILLE_TUILE - camera_offset[1]
+                ty = self.torche.y + TAILLE_TUILE     - camera_offset[1]
                 obscurite.blit(self._masque_halo_torche,
                                (tx - rayon_t - 1, ty - rayon_t - 1),
                                special_flags=pygame.BLEND_RGBA_MIN)
-
             surface_virtuelle.blit(obscurite, (0, 0))
 
         if mon_joueur and mon_joueur.pv <= 0:
@@ -300,11 +319,11 @@ class BoucleJeuMixin:
         music.demarrer()
 
         while self.etat_jeu == "EN_JEU" and self.running:
-            pos_souris = pygame.mouse.get_pos()
+            pos_souris       = pygame.mouse.get_pos()
             commandes_a_envoyer = {
                 'clavier': {'gauche': False, 'droite': False,
                             'saut': False, 'attaque': False, 'dash': False},
-                'echo': False
+                'echo': False,
             }
 
             if self.etat_jeu_interne == "JEU":
@@ -319,9 +338,11 @@ class BoucleJeuMixin:
                 send_complet(self.client_socket, commandes_a_envoyer)
                 donnees_recues = recv_complet(self.client_socket)
 
+                # --- Vis map ---
                 if donnees_recues.get('vis_map') is not None:
                     self.vis_map_locale = donnees_recues['vis_map']
 
+                # --- Joueurs ---
                 ids_serveur = {j['id'] for j in donnees_recues['joueurs']}
                 for id_local in list(self.joueurs_locaux.keys()):
                     if id_local not in ids_serveur:
@@ -337,13 +358,16 @@ class BoucleJeuMixin:
                         music.jouer_sfx(nom_son)
                     mon_joueur_local.sons_a_jouer.clear()
 
+                # --- Ennemis ---
                 ids_e = {e['id'] for e in donnees_recues['ennemis']}
                 for id_local in list(self.ennemis_locaux.keys()):
                     if id_local not in ids_e:
                         del self.ennemis_locaux[id_local]
                 for de in donnees_recues['ennemis']:
                     if de['id'] not in self.ennemis_locaux:
-                        self.ennemis_locaux[de['id']] = Ennemi(de['x'], de['y'], de['id'])
+                        self.ennemis_locaux[de['id']] = Ennemi(
+                            de['x'], de['y'], de['id'],
+                            de.get('type_ennemi', 'garde'))
                     self.ennemis_locaux[de['id']].set_etat(de)
 
                 for ennemi_local in self.ennemis_locaux.values():
@@ -351,6 +375,7 @@ class BoucleJeuMixin:
                         music.jouer_sfx(nom_son)
                     ennemi_local.sons_a_jouer.clear()
 
+                # --- Âmes perdues ---
                 ids_a = {a['id'] for a in donnees_recues.get('ames_perdues', [])}
                 for id_local in list(self.ames_perdues_locales.keys()):
                     if id_local not in ids_a:
@@ -361,47 +386,63 @@ class BoucleJeuMixin:
                             da['x'], da['y'], da['id_joueur'])
                     self.ames_perdues_locales[da['id']].set_etat(da)
 
+                # --- Âmes libres ---
                 ids_al = {a['id'] for a in donnees_recues.get('ames_libres', [])}
                 for id_local in list(self.ames_libres_locales.keys()):
                     if id_local not in ids_al:
                         del self.ames_libres_locales[id_local]
                 for dal in donnees_recues.get('ames_libres', []):
                     if dal['id'] not in self.ames_libres_locales:
-                        self.ames_libres_locales[dal['id']] = AmeLibre(dal['x'], dal['y'], dal.get('valeur'))
+                        self.ames_libres_locales[dal['id']] = AmeLibre(
+                            dal['x'], dal['y'], dal.get('valeur'))
                     self.ames_libres_locales[dal['id']].set_etat(dal)
 
-                # Boss
+                # --- Orbes de capacité ---
+                ids_orbes = {o['id'] for o in donnees_recues.get('orbes_capacite', [])}
+                for id_local in list(self.orbes_capacite_locaux.keys()):
+                    if id_local not in ids_orbes:
+                        del self.orbes_capacite_locaux[id_local]
+                for do in donnees_recues.get('orbes_capacite', []):
+                    if do['id'] not in self.orbes_capacite_locaux:
+                        self.orbes_capacite_locaux[do['id']] = OrbeCapacite(
+                            do['x'], do['y'], do['capacite'])
+                    self.orbes_capacite_locaux[do['id']].set_etat(do)
+
+                # --- Porte ---
+                data_porte = donnees_recues.get('porte')
+                if data_porte:
+                    if self.porte_locale is None:
+                        self.porte_locale = Porte(data_porte['x'], data_porte['y'])
+                    self.porte_locale.set_etat(data_porte)
+
+                # --- Boss ---
                 data_boss = donnees_recues.get('boss_room')
                 if data_boss and not data_boss['boss_defeated']:
                     if self.boss_local is None:
-                        _base = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
-                        self.boss_local = DemonSlimeBoss(x=0, y=0,json_path=os.path.join(_base, "demon_slime.json"),png_path=os.path.join(_base, "assets", "demon_slime.png"))
-                        self.boss_local.set_etat(data_boss['boss'])
+                        _base = (sys._MEIPASS if getattr(sys, 'frozen', False)
+                                 else os.path.dirname(os.path.abspath(__file__)))
+                        self.boss_local = DemonSlimeBoss(
+                            x=0, y=0,
+                            json_path=os.path.join(_base, "demon_slime.json"),
+                            png_path =os.path.join(_base, "assets", "demon_slime.png"))
+                    self.boss_local.set_etat(data_boss['boss'])
 
-                # Clé
+                # --- Clé ---
                 data_cle = donnees_recues.get('cle')
                 if data_cle:
                     if self.cle_locale is None:
                         self.cle_locale = Cle(data_cle['x'], data_cle['y'])
                     self.cle_locale.set_etat(data_cle)
 
-                # Torche
+                # --- Torche ---
                 torche_serveur = donnees_recues.get('torche_allumee', False)
                 if torche_serveur != self.torche.allumee:
                     self.torche.allumee = torche_serveur
                     if torche_serveur:
                         self.torche.particules = []
 
-                # Boss (état pour HUD)
+                # --- Données boss pour HUD ---
                 self._derniere_data_boss = donnees_recues.get('boss_room')
-                data_boss = self._derniere_data_boss
-                if data_boss and not data_boss['boss_defeated']:
-                    if self.boss_local is None:
-                        _base = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
-                        self.boss_local = DemonSlimeBoss(x=0, y=0,
-                                json_path=os.path.join(_base, "demon_slime.json"),
-                                png_path=os.path.join(_base, "assets", "demon_slime.png"))
-                    self.boss_local.set_etat(data_boss['boss'])
 
                 self.dessiner_jeu()
                 if self.etat_jeu_interne == "PAUSE":
@@ -414,7 +455,7 @@ class BoucleJeuMixin:
                 self.etat_jeu = "MENU_PRINCIPAL"
                 break
             except socket.timeout:
-                print("[CLIENT] Timeout réseau — serveur ne répond plus")
+                print("[CLIENT] Timeout réseau")
                 self.message_erreur_connexion = "Connexion perdue (timeout)."
                 self.nettoyer_connexion()
                 self.etat_jeu = "MENU_PRINCIPAL"
@@ -428,7 +469,7 @@ class BoucleJeuMixin:
             except (pickle.UnpicklingError,) as e:
                 print(f"[CLIENT] Paquet corrompu ignoré: {e}")
             except ValueError as e:
-                print(f"[CLIENT] Erreur valeur (probablement Pygame): {e}")
+                print(f"[CLIENT] Erreur valeur: {e}")
                 import traceback; traceback.print_exc()
 
             pygame.display.flip()
@@ -439,12 +480,11 @@ class BoucleJeuMixin:
     # ==================================================================
 
     def lancer_partie_locale(self, id_slot, est_nouvelle_partie=False):
-        type_lancement = "nouvelle" if est_nouvelle_partie else "charger"
-        print(f"[CLIENT] Demarrage serveur local (slot {id_slot}, {type_lancement})")
-        thread_serveur = threading.Thread(
+        type_lancement  = "nouvelle" if est_nouvelle_partie else "charger"
+        thread_serveur  = threading.Thread(
             target=serveur.main,
             args=(id_slot, type_lancement),
-            daemon=True
+            daemon=True,
         )
         thread_serveur.start()
         connecte = False
@@ -456,14 +496,12 @@ class BoucleJeuMixin:
         if connecte:
             self.etat_jeu = "EN_JEU"
         else:
-            print("[CLIENT] Échec connexion serveur")
             self.etat_jeu = "MENU_PRINCIPAL"
 
     def connecter(self, hote):
         try:
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.client_socket.settimeout(5)
-            print(f"[CLIENT] Connexion a {hote}:{PORT_SERVEUR}...")
             self.client_socket.connect((hote, PORT_SERVEUR))
             self.client_socket.settimeout(10.0)
             self.client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -471,7 +509,7 @@ class BoucleJeuMixin:
 
             if isinstance(reponse, dict) and "erreur" in reponse:
                 if reponse["erreur"] == "SERVEUR_PLEIN":
-                    self.message_erreur_connexion = "Le serveur est plein !\n(3/3 joueurs connectés)"
+                    self.message_erreur_connexion = "Le serveur est plein !\n(3/3 joueurs)"
                     self.client_socket.close()
                     self.client_socket = None
                     return False
@@ -484,19 +522,20 @@ class BoucleJeuMixin:
             else:
                 dossier_script = os.path.dirname(os.path.abspath(__file__))
             chemin_map = os.path.join(dossier_script, "assets/MapS2.tmx")
-            self.carte = Carte(chemin_map)
-            self.vis_map_locale = self.carte.creer_carte_visibilite_vierge()
-            self.joueurs_locaux      = {}
-            self.ennemis_locaux      = {}
-            self.ames_perdues_locales = {}
-            self.ames_libres_locales  = {}
-            self.cle_locale           = None
+            self.carte             = Carte(chemin_map)
+            self.vis_map_locale    = self.carte.creer_carte_visibilite_vierge()
+            self.joueurs_locaux    = {}
+            self.ennemis_locaux    = {}
+            self.ames_perdues_locales  = {}
+            self.ames_libres_locales   = {}
+            self.orbes_capacite_locaux = {}   # NOUVEAU
+            self.porte_locale          = None  # NOUVEAU
+            self.cle_locale            = None
             return True
 
         except socket.error as e:
             print(f"[CLIENT] Echec connexion: {e}")
-            self.message_erreur_connexion = (
-                f"Impossible de se connecter\nau serveur : {hote}")
+            self.message_erreur_connexion = f"Impossible de se connecter\nau serveur : {hote}"
             self.client_socket = None
             return False
 
@@ -506,13 +545,15 @@ class BoucleJeuMixin:
                 self.client_socket.close()
             except Exception:
                 pass
-        self.client_socket = None
-        self.mon_id = -1
-        self.joueurs_locaux = {}
-        self.ennemis_locaux = {}
-        self.ames_perdues_locales = {}
-        self.ames_libres_locales = {}
-        self.cle_locale  = None
-        self.carte = None
-        self.vis_map_locale = None
-        self.etat_jeu_interne = "JEU"
+        self.client_socket         = None
+        self.mon_id                = -1
+        self.joueurs_locaux        = {}
+        self.ennemis_locaux        = {}
+        self.ames_perdues_locales  = {}
+        self.ames_libres_locales   = {}
+        self.orbes_capacite_locaux = {}   # NOUVEAU
+        self.porte_locale          = None  # NOUVEAU
+        self.cle_locale            = None
+        self.carte                 = None
+        self.vis_map_locale        = None
+        self.etat_jeu_interne      = "JEU"

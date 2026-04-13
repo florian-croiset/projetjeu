@@ -1,6 +1,7 @@
 # ui/tutoriel.py
-# Tutoriel interactif affiché au premier lancement du jeu.
-# Composé de plusieurs "slides" que le joueur peut parcourir.
+# Tutoriel refactorisé : 2 slides uniquement.
+#   Slide 1 — Mécaniques de gameplay (contrôles, système, capacités)
+#   Slide 2 — Lore et contexte narratif
 
 import pygame
 import math
@@ -9,307 +10,72 @@ from ui.effets_visuels import dessiner_fond_echo
 from ui.bouton import Bouton
 
 
-# ===========================================================
-#  DONNÉES DES SLIDES
-# ===========================================================
-
-def _get_slides(params_controles):
-    """Construit la liste des slides en fonction des contrôles configurés."""
-
-    def touche(cle):
-        return params_controles.get(cle, "?").upper()
-
-    slides = [
-        # --- 0 : Bienvenue ---
-        {
-            "titre": "Bienvenue dans Écho !",
-            "sous_titre": "Appuie sur → ou ESPACE pour continuer",
-            "icone": "🎮",
-            "blocs": [
-                {
-                    "texte": (
-                        "Écho est un jeu d'action-plateforme 2D où tu evolues\n"
-                        "dans un monde plongé dans l'obscurité totale.\n\n"
-                        "Tu ne vois rien... sauf ce que tes échos te révèlent."
-                    ),
-                    "couleur": COULEUR_TEXTE,
-                },
-            ],
-            "dessin": "bienvenue",
-        },
-
-        # --- 1 : Déplacement ---
-        {
-            "titre": "Se déplacer",
-            "sous_titre": "Les bases du mouvement",
-            "icone": "🏃",
-            "blocs": [
-                {
-                    "label": f"[ {touche('gauche')} ]",
-                    "texte": "Aller à gauche",
-                },
-                {
-                    "label": f"[ {touche('droite')} ]",
-                    "texte": "Aller à droite",
-                },
-                {
-                    "label": f"[ {touche('saut')} ]",
-                    "texte": "Sauter  (appuie à nouveau en l'air pour le double saut, si débloqué)",
-                },
-                {
-                    "label": f"[ {touche('dash')} ]",
-                    "texte": "Dash — propulsion rapide (si débloqué)",
-                },
-            ],
-            "dessin": "deplacement",
-        },
-
-        # --- 2 : Écholocalisation ---
-        {
-            "titre": "L'Écholocalisation",
-            "sous_titre": "Ta seule façon de voir",
-            "icone": "🔊",
-            "blocs": [
-                {
-                    "texte": (
-                        "Le monde est dans le noir. Appuie sur\n"
-                        f"[ {touche('echo')} ] pour émettre un écho sonore.\n\n"
-                        "L'écho se propage en cercle autour de toi et révèle\n"
-                        "les murs, obstacles et points d'intérêt proches.\n\n"
-                        "⚠  Cooldown : 6 secondes entre chaque écho.\n"
-                        "     Utilise-le avec intelligence !"
-                    ),
-                    "couleur": COULEUR_CYAN,
-                },
-            ],
-            "dessin": "echo",
-        },
-
-        # --- 3 : Combat ---
-        {
-            "titre": "Le Combat",
-            "sous_titre": "Attaque et survie",
-            "icone": "⚔️",
-            "blocs": [
-                {
-                    "label": f"[ {touche('attaque')} ]",
-                    "texte": "Attaque de mêlée — portée courte, devant toi",
-                },
-                {
-                    "texte": (
-                        "Les ennemis patrouillent dans le noir.\n"
-                        "Tu as 5 points de vie (PV). Chaque contact en retire 1.\n\n"
-                        "Après avoir pris un coup, tu es invincible\n"
-                        "pendant 1 seconde — profites-en pour fuir !"
-                    ),
-                    "couleur": COULEUR_TEXTE,
-                },
-            ],
-            "dessin": "combat",
-        },
-
-        # --- 4 : Âmes perdues ---
-        {
-            "titre": "Les Âmes Perdues",
-            "sous_titre": "Inspiré de Dark Souls",
-            "icone": "💜",
-            "blocs": [
-                {
-                    "texte": (
-                        "Quand tu meurs, tu laisses une Âme Perdue\n"
-                        "à l'endroit de ta mort. Elle contient tout ton argent.\n\n"
-                        "Tu réapparais au dernier checkpoint, sans argent.\n\n"
-                        "Pour récupérer tes âmes :\n"
-                        f"  → Retourne à ta mort et attaque l'âme [ {touche('attaque')} ]\n\n"
-                        "⚠  Mourir avant de récupérer ton âme la détruit définitivement !"
-                    ),
-                    "couleur": COULEUR_VIOLET_CLAIR,
-                },
-            ],
-            "dessin": "ame",
-        },
-
-        # --- 5 : Checkpoints & Sauvegarde ---
-        {
-            "titre": "Checkpoints & Sauvegarde",
-            "sous_titre": "Progresser sans perdre sa progression",
-            "icone": "💾",
-            "blocs": [
-                {
-                    "texte": (
-                        "Les tuiles CYAN sur la carte sont des checkpoints.\n\n"
-                        "Passe dessus pour :\n"
-                        "  ✔  Sauvegarder ta position\n"
-                        "  ✔  Sauvegarder la carte révélée\n"
-                        "  ✔  Sauvegarder ton argent et tes capacités\n\n"
-                        "En cas de mort tu réapparais au dernier checkpoint activé.\n"
-                        "Les tuiles grises foncées sont des repères toujours visibles."
-                    ),
-                    "couleur": COULEUR_SAUVEGARDE,
-                },
-            ],
-            "dessin": "checkpoint",
-        },
-
-        # --- 6 : Capacités débloquables ---
-        {
-            "titre": "Capacités Débloquables",
-            "sous_titre": "Explore pour progresser",
-            "icone": "⬆️",
-            "blocs": [
-                {
-                    "label": "Double Saut",
-                    "texte": f"Appuie sur [ {touche('saut')} ] une 2ᵉ fois en l'air pour sauter plus haut.",
-                },
-                {
-                    "label": "Dash",
-                    "texte": f"[ {touche('dash')} ] — propulsion rapide. 1 seul en l'air avant de retoucher le sol.",
-                },
-                {
-                    "texte": (
-                        "\nCes capacités sont permanentes une fois débloquées\n"
-                        "et persistent entre les sessions de jeu."
-                    ),
-                    "couleur": COULEUR_TEXTE_SOMBRE,
-                },
-            ],
-            "dessin": "capacites",
-        },
-
-        # --- 7 : Multijoueur ---
-        {
-            "titre": "Multijoueur Coopératif",
-            "sous_titre": "Jusqu'à 3 joueurs en réseau local",
-            "icone": "👥",
-            "blocs": [
-                {
-                    "label": "Héberger",
-                    "texte": "Lance le serveur. Les autres se connectent avec ton IP locale (visible dans Paramètres).",
-                },
-                {
-                    "label": "Rejoindre",
-                    "texte": "Entre l'IP de l'hôte pour rejoindre sa partie.",
-                },
-                {
-                    "texte": (
-                        "\nChaque joueur a sa propre carte de visibilité.\n"
-                        "Les ennemis et les âmes sont partagés entre tous."
-                    ),
-                    "couleur": COULEUR_TEXTE_SOMBRE,
-                },
-            ],
-            "dessin": "multi",
-        },
-
-        # --- 8 : Récapitulatif touches ---
-        {
-            "titre": "Récapitulatif des Touches",
-            "sous_titre": "Tu peux les modifier dans Paramètres",
-            "icone": "⌨️",
-            "blocs": [
-                {"label": f"[ {touche('gauche')} ] / [ {touche('droite')} ]", "texte": "Déplacement"},
-                {"label": f"[ {touche('saut')} ]",    "texte": "Saut / Double saut"},
-                {"label": f"[ {touche('dash')} ]",    "texte": "Dash"},
-                {"label": f"[ {touche('echo')} ]",    "texte": "Écho (révèle l'environnement)"},
-                {"label": f"[ {touche('attaque')} ]", "texte": "Attaque"},
-                {"label": "[ ÉCHAP ]",                "texte": "Pause"},
-            ],
-            "dessin": "recap",
-        },
-
-        # --- 9 : C'est parti ! ---
-        {
-            "titre": "C'est parti !",
-            "sous_titre": "Bonne exploration dans l'obscurité… 🎮",
-            "icone": "🚀",
-            "blocs": [
-                {
-                    "texte": (
-                        "Tu peux relancer ce tutoriel à tout moment\n"
-                        "depuis le menu principal.\n\n"
-                        "Astuce : mémorise la carte révélée,\n"
-                        "elle reste permanente entre les sessions.\n\n"
-                        "Bonne chance !"
-                    ),
-                    "couleur": COULEUR_CYAN,
-                },
-            ],
-            "dessin": "fin",
-        },
-    ]
-
-    return slides
-
-
-# ===========================================================
-#  CLASSE PRINCIPALE
-# ===========================================================
-
 class Tutoriel:
     """
-    Écran de tutoriel interactif.
-    Utilisation :
-        tuto = Tutoriel(ecran, largeur, hauteur, params_controles, police_titre, police_texte, police_bouton)
-        tuto.lancer()   # bloquant jusqu'à la fin
+    Tutoriel en 2 slides purement informatives.
+    Usage :
+        tuto = Tutoriel(ecran, largeur, hauteur, params_controles,
+                        police_titre, police_texte, police_bouton, police_petit)
+        tuto.lancer()
     """
 
     def __init__(self, ecran, largeur, hauteur, params_controles,
                  police_titre, police_texte, police_bouton, police_petit=None):
-        self.ecran = ecran
+        self.ecran   = ecran
         self.largeur = largeur
         self.hauteur = hauteur
-        self.cx = largeur // 2
-        self.cy = hauteur // 2
+        self.cx      = largeur // 2
+        self.cy      = hauteur // 2
 
-        self.police_titre   = police_titre
-        self.police_texte   = police_texte
-        self.police_bouton  = police_bouton
-        self.police_petit   = police_petit or police_texte
+        self.police_titre  = police_titre
+        self.police_texte  = police_texte
+        self.police_bouton = police_bouton
+        self.police_petit  = police_petit or police_texte
 
-        self.slides = _get_slides(params_controles)
-        self.index  = 0
-        self.total  = len(self.slides)
+        self.params_controles = params_controles
 
-        self.horloge    = pygame.time.Clock()
+        self.index    = 0
+        self.total    = 2
+        self.horloge  = pygame.time.Clock()
         self.temps_anim = 0
 
-        # Boutons navigation
         bh = max(40, hauteur // 22)
         bw = max(160, largeur // 9)
 
-        self.btn_suivant  = Bouton(self.cx + 20,       hauteur - bh - 30, bw, bh, "Suivant  →", police_bouton)
-        self.btn_precedent = Bouton(self.cx - bw - 20, hauteur - bh - 30, bw, bh, "←  Précédent", police_bouton, style="ghost")
-        self.btn_passer   = Bouton(largeur - 220,       30, 190, bh - 8, "Passer le tutoriel", police_petit or police_bouton, style="ghost")
-        self.btn_fermer   = Bouton(self.cx - bw // 2,  hauteur - bh - 30, bw, bh, "Commencer !",   police_bouton, style="primary")
+        self.btn_suivant   = Bouton(self.cx + 20, hauteur - bh - 30,
+                                    bw, bh, "Suivant  →", police_bouton)
+        self.btn_precedent = Bouton(self.cx - bw - 20, hauteur - bh - 30,
+                                    bw, bh, "←  Retour", police_bouton, style="ghost")
+        self.btn_fermer    = Bouton(self.cx - bw // 2, hauteur - bh - 30,
+                                    bw, bh, "Commencer !", police_bouton)
+        self.btn_passer    = Bouton(largeur - 220, 30,
+                                    190, bh - 8, "Passer", police_petit or police_bouton,
+                                    style="ghost")
 
-        # Surface semi-trans pour les panneaux
-        self._panneau = pygame.Surface((largeur, hauteur), pygame.SRCALPHA)
-
-    # ----------------------------------------------------------
-    #  BOUCLE PRINCIPALE
-    # ----------------------------------------------------------
+    # ------------------------------------------------------------------
+    #  BOUCLE
+    # ------------------------------------------------------------------
 
     def lancer(self):
-        """Lance le tutoriel. Retourne quand l'utilisateur a terminé ou passé."""
         running = True
         while running:
             self.temps_anim = pygame.time.get_ticks()
-            pos_souris = pygame.mouse.get_pos()
+            pos = pygame.mouse.get_pos()
 
-            # --- Événements ---
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     import sys; sys.exit()
-
                 if event.type == pygame.KEYDOWN:
                     if event.key in (pygame.K_RIGHT, pygame.K_SPACE, pygame.K_RETURN):
-                        self._avancer()
-                    elif event.key == pygame.K_LEFT:
-                        self._reculer()
+                        if self.index < self.total - 1:
+                            self.index += 1
+                        else:
+                            running = False
+                    elif event.key == pygame.K_LEFT and self.index > 0:
+                        self.index -= 1
                     elif event.key == pygame.K_ESCAPE:
                         running = False
-
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if self.btn_passer.rect.collidepoint(event.pos):
                         running = False
@@ -318,279 +84,278 @@ class Tutoriel:
                             running = False
                     else:
                         if self.btn_suivant.rect.collidepoint(event.pos):
-                            self._avancer()
-                        if self.btn_precedent.rect.collidepoint(event.pos):
-                            self._reculer()
+                            self.index += 1
+                    if self.index > 0 and self.btn_precedent.rect.collidepoint(event.pos):
+                        self.index -= 1
 
-            # Survol
-            for btn in [self.btn_suivant, self.btn_precedent, self.btn_passer, self.btn_fermer]:
-                btn.verifier_survol(pos_souris)
+            for btn in [self.btn_suivant, self.btn_precedent,
+                        self.btn_fermer, self.btn_passer]:
+                btn.verifier_survol(pos)
 
-            # Si on arrive à la dernière slide et qu'on avance, on ferme
-            if self.index >= self.total:
-                running = False
-                break
-
-            # --- Dessin ---
             self._dessiner()
             pygame.display.flip()
             self.horloge.tick(FPS)
 
-    # ----------------------------------------------------------
-    #  NAVIGATION
-    # ----------------------------------------------------------
-
-    def _avancer(self):
-        if self.index < self.total - 1:
-            self.index += 1
-        else:
-            self.index = self.total  # signal de fin
-
-    def _reculer(self):
-        if self.index > 0:
-            self.index -= 1
-
-    # ----------------------------------------------------------
+    # ------------------------------------------------------------------
     #  RENDU
-    # ----------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def _dessiner(self):
-        # Fond animé (réutilise l'effet des menus)
         dessiner_fond_echo(self.ecran, self.largeur, self.hauteur, self.temps_anim)
 
-        slide = self.slides[self.index]
-
-        # Zone principale : panneau centré
-        pw = int(self.largeur * 0.72)
-        ph = int(self.hauteur * 0.78)
+        pw = int(self.largeur * 0.88)
+        ph = int(self.hauteur * 0.80)
         px = (self.largeur - pw) // 2
-        py = int(self.hauteur * 0.07)
+        py = int(self.hauteur * 0.06)
 
-        self._dessiner_panneau(px, py, pw, ph)
-        self._dessiner_contenu_slide(slide, px, py, pw, ph)
-        self._dessiner_navigation()
-        self._dessiner_indicateur()
+        self._panneau(px, py, pw, ph)
 
-    def _dessiner_panneau(self, x, y, w, h):
-        """Panneau semi-transparent avec bordure néon."""
+        if self.index == 0:
+            self._slide_gameplay(px, py, pw, ph)
+        else:
+            self._slide_lore(px, py, pw, ph)
+
+        self._navigation()
+        self._indicateur()
+
+    def _panneau(self, x, y, w, h):
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
-        surf.fill((10, 8, 28, 210))
+        surf.fill((10, 8, 28, 215))
         self.ecran.blit(surf, (x, y))
-
-        # Bordure cyan
         pulse = 0.7 + 0.3 * math.sin(self.temps_anim / 900)
-        alpha_bord = int(180 * pulse)
-        bord = pygame.Surface((w, h), pygame.SRCALPHA)
-        pygame.draw.rect(bord, (*COULEUR_CYAN, alpha_bord), bord.get_rect(), 2, border_radius=10)
+        bord  = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(bord, (*COULEUR_CYAN, int(180 * pulse)),
+                         bord.get_rect(), 2, border_radius=10)
         self.ecran.blit(bord, (x, y))
 
-    def _dessiner_contenu_slide(self, slide, px, py, pw, ph):
-        """Dessine le titre, l'icône et les blocs de texte de la slide."""
-        marge_h = int(pw * 0.06)
-        marge_v = int(ph * 0.07)
-        y_cur   = py + marge_v
+    # ---- Slide 0 : Mécaniques ----------------------------------------
 
-        # -- Icône --
-        icone_surf = self.police_titre.render(slide.get("icone", ""), True, COULEUR_CYAN)
-        self.ecran.blit(icone_surf, (px + marge_h, y_cur))
+    def _slide_gameplay(self, px, py, pw, ph):
+        ctrl   = self.params_controles
+        mh     = int(pw * 0.045)
+        mv     = int(ph * 0.055)
+        col_w  = (pw - mh * 3) // 2
+        col1_x = px + mh
+        col2_x = px + mh * 2 + col_w
+        y0     = py + mv
 
-        # -- Titre --
-        titre_surf = self.police_titre.render(slide["titre"], True, COULEUR_CYAN)
-        self.ecran.blit(titre_surf, (px + marge_h + icone_surf.get_width() + 18, y_cur))
-        y_cur += titre_surf.get_height() + 6
+        # Titre de la slide
+        titre = self.police_titre.render("Mécaniques de jeu", True, COULEUR_CYAN)
+        self.ecran.blit(titre, (col1_x, y0))
+        y0 += titre.get_height() + 4
 
-        # -- Sous-titre --
-        if slide.get("sous_titre"):
-            st = self.police_petit.render(slide["sous_titre"], True, COULEUR_TEXTE_SOMBRE)
-            self.ecran.blit(st, (px + marge_h + icone_surf.get_width() + 18, y_cur))
-            y_cur += st.get_height() + 4
+        sous = self.police_petit.render(
+            "Tout ce dont tu as besoin pour survivre dans l'obscurité",
+            True, COULEUR_TEXTE_SOMBRE)
+        self.ecran.blit(sous, (col1_x, y0))
+        y0 += sous.get_height() + 10
 
-        # -- Séparateur --
-        sep_y = y_cur + 8
-        sep_surf = pygame.Surface((pw - 2 * marge_h, 1), pygame.SRCALPHA)
-        sep_surf.fill((*COULEUR_CYAN, 80))
-        self.ecran.blit(sep_surf, (px + marge_h, sep_y))
-        y_cur = sep_y + 18
+        # Séparateur
+        sep = pygame.Surface((pw - mh * 2, 1), pygame.SRCALPHA)
+        sep.fill((*COULEUR_CYAN, 70))
+        self.ecran.blit(sep, (col1_x, y0))
+        y0 += 14
 
-        # -- Illustration à droite (selon type) --
-        ilu_x = px + pw - int(pw * 0.30) - marge_h
-        ilu_y = py + int(ph * 0.18)
-        ilu_w = int(pw * 0.28)
-        ilu_h = int(ph * 0.55)
-        self._dessiner_illustration(slide.get("dessin", ""), ilu_x, ilu_y, ilu_w, ilu_h)
+        # Colonnes
+        self._colonne_controles(col1_x, y0, col_w, ctrl)
+        self._colonne_systemes(col2_x, y0, col_w)
 
-        # Zone texte (côté gauche)
-        zone_texte_w = int(pw * 0.60) - marge_h
+    def _touche(self, cle: str) -> str:
+        return self.params_controles.get(cle, '?').upper()
 
-        # -- Blocs de contenu --
-        for bloc in slide.get("blocs", []):
-            couleur = bloc.get("couleur", COULEUR_TEXTE)
+    def _titre_section(self, x, y, texte):
+        s = self.police_bouton.render(texte, True, COULEUR_VIOLET_CLAIR)
+        self.ecran.blit(s, (x, y))
+        return y + s.get_height() + 6
 
-            if "label" in bloc:
-                # Ligne label + texte
-                label_surf = self.police_bouton.render(bloc["label"], True, COULEUR_CYAN)
-                self.ecran.blit(label_surf, (px + marge_h, y_cur))
-                txt_surf = self.police_texte.render(bloc["texte"], True, couleur)
-                self.ecran.blit(txt_surf, (px + marge_h + label_surf.get_width() + 14, y_cur + 4))
-                y_cur += label_surf.get_height() + 10
-            else:
-                # Bloc de texte multi-lignes
-                for ligne in bloc["texte"].split("\n"):
-                    if ligne.strip() == "":
-                        y_cur += int(self.police_texte.get_height() * 0.6)
-                        continue
-                    s = self.police_texte.render(ligne, True, couleur)
-                    if s.get_width() > zone_texte_w:
-                        # Troncature simple
-                        while s.get_width() > zone_texte_w and len(ligne) > 10:
-                            ligne = ligne[:-1]
-                        s = self.police_texte.render(ligne + "…", True, couleur)
-                    self.ecran.blit(s, (px + marge_h, y_cur))
-                    y_cur += s.get_height() + 6
-                y_cur += 8
+    def _ligne(self, x, y, label, desc, couleur_label=None):
+        if couleur_label is None:
+            couleur_label = COULEUR_CYAN
+        p = self.police_petit
+        lbl = p.render(label, True, couleur_label)
+        self.ecran.blit(lbl, (x, y))
+        dsc = p.render(desc, True, COULEUR_TEXTE)
+        self.ecran.blit(dsc, (x + lbl.get_width() + 10, y))
+        return y + max(lbl.get_height(), dsc.get_height()) + 5
 
-    def _dessiner_illustration(self, type_dessin, x, y, w, h):
-        """Dessine une illustration minimaliste selon le type de slide."""
-        surf = pygame.Surface((w, h), pygame.SRCALPHA)
-        cx, cy = w // 2, h // 2
-        t = self.temps_anim
+    def _para(self, x, y, texte, couleur=None, max_w=None):
+        if couleur is None:
+            couleur = COULEUR_TEXTE
+        p = self.police_petit
+        lignes = texte.split('\n')
+        for l in lignes:
+            if l.strip() == '':
+                y += int(p.get_height() * 0.5)
+                continue
+            s = p.render(l, True, couleur)
+            self.ecran.blit(s, (x, y))
+            y += s.get_height() + 4
+        return y + 4
 
-        if type_dessin == "bienvenue":
-            # Titre animé en écho
-            pulse = 0.5 + 0.5 * math.sin(t / 700)
-            for r in [80, 55, 30]:
-                a = int(pulse * 120 * (1 - r / 90))
-                pygame.draw.circle(surf, (*COULEUR_CYAN, a), (cx, cy), r, 2)
-            pygame.draw.circle(surf, COULEUR_CYAN, (cx, cy), 10)
+    def _colonne_controles(self, x, y, w, ctrl):
+        y = self._titre_section(x, y, "⌨  Contrôles")
 
-        elif type_dessin == "deplacement":
-            # Personnage stylisé avec flèches
-            pygame.draw.rect(surf, COULEUR_JOUEUR, (cx - 8, cy - 15, 16, 20), border_radius=3)
-            pygame.draw.circle(surf, COULEUR_JOUEUR, (cx, cy - 22), 8)
-            # Flèches gauche/droite
-            pygame.draw.polygon(surf, COULEUR_CYAN, [(cx - 35, cy), (cx - 22, cy - 10), (cx - 22, cy + 10)])
-            pygame.draw.polygon(surf, COULEUR_CYAN, [(cx + 35, cy), (cx + 22, cy - 10), (cx + 22, cy + 10)])
-            # Sol
-            pygame.draw.line(surf, COULEUR_MUR_VISIBLE, (cx - 50, cy + 10), (cx + 50, cy + 10), 3)
+        y = self._ligne(x, y, f"[ {self._touche('gauche')} / {self._touche('droite')} ]",
+                        "Déplacement horizontal")
+        y = self._ligne(x, y, f"[ {self._touche('saut')} ]",
+                        "Saut  (×2 si Double Saut débloqué)")
+        y = self._ligne(x, y, f"[ {self._touche('dash')} ]",
+                        "Dash  (si débloqué)")
+        y = self._ligne(x, y, f"[ {self._touche('echo')} ]",
+                        "Écho — révèle l'environnement")
+        y = self._ligne(x, y, f"[ {self._touche('attaque')} ]",
+                        "Attaque de mêlée")
+        y = self._ligne(x, y, "[ ÉCHAP ]", "Pause")
+        y += 12
 
-        elif type_dessin == "echo":
-            # Ondes concentriques en expansion
-            phase = (t % 2400) / 2400
-            for i in range(4):
-                r_base = 20 + i * 22
-                r = int(r_base + phase * 25) % (h // 2)
-                a = max(0, int(200 * (1 - phase - i * 0.18)))
-                if a > 0:
-                    pygame.draw.circle(surf, (*COULEUR_CYAN, a), (cx, cy), r, 2)
-            pygame.draw.circle(surf, COULEUR_VIOLET, (cx, cy), 8)
+        y = self._titre_section(x, y, "⚔  Combat & Survie")
+        y = self._para(x, y,
+            "Tu as 5 PV. Chaque contact ennemi en retire 1.\n"
+            "1 seconde d'invincibilité après un coup reçu.\n\n"
+            "Les ennemis ont entre 1 et 3 PV :\n"
+            "  · 1 PV — patrouilleurs rapides\n"
+            "  · 2 PV — gardes standard\n"
+            "  · 3 PV — gardiens lourds")
 
-        elif type_dessin == "combat":
-            # Joueur vs ennemi
-            pygame.draw.rect(surf, COULEUR_JOUEUR,  (cx - 40, cy - 15, 16, 22), border_radius=3)
-            pygame.draw.circle(surf, COULEUR_JOUEUR, (cx - 32, cy - 24), 8)
-            pygame.draw.rect(surf, COULEUR_ENNEMI,   (cx + 18, cy - 15, 16, 22), border_radius=3)
-            pygame.draw.circle(surf, COULEUR_ENNEMI, (cx + 26, cy - 24), 8)
-            # Trait d'attaque animé
-            blink = int(t / 300) % 2
-            if blink:
-                pygame.draw.line(surf, COULEUR_ATTAQUE, (cx - 22, cy - 5), (cx + 17, cy - 5), 3)
+    def _colonne_systemes(self, x, y, w):
+        y = self._titre_section(x, y, "🔊  Écholocalisation")
+        y = self._para(x, y,
+            "Le monde est dans le noir absolu.\n"
+            "Active l'écho pour révéler les murs et\n"
+            "obstacles proches. Un indicateur circulaire\n"
+            "montre la durée restante du cooldown.\n\n"
+            "Cooldown : 2.5 s  |  Portée : 150 px")
+        y += 8
 
-        elif type_dessin == "ame":
-            # Silhouette âme + icône argent
-            pulse = 0.6 + 0.4 * math.sin(t / 600)
-            r = int(20 * pulse)
-            pygame.draw.ellipse(surf, (*COULEUR_VIOLET, 180), (cx - r, cy - r - 5, r * 2, r * 2 + 10))
-            # Particules flottantes
-            for i in range(5):
-                angle = t / 1000 + i * math.pi * 2 / 5
-                px2 = int(cx + math.cos(angle) * 35)
-                py2 = int(cy + math.sin(angle) * 20)
-                pygame.draw.circle(surf, (*COULEUR_VIOLET_CLAIR, 160), (px2, py2), 3)
+        y = self._titre_section(x, y, "💜  Âmes Perdues")
+        y = self._para(x, y,
+            "À ta mort → une âme perdue apparaît\n"
+            "avec tout ton argent. Tu réapparais\n"
+            "au dernier checkpoint.\n"
+            "Attaque l'âme pour la récupérer.\n"
+            "Mourir avant = perte définitive.")
+        y += 8
 
-        elif type_dessin == "checkpoint":
-            # Tuile checkpoint cyan avec éclat
-            pygame.draw.rect(surf, COULEUR_SAUVEGARDE, (cx - 16, cy - 16, 32, 32), border_radius=4)
-            pulse = 0.4 + 0.6 * math.sin(t / 800)
-            for r in [28, 40, 52]:
-                a = int(60 * pulse * (1 - r / 60))
-                if a > 0:
-                    pygame.draw.circle(surf, (*COULEUR_SAUVEGARDE, a), (cx, cy), r, 2)
-            # Symbole save
-            texte = pygame.font.Font(None, 28).render("✔", True, COULEUR_NOIR)
-            surf.blit(texte, (cx - texte.get_width() // 2, cy - texte.get_height() // 2))
+        y = self._titre_section(x, y, "✨  Capacités & Progression")
+        y = self._para(x, y,
+            "Des orbes flottants débloquent\n"
+            "définitivement Dash ou Double Saut.\n\n"
+            "La porte dorée ne s'ouvre qu'avec la\n"
+            "clé — ramasse-la d'abord !\n\n"
+            "Checkpoints → sauvegarde automatique.")
 
-        elif type_dessin == "capacites":
-            # Double saut et dash représentés
-            pygame.draw.rect(surf, COULEUR_JOUEUR, (cx - 8, cy - 15, 16, 20), border_radius=3)
-            pygame.draw.circle(surf, COULEUR_JOUEUR, (cx, cy - 22), 8)
-            # Flèche montante double saut
-            for offset in [-8, 0]:
-                pygame.draw.polygon(surf, COULEUR_CYAN, [
-                    (cx, cy - 35 + offset), (cx - 10, cy - 22 + offset), (cx + 10, cy - 22 + offset)
-                ])
-            # Trainée dash
-            for i in range(5):
-                a = int(150 * (1 - i / 5))
-                pygame.draw.circle(surf, (*COULEUR_VIOLET, a), (cx - 20 - i * 8, cy), 4 - i // 2)
+    # ---- Slide 1 : Lore ----------------------------------------------
 
-        elif type_dessin == "multi":
-            # 3 joueurs
-            colors = [COULEUR_JOUEUR, COULEUR_JOUEUR_AUTRE, COULEUR_CYAN]
-            positions = [(cx - 40, cy), (cx, cy - 10), (cx + 40, cy)]
-            for (px2, py2), c in zip(positions, colors):
-                pygame.draw.rect(surf, c, (px2 - 8, py2 - 12, 16, 18), border_radius=3)
-                pygame.draw.circle(surf, c, (px2, py2 - 20), 7)
-            # Connexion réseau
-            pygame.draw.line(surf, (*COULEUR_CYAN, 100), positions[0], positions[1], 1)
-            pygame.draw.line(surf, (*COULEUR_CYAN, 100), positions[1], positions[2], 1)
+    def _slide_lore(self, px, py, pw, ph):
+        mh = int(pw * 0.06)
+        mv = int(ph * 0.055)
+        x  = px + mh
+        y  = py + mv
+        tw = pw - mh * 2
 
-        elif type_dessin == "recap":
-            # Clavier simplifié
-            touches = ["Q", "D", "Z", "E", "K", "C"]
-            for i, t_label in enumerate(touches):
-                col = i % 3
-                row = i // 3
-                kx = cx - 50 + col * 38
-                ky = cy - 22 + row * 38
-                pygame.draw.rect(surf, COULEUR_BOUTON_SURVOL, (kx, ky, 32, 28), border_radius=4)
-                pygame.draw.rect(surf, COULEUR_CYAN, (kx, ky, 32, 28), 1, border_radius=4)
-                k_txt = pygame.font.Font(None, 22).render(t_label, True, COULEUR_CYAN)
-                surf.blit(k_txt, (kx + 16 - k_txt.get_width() // 2, ky + 14 - k_txt.get_height() // 2))
+        # Titre
+        titre = self.police_titre.render("L'Univers d'Écho", True, COULEUR_VIOLET_CLAIR)
+        self.ecran.blit(titre, (x, y))
+        y += titre.get_height() + 4
 
-        elif type_dessin == "fin":
-            # Logo/titre pulsé
-            pulse = 0.7 + 0.3 * math.sin(t / 700)
-            for r in [60, 40, 22]:
-                a = int(pulse * 100)
-                pygame.draw.circle(surf, (*COULEUR_CYAN, a), (cx, cy), r, 2)
-            logo = pygame.font.Font(None, 48).render("ÉCHO", True, COULEUR_CYAN)
-            surf.blit(logo, (cx - logo.get_width() // 2, cy - logo.get_height() // 2))
+        sous = self.police_petit.render(
+            "L'histoire et le monde derrière l'obscurité",
+            True, COULEUR_TEXTE_SOMBRE)
+        self.ecran.blit(sous, (x, y))
+        y += sous.get_height() + 10
 
-        self.ecran.blit(surf, (x, y))
+        sep = pygame.Surface((tw, 1), pygame.SRCALPHA)
+        sep.fill((*COULEUR_VIOLET, 70))
+        self.ecran.blit(sep, (x, y))
+        y += 14
 
-    def _dessiner_navigation(self):
-        """Dessine les boutons précédent/suivant/passer."""
-        est_derniere = self.index == self.total - 1
+        # Deux colonnes pour le lore
+        col_w  = (tw - mh) // 2
+        col2_x = x + col_w + mh
 
+        self._lore_colonne_gauche(x, y, col_w)
+        self._lore_colonne_droite(col2_x, y, col_w)
+
+    def _lore_colonne_gauche(self, x, y, w):
+        y = self._titre_section(x, y, "🌑  Le Grand Silence")
+        y = self._para(x, y,
+            "Il y a cent ans, une catastrophe\n"
+            "connue sous le nom du « Grand Silence »\n"
+            "a plongé le monde dans une obscurité\n"
+            "totale et permanente.\n\n"
+            "Les lumières se sont éteintes. Les étoiles\n"
+            "ont disparu. Les villes, autrefois\n"
+            "brillantes, sont devenues des labyrinthes\n"
+            "de ténèbres peuplés de créatures\n"
+            "corrompues par l'absence de lumière.",
+            couleur=COULEUR_TEXTE)
+        y += 10
+
+        y = self._titre_section(x, y, "🗝  La Porte Interdite")
+        y = self._para(x, y,
+            "Au cœur des ruines se trouve une\n"
+            "porte ancienne, scellée depuis des\n"
+            "siècles. Les anciens l'appelaient\n"
+            "« La Porte de l'Aurore ».\n\n"
+            "Derrière elle, dit-on, se trouve\n"
+            "la source de la Première Lumière —\n"
+            "seule capable d'inverser le Silence.",
+            couleur=(200, 180, 255))
+
+    def _lore_colonne_droite(self, x, y, w):
+        y = self._titre_section(x, y, "👤  Tu es l'Éclaireur")
+        y = self._para(x, y,
+            "Tu es l'un des rares à maîtriser\n"
+            "l'Art de l'Écho — une technique\n"
+            "ancienne qui permet de percevoir\n"
+            "le monde par le son.\n\n"
+            "Là où les autres voient le néant,\n"
+            "toi tu entends les contours,\n"
+            "les passages, les dangers.",
+            couleur=COULEUR_TEXTE)
+        y += 10
+
+        y = self._titre_section(x, y, "⚡  Les Âmes Errantes")
+        y = self._para(x, y,
+            "Les créatures qui peuplent l'obscurité\n"
+            "ne sont pas de simples monstres.\n"
+            "Ce sont des âmes perdues, corrompues\n"
+            "par le Silence, piégées entre\n"
+            "deux mondes.\n\n"
+            "En les vaincant, tu libères une partie\n"
+            "de leur énergie — les Âmes —\n"
+            "qui te permettront de progresser.",
+            couleur=(200, 180, 255))
+        y += 10
+
+        y = self._titre_section(x, y, "🎯  Ta Mission")
+        y = self._para(x, y,
+            "Traverse les ruines. Bats les gardiens.\n"
+            "Trouve la clé. Ouvre la Porte.\n"
+            "Ramène la lumière.",
+            couleur=COULEUR_CYAN)
+
+    # ------------------------------------------------------------------
+    #  UI NAVIGATION
+    # ------------------------------------------------------------------
+
+    def _navigation(self):
+        est_derniere = (self.index == self.total - 1)
         if est_derniere:
             self.btn_fermer.dessiner(self.ecran)
         else:
             self.btn_suivant.dessiner(self.ecran)
-            if self.index > 0:
-                self.btn_precedent.dessiner(self.ecran)
-
+        if self.index > 0:
+            self.btn_precedent.dessiner(self.ecran)
         self.btn_passer.dessiner(self.ecran)
 
-    def _dessiner_indicateur(self):
-        """Barre de points indiquant la progression."""
-        n = self.total
+    def _indicateur(self):
         rayon = 5
         espace = 16
-        total_w = n * rayon * 2 + (n - 1) * espace
+        total_w = self.total * rayon * 2 + (self.total - 1) * espace
         x_start = self.cx - total_w // 2
         y_pos = self.hauteur - 16
-
-        for i in range(n):
+        for i in range(self.total):
             x = x_start + i * (rayon * 2 + espace) + rayon
             if i == self.index:
                 pygame.draw.circle(self.ecran, COULEUR_CYAN, (x, y_pos), rayon)
