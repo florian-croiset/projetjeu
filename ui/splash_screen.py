@@ -18,12 +18,14 @@ def afficher_splash_screen(ecran, duree=3000):
 
         logo_path = os.path.join(base_path, 'favicon.png')
         logo_original = pygame.image.load(logo_path).convert_alpha()
-        taille_ref = min(LARGEUR_ECRAN, HAUTEUR_ECRAN)
+        largeur = ecran.get_width()
+        hauteur = ecran.get_height()
+        taille_ref = min(largeur, hauteur)
         cote_cible = int(taille_ref * 0.7)
         logo = pygame.transform.smoothscale(logo_original, (cote_cible, cote_cible))
-        fond = pygame.Surface((LARGEUR_ECRAN, HAUTEUR_ECRAN))
+        fond = pygame.Surface((largeur, hauteur))
         fond.fill((0, 0, 0))
-        logo_rect = logo.get_rect(center=(LARGEUR_ECRAN // 2, HAUTEUR_ECRAN // 2))
+        logo_rect = logo.get_rect(center=(largeur // 2, hauteur // 2))
         debut = pygame.time.get_ticks()
         horloge = pygame.time.Clock()
 
