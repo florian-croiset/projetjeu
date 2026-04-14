@@ -29,6 +29,7 @@ FR = {
     "rejoindre_mode_ip": "Mode : IP directe",
     "rejoindre_mode_code": "Mode : Code Room",
     "rejoindre_code_invalide": "Code invalide",
+    "rejoindre_label_ip_relay": "IP de l'hôte :",
     "hud_code_room": "Code : {}",
 
     # Menu Pause
@@ -95,6 +96,7 @@ EN = {
     "rejoindre_mode_ip": "Mode: Direct IP",
     "rejoindre_mode_code": "Mode: Room Code",
     "rejoindre_code_invalide": "Invalid code",
+    "rejoindre_label_ip_relay": "Host IP:",
     "hud_code_room": "Code: {}",
 
     # Pause Menu

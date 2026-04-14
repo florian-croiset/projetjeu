@@ -55,22 +55,45 @@ class RelayServer:
         self.port = port
         self.rooms = {}          # code → Room
         self.lock = threading.Lock()
+        self._server_socket = None
+        self._running = False
 
     def demarrer(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(('0.0.0.0', self.port))
-        sock.listen()
+        self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._server_socket.bind(('0.0.0.0', self.port))
+        self._server_socket.listen()
+        self._running = True
         print(f"[RELAY] Démarré sur le port {self.port}")
 
         # Thread de nettoyage des rooms expirées
         t = threading.Thread(target=self._nettoyer_boucle, daemon=True)
         t.start()
 
-        while True:
-            conn, addr = sock.accept()
+        while self._running:
+            try:
+                conn, addr = self._server_socket.accept()
+            except OSError:
+                # Socket fermé par arreter()
+                break
             t = threading.Thread(target=self._gerer_connexion, args=(conn, addr), daemon=True)
             t.start()
+
+    def arreter(self):
+        """Arrête proprement le serveur relay."""
+        self._running = False
+        # Fermer toutes les rooms actives
+        with self.lock:
+            codes = list(self.rooms.keys())
+        for code in codes:
+            self._fermer_room(code)
+        # Fermer le socket serveur pour débloquer accept()
+        if self._server_socket:
+            try:
+                self._server_socket.close()
+            except OSError:
+                pass
+        print("[RELAY] Arrêté")
 
     # ------------------------------------------------------------------
     #  Dispatch des connexions entrantes
@@ -293,6 +316,22 @@ class RelayServer:
                 self._fermer_room(code)
 
 
+def demarrer_relay_thread(port=7777):
+    """Démarre le serveur relay dans un thread daemon.
+
+    Retourne l'instance RelayServer (appeler .arreter() pour stopper).
+    """
+    relay = RelayServer(port)
+    thread = threading.Thread(target=relay.demarrer, daemon=True)
+    thread.start()
+    # Attendre que le socket soit prêt
+    for _ in range(20):
+        if relay._running:
+            break
+        time.sleep(0.05)
+    return relay
+
+
 def main():
     port = 7777
     if len(sys.argv) > 1:
@@ -306,7 +345,7 @@ def main():
     try:
         serveur.demarrer()
     except KeyboardInterrupt:
-        print("\n[RELAY] Arrêt.")
+        serveur.arreter()
 
 
 if __name__ == "__main__":

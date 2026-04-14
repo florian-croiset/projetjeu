@@ -26,7 +26,7 @@ from reseau.protocole import obtenir_ip_locale, recvall, recv_complet, send_comp
 
 
 class Serveur:
-    def __init__(self, id_slot, est_nouvelle_partie):
+    def __init__(self, id_slot, est_nouvelle_partie, relay_host="", relay_port=7777):
         # ===== RÉSEAU =====
         self.serveur_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serveur_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -117,6 +117,8 @@ class Serveur:
         self._etat_broadcast  = None
         self._broadcast_lock  = threading.Lock()
         self.code_room        = None       # Room code relay (si activé)
+        self.relay_host       = relay_host
+        self.relay_port       = relay_port
 
     # ------------------------------------------------------------------
     #  CREATION DES ENTITES
@@ -573,17 +575,17 @@ class Serveur:
         """Thread relay : crée une room et accepte les clients relayés."""
         from reseau.relay_client import relay_creer_room, relay_attendre_client, relay_ouvrir_canal_data
         try:
-            ctrl, self.code_room = relay_creer_room(RELAY_HOST, RELAY_PORT)
+            ctrl, self.code_room = relay_creer_room(self.relay_host, self.relay_port)
             print(f"[SERVEUR] Relay connecté — Code Room : {self.code_room}")
         except Exception as e:
-            print(f"[SERVEUR] Impossible de se connecter au relay ({RELAY_HOST}:{RELAY_PORT}): {e}")
+            print(f"[SERVEUR] Impossible de se connecter au relay ({self.relay_host}:{self.relay_port}): {e}")
             return
 
         while self.running:
             try:
-                slot_id = relay_attendre_client(ctrl, RELAY_HOST, RELAY_PORT)
+                slot_id = relay_attendre_client(ctrl, self.relay_host, self.relay_port)
                 print(f"[SERVEUR] Nouveau client relay (slot {slot_id})")
-                data_sock = relay_ouvrir_canal_data(RELAY_HOST, RELAY_PORT, self.code_room, slot_id)
+                data_sock = relay_ouvrir_canal_data(self.relay_host, self.relay_port, self.code_room, slot_id)
                 self._accepter_client(data_sock, ("relay", slot_id))
             except EOFError:
                 print("[SERVEUR] Connexion relay perdue")
@@ -605,7 +607,7 @@ class Serveur:
         thread_boucle_jeu.start()
 
         # Démarrer le thread relay si configuré
-        if RELAY_HOST:
+        if self.relay_host:
             thread_relay = threading.Thread(target=self._ecouter_relay, daemon=True)
             thread_relay.start()
 
@@ -617,15 +619,17 @@ class Serveur:
             self._accepter_client(connexion_client, adresse)
 
 
-def creer_serveur(id_slot, type_lancement):
+def creer_serveur(id_slot, type_lancement, relay_host="", relay_port=7777):
     """Crée et retourne une instance Serveur (sans la démarrer)."""
     pygame.init()
     ip = obtenir_ip_locale()
     print(f"[SERVEUR] IP locale : {ip}")
     est_nouvelle_partie = (type_lancement == "nouvelle")
-    return Serveur(id_slot=id_slot, est_nouvelle_partie=est_nouvelle_partie)
+    return Serveur(id_slot=id_slot, est_nouvelle_partie=est_nouvelle_partie,
+                   relay_host=relay_host, relay_port=relay_port)
 
 
 def main(id_slot, type_lancement):
-    s = creer_serveur(id_slot, type_lancement)
+    s = creer_serveur(id_slot, type_lancement,
+                      relay_host=RELAY_HOST, relay_port=RELAY_PORT)
     s.demarrer()
