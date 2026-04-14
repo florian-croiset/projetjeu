@@ -60,6 +60,9 @@ class Joueur:
         self.dernier_attaque_temps = 0
         self.est_en_attaque = False
         self.rect_attaque = None
+        # Hit registry : IDs des ennemis déjà touchés lors de l'attaque en cours.
+        # Réinitialisé à chaque nouvelle attaque. Garantit 1 hit max par ennemi par swing.
+        self.ennemis_touches: set = set()
 
         # Capacités
         self.peut_double_saut = False
@@ -206,6 +209,7 @@ class Joueur:
             if temps_actuel - self.dernier_attaque_temps > DUREE_ATTAQUE:
                 self.est_en_attaque = False
                 self.rect_attaque = None
+                self.ennemis_touches.clear()  # Libère le registry pour la prochaine attaque
 
         if self.est_en_attaque:
             if self.direction == 1:

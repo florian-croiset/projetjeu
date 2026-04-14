@@ -322,6 +322,11 @@ class BoucleJeuMixin:
         music.demarrer()
 
         while self.etat_jeu == "EN_JEU" and self.running:
+            # Masquer la souris en jeu (plein écran), la montrer en pause/menus
+            en_plein_ecran = self.parametres.get('video', {}).get('plein_ecran', False)
+            if en_plein_ecran:
+                pygame.mouse.set_visible(self.etat_jeu_interne == "PAUSE")
+
             pos_souris       = pygame.mouse.get_pos()
             commandes_a_envoyer = {
                 'clavier': {'gauche': False, 'droite': False,
@@ -554,6 +559,7 @@ class BoucleJeuMixin:
             return False
 
     def nettoyer_connexion(self):
+        pygame.mouse.set_visible(True)
         if self.client_socket:
             try:
                 self.client_socket.close()
