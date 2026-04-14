@@ -47,7 +47,12 @@ def recv_complet(sock):
     header = recvall(sock, 4)
     taille = int.from_bytes(header, 'big')
     if taille > 10_000_000:  # sécurité : max 10 MB
-        raise ValueError(f"Paquet suspect trop grand : {taille} octets")
+        ascii_repr = ''.join(chr(b) if 32 <= b < 127 else '.' for b in header)
+        raise ValueError(
+            f"Paquet suspect trop grand : {taille} octets "
+            f"(bytes bruts: {header.hex()} / ASCII: '{ascii_repr}') "
+            f"— probable proxy HTTP ou données corrompues"
+        )
     return pickle.loads(recvall(sock, taille))
 
 
