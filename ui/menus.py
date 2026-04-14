@@ -508,6 +508,7 @@ class MenusMixin:
                     self.parametres = copy.deepcopy(self.parametres_temp)
                     gestion_parametres.sauvegarder_parametres(self.parametres)
                     self.appliquer_parametres_video()
+                    self._recalculer_codes_touches()
                     music.toggle(self.parametres['video'].get('musique', True))
                     music.activer_sfx(self.parametres['sons'].get('activer_sfx', True))
                     self.actualiser_langues_widgets()
@@ -723,6 +724,6 @@ class MenusMixin:
             if self.btn_pause_parametres.verifier_clic(event):
                 self.etat_jeu_precedent = "EN_JEU"
                 self.parametres_temp = copy.deepcopy(self.parametres)
-                self.etat_jeu = "MENU_PARAMETRES"
+                self.etat_jeu_interne = "PARAMETRES_JEU"
             if self.btn_pause_quitter.verifier_clic(event):
                 self.etat_jeu = "MENU_PRINCIPAL"
