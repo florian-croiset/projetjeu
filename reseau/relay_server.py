@@ -101,9 +101,11 @@ class RelayServer:
 
     def _gerer_connexion(self, sock, addr):
         try:
+            print(f"[RELAY] Connexion entrante depuis {addr}")
             ligne = _recv_line(sock)
             msg = json.loads(ligne)
             cmd = msg.get("cmd")
+            print(f"[RELAY] Commande reçue de {addr}: cmd='{cmd}' msg={msg}")
 
             if cmd == "host":
                 self._cmd_host(sock, addr)
@@ -112,6 +114,7 @@ class RelayServer:
             elif cmd == "data":
                 self._cmd_data(sock, addr, msg.get("code", ""), msg.get("slot", 0))
             else:
+                print(f"[RELAY] Commande inconnue de {addr}: {cmd}")
                 _send_json(sock, {"error": "commande inconnue"})
                 sock.close()
         except (EOFError, ConnectionResetError, json.JSONDecodeError) as e:

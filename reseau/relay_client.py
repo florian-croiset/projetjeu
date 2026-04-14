@@ -28,11 +28,14 @@ def relay_creer_room(relay_host, relay_port):
     Retourne (ctrl_socket, code_room).
     Le ctrl_socket doit rester ouvert tant que la room existe.
     """
+    print(f"[RELAY_CLIENT] Création room: connexion à {relay_host}:{relay_port}...")
     ctrl = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     ctrl.settimeout(10)
     ctrl.connect((relay_host, relay_port))
+    print(f"[RELAY_CLIENT] Connecté au relay, envoi cmd 'host'...")
     _send_json(ctrl, {"cmd": "host"})
     reponse = json.loads(_recv_line(ctrl))
+    print(f"[RELAY_CLIENT] Réponse relay: {reponse}")
 
     if "error" in reponse:
         ctrl.close()
@@ -42,6 +45,7 @@ def relay_creer_room(relay_host, relay_port):
     # Passer en mode non-bloquant pour le canal contrôle
     # (sera lu dans un thread dédié)
     ctrl.settimeout(None)
+    print(f"[RELAY_CLIENT] Room créée, code={code}")
     return ctrl, code
 
 
@@ -80,11 +84,13 @@ def relay_ouvrir_canal_data(relay_host, relay_port, code_room, slot_id):
 
     Retourne un socket TCP bridgé avec le client correspondant.
     """
+    print(f"[RELAY_CLIENT] Ouverture canal data: {relay_host}:{relay_port} room={code_room} slot={slot_id}")
     data_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     data_sock.settimeout(15)
     data_sock.connect((relay_host, relay_port))
     _send_json(data_sock, {"cmd": "data", "code": code_room, "slot": slot_id})
     reponse = json.loads(_recv_line(data_sock))
+    print(f"[RELAY_CLIENT] Réponse canal data: {reponse}")
 
     if "error" in reponse:
         data_sock.close()
@@ -96,6 +102,7 @@ def relay_ouvrir_canal_data(relay_host, relay_port, code_room, slot_id):
 
     # Le socket est maintenant bridgé avec le client
     data_sock.settimeout(None)
+    print(f"[RELAY_CLIENT] Canal data bridgé pour slot {slot_id}")
     return data_sock
 
 
@@ -105,11 +112,19 @@ def relay_rejoindre(relay_host, relay_port, code_room):
     Retourne un socket TCP bridgé avec le serveur hôte.
     Utilisable directement avec send_complet/recv_complet.
     """
+    print(f"[RELAY_CLIENT] Rejoindre: connexion à {relay_host}:{relay_port} avec code '{code_room}'...")
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(15)
-    sock.connect((relay_host, relay_port))
+    try:
+        sock.connect((relay_host, relay_port))
+    except Exception as e:
+        print(f"[RELAY_CLIENT] Échec connexion TCP au relay {relay_host}:{relay_port}: {type(e).__name__}: {e}")
+        raise
+    print(f"[RELAY_CLIENT] Connecté au relay, envoi cmd 'join' code='{code_room}'...")
     _send_json(sock, {"cmd": "join", "code": code_room.upper().strip()})
+    print(f"[RELAY_CLIENT] Attente réponse du relay (bridge)...")
     reponse = json.loads(_recv_line(sock))
+    print(f"[RELAY_CLIENT] Réponse relay: {reponse}")
 
     if "error" in reponse:
         sock.close()
@@ -121,4 +136,5 @@ def relay_rejoindre(relay_host, relay_port, code_room):
 
     # Le socket est maintenant bridgé avec le host
     sock.settimeout(None)
+    print(f"[RELAY_CLIENT] Bridge établi avec le serveur hôte via relay")
     return sock
