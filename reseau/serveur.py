@@ -22,7 +22,7 @@ from core.ame_loot import AmeLoot
 from core.cle import Cle
 from core.porte import Porte
 from core.orbe_capacite import OrbeCapacite
-from reseau.protocole import obtenir_ip_locale, recvall, recv_complet, send_complet
+from reseau.protocole import obtenir_ip_locale, obtenir_ip_vpn, recvall, recv_complet, send_complet
 
 
 class Serveur:
@@ -623,7 +623,10 @@ def creer_serveur(id_slot, type_lancement, relay_host="", relay_port=7777):
     """Crée et retourne une instance Serveur (sans la démarrer)."""
     pygame.init()
     ip = obtenir_ip_locale()
+    ip_vpn = obtenir_ip_vpn()
     print(f"[SERVEUR] IP locale : {ip}")
+    if ip_vpn != "Non connecté":
+        print(f"[SERVEUR] IP VPN (Tailscale/Hamachi) : {ip_vpn}")
     est_nouvelle_partie = (type_lancement == "nouvelle")
     return Serveur(id_slot=id_slot, est_nouvelle_partie=est_nouvelle_partie,
                    relay_host=relay_host, relay_port=relay_port)

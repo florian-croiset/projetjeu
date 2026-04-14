@@ -11,7 +11,7 @@ from utils import langue, music
 from ui.bouton import Bouton
 from ui.effets_visuels import dessiner_fond_echo, dessiner_titre_neon, dessiner_separateur_neon, dessiner_panneau
 from sauvegarde import gestion_parametres, gestion_sauvegarde
-from reseau.protocole import obtenir_ip_locale, obtenir_ip_hamachi
+from reseau.protocole import obtenir_ip_locale, obtenir_ip_vpn
 
 
 class MenusMixin:
@@ -714,7 +714,7 @@ class MenusMixin:
                     ip = obtenir_ip_locale()
                     self.copier_dans_presse_papier(ip)
                 if self.btn_copier_ip_hamachi.verifier_clic(event):
-                    ip = obtenir_ip_hamachi()
+                    ip = obtenir_ip_vpn()
                     if ip != "Non connecté":
                         self.copier_dans_presse_papier(ip)
         for btn in self.boutons_menu_params_fixes + self.boutons_menu_params_scrollables:
@@ -838,8 +838,8 @@ class MenusMixin:
         ligne_ip("IP Locale (LAN) :",
                 f"{obtenir_ip_locale()}   (copier)",
                 self.btn_copier_ip_locale)
-        ligne_ip("IP Hamachi (VPN) :",
-                f"{obtenir_ip_hamachi()}   (copier)",
+        ligne_ip("IP VPN (Tailscale/Hamachi) :",
+                f"{obtenir_ip_vpn()}   (copier)",
                 self.btn_copier_ip_hamachi)
 
         aide = self.police_petit.render(

@@ -18,17 +18,42 @@ def obtenir_ip_locale():
         return "127.0.0.1"
 
 
-def obtenir_ip_hamachi():
-    """Retourne l'IP Hamachi (VPN) si disponible."""
+def obtenir_ip_vpn():
+    """Retourne l'IP VPN (Tailscale ou Hamachi) si disponible."""
+    import subprocess
+    # Essayer de récupérer l'IP Tailscale via la CLI (très très fiable sous Linux/Crostini)
+    try:
+        output = subprocess.check_output(
+            ["tailscale", "ip", "-4"], 
+            stderr=subprocess.DEVNULL, 
+            timeout=1
+        ).decode('utf-8').strip()
+        if output:
+            return output.split('\\n')[0].strip()
+    except Exception:
+        pass
+
+    # Fallback : vérifier les interfaces réseaux via Python (pour Windows surtout)
     try:
         hostname = socket.gethostname()
         all_ips = socket.gethostbyname_ex(hostname)[2]
+        
+        # IP Hamachi (commence par 25.)
         for ip in all_ips:
             if ip.startswith("25."):
                 return ip
-        return "Non connecté"
+                
+        # IP Tailscale sous Windows (100.x.x.x). Sous Linux/Crostini on utilise la commande en haut
+        # car Crostini utilise aussi 100.x pour son IP locale.
+        import sys
+        if sys.platform != "linux":
+            for ip in all_ips:
+                if ip.startswith("100."):
+                    return ip
     except Exception:
-        return "Non connecté"
+        pass
+        
+    return "Non connecté"
 
 
 def recvall(sock, n):
