@@ -276,17 +276,26 @@ class MenusMixin:
         """Lance la connexion selon le mode actuel (IP ou Code Room)."""
         if self.mode_rejoindre == "code":
             code = self.input_code_texte.strip().upper()
+            relay_ip = self.input_ip_texte.strip() if self.input_ip_texte.strip() else "localhost"
+            print(f"[MENU] Tentative connexion Code Room: relay_ip='{relay_ip}', code='{code}'")
             if len(code) < 4:
+                print(f"[MENU] Code trop court ({len(code)} chars), rejeté")
                 self.message_erreur_connexion = langue.get_texte("rejoindre_code_invalide")
                 return
             # Utiliser l'IP saisie comme adresse du relay
-            relay_ip = self.input_ip_texte.strip() if self.input_ip_texte.strip() else "localhost"
             if self.connecter_relay(code, relay_host=relay_ip, relay_port=RELAY_PORT):
+                print(f"[MENU] Connexion relay réussie !")
                 self.etat_jeu = "EN_JEU"
+            else:
+                print(f"[MENU] Connexion relay échouée")
         else:
             hote = self.input_ip_texte if self.input_ip_texte else "localhost"
+            print(f"[MENU] Tentative connexion IP directe: hote='{hote}'")
             if self.connecter(hote):
+                print(f"[MENU] Connexion directe réussie !")
                 self.etat_jeu = "EN_JEU"
+            else:
+                print(f"[MENU] Connexion directe échouée")
 
     def _coller_presse_papier(self):
         """Récupère le texte du presse-papier (multi-plateforme)."""
