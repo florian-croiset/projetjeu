@@ -218,7 +218,9 @@ class Serveur:
                 self.cartes_visibilite[id_joueur] = [row[:] for row in vis_sauvegarde]
         self.vis_map_precedente[id_joueur] = None
 
+        print(f"[SERVEUR] Envoi handshake (ID={id_joueur}) au client {connexion_client.getpeername()}...")
         send_complet(connexion_client, id_joueur)
+        print(f"[SERVEUR] Handshake envoyé, démarrage boucle de jeu pour joueur {id_joueur}")
         connexion_client.settimeout(10.0)
         connexion_client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
@@ -286,8 +288,10 @@ class Serveur:
                 donnees_pour_client = {**etat_commun, 'vis_map': vis_a_envoyer}
                 send_complet(connexion_client, donnees_pour_client)
 
+        except socket.timeout as e:
+            print(f"[SERVEUR] Timeout joueur {id_joueur} (pas de données depuis 10s) : {e}")
         except socket.error as e:
-            print(f"[SERVEUR] Erreur socket {id_joueur}: {e}")
+            print(f"[SERVEUR] Erreur socket joueur {id_joueur} ({type(e).__name__}): {e}")
         finally:
             print(f"[SERVEUR] Client {id_joueur} deconnecte.")
             connexion_client.close()
@@ -560,6 +564,7 @@ class Serveur:
                 daemon=True,
             )
             thread_client.start()
+            print(f"[SERVEUR] Thread client démarré pour joueur {id_joueur} depuis {adresse}")
 
 
 def main(id_slot, type_lancement):

@@ -531,21 +531,29 @@ class BoucleJeuMixin:
 
     def connecter(self, hote):
         try:
+            print(f"[CLIENT] Tentative de connexion vers {hote}:{PORT_SERVEUR}...")
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            print(f"[CLIENT] Socket TCP créée (timeout connexion : 5s)")
             self.client_socket.settimeout(5)
+            print(f"[CLIENT] Connexion TCP en cours vers {hote}:{PORT_SERVEUR}...")
             self.client_socket.connect((hote, PORT_SERVEUR))
+            print(f"[CLIENT] Connexion TCP établie avec {hote}:{PORT_SERVEUR}")
             self.client_socket.settimeout(10.0)
             self.client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            print(f"[CLIENT] En attente du handshake serveur (timeout : 10s)...")
             reponse = recv_complet(self.client_socket)
+            print(f"[CLIENT] Handshake reçu : {reponse}")
 
             if isinstance(reponse, dict) and "erreur" in reponse:
                 if reponse["erreur"] == "SERVEUR_PLEIN":
+                    print(f"[CLIENT] Connexion refusée : serveur plein")
                     self.message_erreur_connexion = "Le serveur est plein !\n(3/3 joueurs)"
                     self.client_socket.close()
                     self.client_socket = None
                     return False
 
             self.mon_id = reponse
+            print(f"[CLIENT] Connecté avec succès (ID joueur : {self.mon_id})")
             self.message_erreur_connexion = None
 
             if getattr(sys, 'frozen', False):
@@ -565,8 +573,23 @@ class BoucleJeuMixin:
             self.cle_locale            = None
             return True
 
+        except socket.timeout:
+            print(f"[CLIENT] Echec connexion: TIMEOUT — {hote}:{PORT_SERVEUR} ne répond pas (firewall ou port non ouvert ?)")
+            self.message_erreur_connexion = f"Timeout : {hote}:{PORT_SERVEUR} ne répond pas.\nVérifiez le pare-feu et la redirection de port."
+            self.client_socket = None
+            return False
+        except ConnectionRefusedError:
+            print(f"[CLIENT] Echec connexion: CONNEXION REFUSÉE — aucun serveur sur {hote}:{PORT_SERVEUR}")
+            self.message_erreur_connexion = f"Connexion refusée : {hote}:{PORT_SERVEUR}\nLe serveur n'est pas démarré."
+            self.client_socket = None
+            return False
+        except socket.gaierror as e:
+            print(f"[CLIENT] Echec connexion: ADRESSE INVALIDE — impossible de résoudre '{hote}' : {e}")
+            self.message_erreur_connexion = f"Adresse invalide : '{hote}'"
+            self.client_socket = None
+            return False
         except socket.error as e:
-            print(f"[CLIENT] Echec connexion: {e}")
+            print(f"[CLIENT] Echec connexion: {type(e).__name__}: {e}")
             self.message_erreur_connexion = f"Impossible de se connecter\nau serveur : {hote}"
             self.client_socket = None
             return False
