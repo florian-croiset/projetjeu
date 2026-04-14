@@ -28,6 +28,23 @@ def _charger_sprite_cristal_perdu():
         return None
 
 SPRITE_CRISTAL_PERDU = None
+_CACHE_HALOS_PERDU = None
+NB_NIVEAUX_HALO = 8
+
+
+def _generer_halos_perdu():
+    """Pré-rend 8 variantes de halo pour les âmes perdues."""
+    r, g, b = COULEUR_AME_PERDUE
+    halos = []
+    for i in range(NB_NIVEAUX_HALO):
+        pulse = 0.7 + 0.3 * (i / (NB_NIVEAUX_HALO - 1))
+        halo_surf = pygame.Surface((60, 60), pygame.SRCALPHA)
+        for rayon, alpha_base in [(26, 20), (18, 40), (11, 70)]:
+            a = int(alpha_base * pulse)
+            pygame.draw.ellipse(halo_surf, (r, g, b, a),
+                                pygame.Rect(30 - rayon, 30 - rayon, rayon * 2, rayon * 2))
+        halos.append(halo_surf)
+    return halos
 
 
 class AmePerdue:
@@ -45,9 +62,11 @@ class AmePerdue:
         self.phase = (self.id * 0.91) % (2 * math.pi)
         print(f"Ame {self.id} creee pour Joueur {self.id_joueur} a ({x}, {y})")
 
-        global SPRITE_CRISTAL_PERDU
+        global SPRITE_CRISTAL_PERDU, _CACHE_HALOS_PERDU
         if SPRITE_CRISTAL_PERDU is None:
             SPRITE_CRISTAL_PERDU = _charger_sprite_cristal_perdu()
+        if _CACHE_HALOS_PERDU is None:
+            _CACHE_HALOS_PERDU = _generer_halos_perdu()
         self.sprite = SPRITE_CRISTAL_PERDU
 
     def get_etat(self):
@@ -76,20 +95,16 @@ class AmePerdue:
         pulse = 0.7 + 0.3 * math.sin(temps_ms / 600 + self.phase)
         r, g, b = self.couleur
 
-        # Halo violet
-        halo = pygame.Surface((60, 60), pygame.SRCALPHA)
-        for rayon, alpha_base in [(26, 20), (18, 40), (11, 70)]:
-            a = int(alpha_base * pulse)
-            pygame.draw.ellipse(halo, (r, g, b, a),
-                                pygame.Rect(30 - rayon, 30 - rayon, rayon * 2, rayon * 2))
-        surface.blit(halo, (cx - 30, cy - 30))
+        # Halo violet (pré-rendu)
+        idx_halo = int((pulse - 0.7) / 0.3 * (NB_NIVEAUX_HALO - 1))
+        idx_halo = max(0, min(NB_NIVEAUX_HALO - 1, idx_halo))
+        surface.blit(_CACHE_HALOS_PERDU[idx_halo], (cx - 30, cy - 30))
 
         if self.sprite:
             alpha = int(160 + 95 * pulse)
-            spr = self.sprite.copy()
-            spr.set_alpha(alpha)
-            r_spr = spr.get_rect(center=(cx, cy))
-            surface.blit(spr, r_spr)
+            self.sprite.set_alpha(alpha)
+            r_spr = self.sprite.get_rect(center=(cx, cy))
+            surface.blit(self.sprite, r_spr)
         else:
             rect_visuel = pygame.Rect(cx - 8, cy - 12, 16, 24)
             pygame.draw.ellipse(surface, self.couleur, rect_visuel)

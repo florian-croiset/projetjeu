@@ -51,17 +51,28 @@ class HudMixin:
         x0 = 24
         y0 = 24
 
+        # Cache des sprites coeur pré-rendus
+        cle_coeur = (largeur_coeur, hauteur_coeur)
+        if not hasattr(self, '_cache_coeur') or self._cache_coeur_taille != cle_coeur:
+            coeur_vide = pygame.Surface((largeur_coeur, hauteur_coeur), pygame.SRCALPHA)
+            pygame.draw.rect(coeur_vide, COULEUR_PV_PERDU,
+                            pygame.Rect(0, 0, largeur_coeur, hauteur_coeur), border_radius=4)
+            pygame.draw.rect(coeur_vide, COULEUR_CYAN_SOMBRE,
+                            pygame.Rect(0, 0, largeur_coeur, hauteur_coeur), width=1, border_radius=4)
+            coeur_plein = pygame.Surface((largeur_coeur, hauteur_coeur), pygame.SRCALPHA)
+            pygame.draw.rect(coeur_plein, COULEUR_PV,
+                            pygame.Rect(0, 0, largeur_coeur, hauteur_coeur), border_radius=4)
+            self._cache_coeur_vide = coeur_vide
+            self._cache_coeur_plein = coeur_plein
+            self._cache_coeur_taille = cle_coeur
+
         for i in range(pv_max):
             rx = x0 + i * (largeur_coeur + padding)
-            fond_r = pygame.Rect(rx, y0, largeur_coeur, hauteur_coeur)
-            pygame.draw.rect(self.ecran, COULEUR_PV_PERDU, fond_r, border_radius=4)
-            pygame.draw.rect(self.ecran, COULEUR_CYAN_SOMBRE, fond_r,
-                            width=1, border_radius=4)
+            self.ecran.blit(self._cache_coeur_vide, (rx, y0))
 
         for i in range(pv):
             rx = x0 + i * (largeur_coeur + padding)
-            plein_r = pygame.Rect(rx, y0, largeur_coeur, hauteur_coeur)
-            pygame.draw.rect(self.ecran, COULEUR_PV, plein_r, border_radius=4)
+            self.ecran.blit(self._cache_coeur_plein, (rx, y0))
 
         if hasattr(self, '_derniere_data_boss') and self._derniere_data_boss:
             d = self._derniere_data_boss

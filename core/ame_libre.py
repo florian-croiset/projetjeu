@@ -25,6 +25,24 @@ def _charger_sprite_cristal():
         return None
 
 SPRITE_CRISTAL_LIBRE = None  # Chargé à la première instanciation
+_CACHE_HALOS_LIBRE = None    # Cache des halos pré-rendus (8 niveaux de pulse)
+
+NB_NIVEAUX_HALO = 8
+
+
+def _generer_halos_libre():
+    """Pré-rend 8 variantes de halo pour les âmes libres."""
+    r, g, b = COULEUR_AME_LIBRE
+    halos = []
+    for i in range(NB_NIVEAUX_HALO):
+        pulse = 0.7 + 0.3 * (i / (NB_NIVEAUX_HALO - 1))
+        halo_surf = pygame.Surface((60, 60), pygame.SRCALPHA)
+        for rayon, alpha_base in [(28, 18), (20, 35), (13, 60)]:
+            a = int(alpha_base * pulse)
+            pygame.draw.ellipse(halo_surf, (r, g, b, a),
+                                pygame.Rect(30 - rayon, 30 - rayon, rayon * 2, rayon * 2))
+        halos.append(halo_surf)
+    return halos
 
 
 class AmeLibre:
@@ -58,9 +76,11 @@ class AmeLibre:
         self.couleur = COULEUR_AME_LIBRE
         self.est_ramassee = False
 
-        global SPRITE_CRISTAL_LIBRE
+        global SPRITE_CRISTAL_LIBRE, _CACHE_HALOS_LIBRE
         if SPRITE_CRISTAL_LIBRE is None:
             SPRITE_CRISTAL_LIBRE = _charger_sprite_cristal()
+        if _CACHE_HALOS_LIBRE is None:
+            _CACHE_HALOS_LIBRE = _generer_halos_libre()
         self.sprite = SPRITE_CRISTAL_LIBRE
 
     # ------------------------------------------------------------------
@@ -106,21 +126,17 @@ class AmeLibre:
         pulse = 0.7 + 0.3 * math.sin(temps_ms / 600 + self.phase)
         r, g, b = self.couleur
 
-        # Halo externe pulsant
-        halo_surf = pygame.Surface((60, 60), pygame.SRCALPHA)
-        for rayon, alpha_base in [(28, 18), (20, 35), (13, 60)]:
-            a = int(alpha_base * pulse)
-            pygame.draw.ellipse(halo_surf, (r, g, b, a),
-                                pygame.Rect(30 - rayon, 30 - rayon, rayon * 2, rayon * 2))
-        surface.blit(halo_surf, (cx - 30, cy - 30))
+        # Halo externe pulsant (pré-rendu)
+        idx_halo = int((pulse - 0.7) / 0.3 * (NB_NIVEAUX_HALO - 1))
+        idx_halo = max(0, min(NB_NIVEAUX_HALO - 1, idx_halo))
+        surface.blit(_CACHE_HALOS_LIBRE[idx_halo], (cx - 30, cy - 30))
 
         if self.sprite:
             # Légère variation d'alpha pour effet de pulsation
             alpha = int(180 + 75 * pulse)
-            spr = self.sprite.copy()
-            spr.set_alpha(alpha)
-            r_spr = spr.get_rect(center=(cx, cy))
-            surface.blit(spr, r_spr)
+            self.sprite.set_alpha(alpha)
+            r_spr = self.sprite.get_rect(center=(cx, cy))
+            surface.blit(self.sprite, r_spr)
         else:
             # Fallback : ellipse colorée
             corps_surf = pygame.Surface((12, 18), pygame.SRCALPHA)

@@ -53,6 +53,7 @@ class Serveur:
         self.ames_loot = {}
         self.ames_libres = {}
         self.vis_map_precedente = {}  # pour delta vis_map
+        self.vis_map_dirty = {}      # flag dirty par joueur
         self.cle = None
         self.echos_en_cours = []
 
@@ -66,6 +67,7 @@ class Serveur:
         self.carte_jeu = Carte(chemin_map)
 
         self.rects_collision = self.carte_jeu.get_rects_collisions()
+        self.carte_jeu.construire_grille_spatiale()
         self.points_sauvegarde_map = self.scanner_points_sauvegarde()
 
         # ===== SAUVEGARDE =====
@@ -105,7 +107,8 @@ class Serveur:
                                   boss_x    = 87*32, boss_y = 19*32,                              # ← position spawn du boss
                                   json_path = os.path.join(dossier_script, "demon_slime.json"),
                                   png_path  = os.path.join(dossier_script, "assets", "demon_slime.png"),
-                                  rects_collision = self.rects_collision)
+                                  rects_collision = self.rects_collision,
+                                  carte = self.carte_jeu)
         self.cle = Cle(x=1011, y=1027)
         self._ids_pool = list(range(3))  # IDs réutilisables : 0, 1, 2
         self.torche_allumee = False
@@ -172,6 +175,7 @@ class Serveur:
                 self.cartes_visibilite[id_joueur] = [row[:] for row in vis_sauvegarde]
         # Version précédente pour détecter les changements (delta vis_map)
         self.vis_map_precedente[id_joueur] = None
+        self.vis_map_dirty[id_joueur] = True
 
         send_complet(connexion_client, id_joueur)
         connexion_client.settimeout(10.0)  # kick si inactif > 10s
@@ -236,11 +240,10 @@ class Serveur:
 
                 # Delta vis_map : spécifique à ce joueur, calculé ici
                 with self.lock:
-                    vis_actuelle = self.cartes_visibilite.get(id_joueur)
-                    vis_prec = self.vis_map_precedente.get(id_joueur)
-                    if vis_actuelle != vis_prec:
-                        vis_a_envoyer = [row[:] for row in vis_actuelle]
-                        self.vis_map_precedente[id_joueur] = [row[:] for row in vis_actuelle]
+                    if self.vis_map_dirty.get(id_joueur, False):
+                        vis_actuelle = self.cartes_visibilite.get(id_joueur)
+                        vis_a_envoyer = [row[:] for row in vis_actuelle] if vis_actuelle else None
+                        self.vis_map_dirty[id_joueur] = False
                     else:
                         vis_a_envoyer = None
 
@@ -295,6 +298,7 @@ class Serveur:
                                 self.cartes_visibilite[echo['id_joueur']]
                             )
                         echo['rayon_precedent'] = rayon_max
+                        self.vis_map_dirty[echo['id_joueur']] = True
                     echos_restants.append(echo)
             self.echos_en_cours = echos_restants
 
@@ -303,8 +307,8 @@ class Serveur:
                 for id_ennemi, ennemi in self.ennemis.items():
                     dx = ennemi.rect.centerx - echo['cx']
                     dy = ennemi.rect.centery - echo['cy']
-                    dist = (dx**2 + dy**2) ** 0.5
-                    if dist <= PORTEE_ECHO:
+                    dist_sq = dx*dx + dy*dy
+                    if dist_sq <= PORTEE_ECHO * PORTEE_ECHO:
                         ennemi.flash_echo_temps = temps_actuel
 
             with self.lock:
@@ -322,7 +326,7 @@ class Serveur:
 
               # 1b. Âmes loot : physique + collecte + despawn
               for id_ame, ame in list(self.ames_loot.items()):
-                  ame.mettre_a_jour(temps_actuel, self.rects_collision)
+                  ame.mettre_a_jour(temps_actuel, self.carte_jeu.get_murs_proches(ame.rect))
                   if ame.est_expiree(temps_actuel):
                       del self.ames_loot[id_ame]
                       continue
@@ -349,7 +353,7 @@ class Serveur:
                         ennemi.respawn()
                         print(f"[SERVEUR] Ennemi {id_ennemi} respawn !")
                 else:
-                    ennemi.appliquer_logique(self.rects_collision, self.carte_jeu)
+                    ennemi.appliquer_logique(self.carte_jeu.get_murs_proches(ennemi.rect), self.carte_jeu)
 
             # 4. Boss Room
             if not self.boss_room.boss_defeated:
@@ -358,7 +362,7 @@ class Serveur:
 
             # 5. Joueurs
             for id_joueur, joueur in list(self.joueurs.items()):
-                joueur.appliquer_physique(self.rects_collision)
+                joueur.appliquer_physique(self.carte_jeu.get_murs_proches(joueur.rect))
 
                 # A. Attaque
                 joueur.gerer_attaque(temps_actuel)

@@ -16,6 +16,10 @@ def _charger_sprite_torche():
         return None
 
 
+_CACHE_HALOS_TORCHE = {}   # Cache {rayon: surface} pour les halos de torche
+_CACHE_PARTICULES = {}     # Cache {(taille, alpha_bucket): surface} pour les particules
+
+
 class Torche:
     def __init__(self, x, y):
         self.x = x
@@ -59,16 +63,18 @@ class Torche:
         sx = self.x - off_x
         sy = self.y - off_y
 
-        # --- Halo de lumière (si allumée) ---
+        # --- Halo de lumière (si allumée, pré-rendu par rayon) ---
         if self.allumee:
             pulse = 0.85 + 0.15 * math.sin(temps_ms / 120)
             rayon = int(RAYON_LUMIERE_TORCHE * pulse)
-            halo = pygame.Surface((rayon * 2, rayon * 2), pygame.SRCALPHA)
-            for r, a in [(rayon, 18), (int(rayon*0.7), 35), (int(rayon*0.4), 60)]:
-                pygame.draw.circle(halo, (255, 140, 30, a), (rayon, rayon), r)
+            if rayon not in _CACHE_HALOS_TORCHE:
+                halo = pygame.Surface((rayon * 2, rayon * 2), pygame.SRCALPHA)
+                for r, a in [(rayon, 18), (int(rayon*0.7), 35), (int(rayon*0.4), 60)]:
+                    pygame.draw.circle(halo, (255, 140, 30, a), (rayon, rayon), r)
+                _CACHE_HALOS_TORCHE[rayon] = halo
             cx = sx + TAILLE_TUILE // 2
             cy = sy + TAILLE_TUILE // 2
-            surface.blit(halo, (cx - rayon, cy - rayon))
+            surface.blit(_CACHE_HALOS_TORCHE[rayon], (cx - rayon, cy - rayon))
 
         # --- Sprite ou rectangle ---
         if self.sprite:
@@ -77,7 +83,7 @@ class Torche:
             pygame.draw.rect(surface, (100, 60, 20),
                              pygame.Rect(sx + 10, sy, 12, TAILLE_TUILE * 2))
 
-        # --- Particules de flamme ---
+        # --- Particules de flamme (surfaces pré-rendues par taille+couleur) ---
         if self.allumee:
             for p in self.particules:
                 ratio = p['vie'] / p['vie_max']
@@ -86,8 +92,11 @@ class Torche:
                 b = 0
                 alpha = int(200 * ratio)
                 taille = max(1, int(p['taille'] * ratio))
+                cle = (taille, r, g, alpha)
+                if cle not in _CACHE_PARTICULES:
+                    flamme = pygame.Surface((taille*2, taille*2), pygame.SRCALPHA)
+                    pygame.draw.circle(flamme, (r, g, b, alpha), (taille, taille), taille)
+                    _CACHE_PARTICULES[cle] = flamme
                 px = int(p['x']) - off_x
                 py = int(p['y']) - off_y
-                flamme = pygame.Surface((taille*2, taille*2), pygame.SRCALPHA)
-                pygame.draw.circle(flamme, (r, g, b, alpha), (taille, taille), taille)
-                surface.blit(flamme, (px - taille, py - taille))
+                surface.blit(_CACHE_PARTICULES[cle], (px - taille, py - taille))

@@ -329,6 +329,39 @@ class Carte:
                 if self.map_data[y][x] == 1:
                     rects.append(pygame.Rect(x * TAILLE_TUILE, y * TAILLE_TUILE, TAILLE_TUILE, TAILLE_TUILE))
         return rects
+
+    def construire_grille_spatiale(self, taille_cellule=128):
+        """Construit une grille spatiale pour accélérer les tests de collision."""
+        self._taille_cellule = taille_cellule
+        self._grille_spatiale = {}
+        for y in range(self.hauteur_map):
+            for x in range(self.largeur_map):
+                if self.map_data[y][x] == 1:
+                    rect = pygame.Rect(x * TAILLE_TUILE, y * TAILLE_TUILE,
+                                       TAILLE_TUILE, TAILLE_TUILE)
+                    cx = x * TAILLE_TUILE // taille_cellule
+                    cy = y * TAILLE_TUILE // taille_cellule
+                    cle = (cx, cy)
+                    if cle not in self._grille_spatiale:
+                        self._grille_spatiale[cle] = []
+                    self._grille_spatiale[cle].append(rect)
+
+    def get_murs_proches(self, rect):
+        """Renvoie les murs dans les cellules voisines du rect donné."""
+        if not hasattr(self, '_grille_spatiale'):
+            return self.get_rects_collisions()
+        tc = self._taille_cellule
+        x1 = rect.left // tc
+        y1 = rect.top // tc
+        x2 = rect.right // tc
+        y2 = rect.bottom // tc
+        murs = []
+        for cy in range(y1, y2 + 1):
+            for cx in range(x1, x2 + 1):
+                cellule = self._grille_spatiale.get((cx, cy))
+                if cellule:
+                    murs.extend(cellule)
+        return murs
     
     # def reveler_par_echo_partiel(self, centre_x, centre_y, portee, vis_map):
     #     """Révélation progressive : repart de 0 jusqu'à portee pixels."""

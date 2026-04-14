@@ -222,7 +222,11 @@ class MenusMixin:
         dessiner_fond_echo(self.ecran, self.largeur_ecran, self.hauteur_ecran, t)
 
         cy_titre = max(80, self.hauteur_ecran // 7)
-        police_grand_titre = pygame.font.Font(None, max(96, self.hauteur_ecran // 7))
+        taille_titre = max(96, self.hauteur_ecran // 7)
+        if not hasattr(self, '_police_grand_titre') or self._taille_grand_titre != taille_titre:
+            self._police_grand_titre = pygame.font.Font(None, taille_titre)
+            self._taille_grand_titre = taille_titre
+        police_grand_titre = self._police_grand_titre
         dessiner_titre_neon(self.ecran, police_grand_titre,
                             langue.get_texte("titre_jeu"),
                             self.cx, cy_titre)
@@ -555,7 +559,11 @@ class MenusMixin:
     def dessiner_menu_parametres(self):
         dessiner_fond_echo(self.ecran, self.largeur_ecran, self.hauteur_ecran,
                         self.temps_anim)
-        police_titre_params = pygame.font.Font(None, max(48, self.hauteur_ecran // 14))
+        taille_params = max(48, self.hauteur_ecran // 14)
+        if not hasattr(self, '_police_titre_params') or self._taille_titre_params != taille_params:
+            self._police_titre_params = pygame.font.Font(None, taille_params)
+            self._taille_titre_params = taille_params
+        police_titre_params = self._police_titre_params
         dessiner_titre_neon(self.ecran, police_titre_params,
                             langue.get_texte("param_titre"),
                             self.cx, self.hauteur_ecran // 14)

@@ -10,11 +10,13 @@ class BossRoom:
     def __init__(self, room_rect: pygame.Rect,
                  boss_x: int, boss_y: int,
                  json_path: str, png_path: str,
-                 rects_collision: list):          # ← paramètre ajouté
+                 rects_collision=None,
+                 carte=None):
 
         self.room_rect       = room_rect
         self.boss            = DemonSlimeBoss(boss_x, boss_y, json_path, png_path)
-        self.rects_collision = rects_collision    # ← stocké avec self.
+        self.rects_collision = rects_collision
+        self.carte           = carte
 
         self.fight_started       = False
         self.boss_defeated       = False
@@ -38,7 +40,7 @@ class BossRoom:
             if self.room_rect.colliderect(joueur.rect):
                 self.fight_started = True
             d = ((joueur.rect.centerx - boss_cx) ** 2 +
-                 (joueur.rect.centery - boss_cy) ** 2) ** 0.5
+                 (joueur.rect.centery - boss_cy) ** 2)
             if d < dist_min:
                 dist_min = d
                 cible = joueur
@@ -53,7 +55,8 @@ class BossRoom:
 
         # ── Collisions murs axe X ────────────────────────────────────────
         boss.body_rect.x = int(boss.pos.x) + (boss.sprite_w - boss.body_rect.w) // 2
-        for mur in self.rects_collision:                          # ← self.
+        murs_proches = self.carte.get_murs_proches(boss.body_rect) if self.carte else self.rects_collision
+        for mur in murs_proches:
             if boss.body_rect.colliderect(mur):
                 if boss.velocity.x > 0:
                     boss.body_rect.right = mur.left
@@ -65,7 +68,8 @@ class BossRoom:
         # ── Collisions murs axe Y ────────────────────────────────────────
         boss.body_rect.y = int(boss.pos.y) + (boss.sprite_h - boss.body_rect.h)
         boss.sur_le_sol  = False
-        for mur in self.rects_collision:                          # ← self.
+        murs_proches = self.carte.get_murs_proches(boss.body_rect) if self.carte else self.rects_collision
+        for mur in murs_proches:
             if boss.body_rect.colliderect(mur):
                 if boss.velocity.y > 0:
                     boss.body_rect.bottom = mur.top

@@ -27,6 +27,23 @@ def _charger_sprite_loot():
 
 
 SPRITE_LOOT = None  # Chargé à la première instanciation
+_CACHE_HALOS_LOOT = None
+NB_NIVEAUX_HALO = 8
+
+
+def _generer_halos_loot():
+    """Pré-rend 8 variantes de halo pour les âmes de loot."""
+    r, g, b = COULEUR_AME_LOOT
+    halos = []
+    for i in range(NB_NIVEAUX_HALO):
+        pulse = 0.7 + 0.3 * (i / (NB_NIVEAUX_HALO - 1))
+        halo_surf = pygame.Surface((40, 40), pygame.SRCALPHA)
+        for rayon, alpha_base in [(18, 15), (13, 30), (8, 50)]:
+            a = int(alpha_base * pulse)
+            pygame.draw.ellipse(halo_surf, (r, g, b, a),
+                                pygame.Rect(20 - rayon, 20 - rayon, rayon * 2, rayon * 2))
+        halos.append(halo_surf)
+    return halos
 
 
 class AmeLoot:
@@ -67,9 +84,11 @@ class AmeLoot:
         self.phase_anim = (self.id * 0.91) % (2 * math.pi)
         self.couleur = COULEUR_AME_LOOT
 
-        global SPRITE_LOOT
+        global SPRITE_LOOT, _CACHE_HALOS_LOOT
         if SPRITE_LOOT is None:
             SPRITE_LOOT = _charger_sprite_loot()
+        if _CACHE_HALOS_LOOT is None:
+            _CACHE_HALOS_LOOT = _generer_halos_loot()
         self.sprite = SPRITE_LOOT
 
     # ------------------------------------------------------------------
@@ -173,20 +192,16 @@ class AmeLoot:
         pulse = 0.7 + 0.3 * math.sin(temps_ms / 600 + self.phase_anim)
         r, g, b = self.couleur
 
-        # Halo (plus petit que AmeLibre)
-        halo_surf = pygame.Surface((40, 40), pygame.SRCALPHA)
-        for rayon, alpha_base in [(18, 15), (13, 30), (8, 50)]:
-            a = int(alpha_base * pulse)
-            pygame.draw.ellipse(halo_surf, (r, g, b, a),
-                                pygame.Rect(20 - rayon, 20 - rayon, rayon * 2, rayon * 2))
-        surface.blit(halo_surf, (cx - 20, cy - 20))
+        # Halo (pré-rendu)
+        idx_halo = int((pulse - 0.7) / 0.3 * (NB_NIVEAUX_HALO - 1))
+        idx_halo = max(0, min(NB_NIVEAUX_HALO - 1, idx_halo))
+        surface.blit(_CACHE_HALOS_LOOT[idx_halo], (cx - 20, cy - 20))
 
         if self.sprite:
             alpha = int(180 + 75 * pulse)
-            spr = self.sprite.copy()
-            spr.set_alpha(alpha)
-            r_spr = spr.get_rect(center=(cx, cy))
-            surface.blit(spr, r_spr)
+            self.sprite.set_alpha(alpha)
+            r_spr = self.sprite.get_rect(center=(cx, cy))
+            surface.blit(self.sprite, r_spr)
         else:
             # Fallback : petit cercle
             pygame.draw.circle(surface, self.couleur, (cx, cy), 5)

@@ -126,7 +126,7 @@ class BoucleJeuMixin:
                     if vient_dallumer:
                         dx = joueur.rect.centerx - self.torche.x
                         dy = joueur.rect.centery - self.torche.y
-                        if (dx**2 + dy**2)**0.5 <= DISTANCE_TORCHE_ECHO:
+                        if dx*dx + dy*dy <= DISTANCE_TORCHE_ECHO * DISTANCE_TORCHE_ECHO:
                             commandes['echo'] = True
 
         touches = pygame.key.get_pressed()
@@ -181,13 +181,13 @@ class BoucleJeuMixin:
             if mon_joueur:
                 dx = ennemi.rect.centerx - mon_joueur.rect.centerx
                 dy = ennemi.rect.centery - mon_joueur.rect.centery
-                dist = (dx**2 + dy**2) ** 0.5
+                dist_sq = dx*dx + dy*dy
             else:
-                dist = 9999
+                dist_sq = 9999 * 9999
 
             temps_depuis_flash = temps_ms - getattr(ennemi, 'flash_echo_temps', 0)
             flash_actif = temps_depuis_flash < DUREE_FLASH_ECHO_ENNEMI
-            proche = dist <= DISTANCE_DETECTION_ENNEMI
+            proche = dist_sq <= DISTANCE_DETECTION_ENNEMI * DISTANCE_DETECTION_ENNEMI
 
             if proche:
                 ennemi.dessiner(surface_virtuelle, camera_offset)
@@ -268,9 +268,11 @@ class BoucleJeuMixin:
         elif mon_joueur and mon_joueur.pv > 0:
             self._mort_depuis = None
 
-        surface_zoomee = pygame.transform.scale(
-            surface_virtuelle, (self.largeur_ecran, self.hauteur_ecran))
-        self.ecran.blit(surface_zoomee, (0, 0))
+        taille_ecran = (self.largeur_ecran, self.hauteur_ecran)
+        if not hasattr(self, '_surface_zoomee') or self._surface_zoomee.get_size() != taille_ecran:
+            self._surface_zoomee = pygame.Surface(taille_ecran)
+        pygame.transform.scale(surface_virtuelle, taille_ecran, self._surface_zoomee)
+        self.ecran.blit(self._surface_zoomee, (0, 0))
 
         if MODE_DEV:
             btn = envoyer_logs.get_bouton()

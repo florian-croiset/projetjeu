@@ -6,6 +6,11 @@ import pygame
 import math
 from parametres import *
 
+# Caches pour les effets visuels coûteux
+_cache_titre_neon = {}    # {(texte, taille_police, couleur): surface}
+_cache_separateur = {}    # {(largeur, couleur, alpha): surface}
+_cache_reflet = {}        # {largeur: surface}
+
 
 def dessiner_fond_echo(surface, largeur, hauteur, temps):
     """
@@ -63,42 +68,58 @@ def dessiner_fond_echo(surface, largeur, hauteur, temps):
 
 
 def dessiner_separateur_neon(surface, x1, y, x2, couleur=None, alpha=180):
-    """Ligne séparatrice style néon avec dégradé de transparence."""
+    """Ligne séparatrice style néon avec dégradé de transparence (pré-rendu)."""
     if couleur is None:
         couleur = COULEUR_CYAN
-    sep_surf = pygame.Surface((x2 - x1, 2), pygame.SRCALPHA)
-    r, g, b = couleur
     largeur = x2 - x1
-    for px in range(largeur):
-        ratio = px / largeur
-        dist_centre = abs(ratio - 0.5) * 2   # 0 au centre, 1 aux bords
-        a = int(alpha * (1 - dist_centre ** 1.5))
-        sep_surf.set_at((px, 0), (r, g, b, a))
-        sep_surf.set_at((px, 1), (r, g, b, a // 3))
-    surface.blit(sep_surf, (x1, y))
+    cle = (largeur, couleur, alpha)
+    if cle not in _cache_separateur:
+        sep_surf = pygame.Surface((largeur, 2), pygame.SRCALPHA)
+        r, g, b = couleur
+        for px in range(largeur):
+            ratio = px / largeur
+            dist_centre = abs(ratio - 0.5) * 2
+            a = int(alpha * (1 - dist_centre ** 1.5))
+            sep_surf.set_at((px, 0), (r, g, b, a))
+            sep_surf.set_at((px, 1), (r, g, b, a // 3))
+        _cache_separateur[cle] = sep_surf
+    surface.blit(_cache_separateur[cle], (x1, y))
 
 
 def dessiner_titre_neon(surface, police, texte, cx, cy, couleur_neon=None):
-    """Titre avec effet de lueur néon multicouche."""
+    """Titre avec effet de lueur néon multicouche (pré-rendu en cache)."""
     if couleur_neon is None:
         couleur_neon = COULEUR_CYAN
-    r, g, b = couleur_neon
 
-    # Couches de glow (de la plus grande à la plus petite)
-    for decal, alpha in [(6, 15), (4, 25), (2, 40)]:
-        for dx in (-decal, 0, decal):
-            for dy in (-decal, 0, decal):
-                if dx == 0 and dy == 0:
-                    continue
-                glow = police.render(texte, True, (r, g, b))
-                glow.set_alpha(alpha)
-                rect = glow.get_rect(center=(cx + dx, cy + dy))
-                surface.blit(glow, rect)
+    cle = (texte, police.get_height(), couleur_neon)
+    if cle not in _cache_titre_neon:
+        r, g, b = couleur_neon
+        # Rend le texte principal pour connaître la taille
+        surf_principal = police.render(texte, True, couleur_neon)
+        tw, th = surf_principal.get_size()
+        # Surface assez grande pour le glow (marge de 12px de chaque côté)
+        marge = 12
+        cache_surf = pygame.Surface((tw + marge * 2, th + marge * 2), pygame.SRCALPHA)
 
-    # Texte principal
-    surf = police.render(texte, True, couleur_neon)
-    rect = surf.get_rect(center=(cx, cy))
-    surface.blit(surf, rect)
+        # Couches de glow
+        for decal, alpha in [(6, 15), (4, 25), (2, 40)]:
+            for dx in (-decal, 0, decal):
+                for dy in (-decal, 0, decal):
+                    if dx == 0 and dy == 0:
+                        continue
+                    glow = police.render(texte, True, (r, g, b))
+                    glow.set_alpha(alpha)
+                    cache_surf.blit(glow, (marge + dx, marge + dy))
+
+        # Texte principal
+        cache_surf.blit(surf_principal, (marge, marge))
+        _cache_titre_neon[cle] = cache_surf
+
+    cached = _cache_titre_neon[cle]
+    marge = 12
+    rect = cached.get_rect(center=(cx + marge, cy + marge))
+    rect.center = (cx, cy)
+    surface.blit(cached, rect)
 
 
 def dessiner_panneau(surface, rect, couleur_bordure=None, alpha_fond=220):
@@ -117,11 +138,15 @@ def dessiner_panneau(surface, rect, couleur_bordure=None, alpha_fond=220):
     # Bordure extérieure
     pygame.draw.rect(surface, couleur_bordure, rect, width=1, border_radius=12)
 
-    # Reflet du haut (ligne lumineuse)
-    reflet = pygame.Surface((rect.width - 20, 1), pygame.SRCALPHA)
-    for px in range(rect.width - 20):
-        ratio = px / (rect.width - 20)
-        dist = abs(ratio - 0.5) * 2
-        a = int(50 * (1 - dist ** 2))
-        reflet.set_at((px, 0), (200, 230, 255, a))
-    surface.blit(reflet, (rect.x + 10, rect.y + 8))
+    # Reflet du haut (ligne lumineuse, pré-rendu)
+    larg_reflet = rect.width - 20
+    if larg_reflet > 0:
+        if larg_reflet not in _cache_reflet:
+            reflet = pygame.Surface((larg_reflet, 1), pygame.SRCALPHA)
+            for px in range(larg_reflet):
+                ratio = px / larg_reflet
+                dist = abs(ratio - 0.5) * 2
+                a = int(50 * (1 - dist ** 2))
+                reflet.set_at((px, 0), (200, 230, 255, a))
+            _cache_reflet[larg_reflet] = reflet
+        surface.blit(_cache_reflet[larg_reflet], (rect.x + 10, rect.y + 8))

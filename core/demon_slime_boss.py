@@ -260,9 +260,13 @@ class DemonSlimeBoss:
 
         frame_surf, _ = self.current_anim_frames[self.current_frame_index]
 
-        # Retourne le sprite horizontalement si le boss regarde à gauche
+        # Retourne le sprite horizontalement (cache pour éviter flip chaque frame)
         if self.facing_right:
-            frame_surf = pygame.transform.flip(frame_surf, True, False)
+            cle_cache = (id(frame_surf), self.facing_right)
+            if not hasattr(self, '_cache_flip') or self._cache_flip_cle != cle_cache:
+                self._cache_flip = pygame.transform.flip(frame_surf, True, False)
+                self._cache_flip_cle = cle_cache
+            frame_surf = self._cache_flip
 
         surface.blit(frame_surf, (int(self.pos.x), int(self.pos.y)))
 
