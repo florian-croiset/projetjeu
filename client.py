@@ -83,6 +83,8 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
         # Réseau
         self.client_socket = None
         self.mon_id = -1
+        self.code_room = None
+        self._serveur_instance = None
 
         # Données de jeu
         self.carte = None

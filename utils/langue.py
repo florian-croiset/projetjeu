@@ -23,8 +23,13 @@ FR = {
     # Menu Rejoindre
     "rejoindre_titre": "Rejoindre une partie",
     "rejoindre_label_ip": "Entrez l'IP de l'hôte (vide pour 'localhost'):",
+    "rejoindre_label_code": "Entrez le code room :",
     "rejoindre_connecter": "Se connecter",
     "rejoindre_retour": "Retour",
+    "rejoindre_mode_ip": "Mode : IP directe",
+    "rejoindre_mode_code": "Mode : Code Room",
+    "rejoindre_code_invalide": "Code invalide",
+    "hud_code_room": "Code : {}",
 
     # Menu Pause
     "pause_titre": "Pause",
@@ -84,8 +89,13 @@ EN = {
     # Join Menu
     "rejoindre_titre": "Join a game",
     "rejoindre_label_ip": "Enter host IP (empty for 'localhost'):",
+    "rejoindre_label_code": "Enter room code:",
     "rejoindre_connecter": "Connect",
     "rejoindre_retour": "Back",
+    "rejoindre_mode_ip": "Mode: Direct IP",
+    "rejoindre_mode_code": "Mode: Room Code",
+    "rejoindre_code_invalide": "Invalid code",
+    "hud_code_room": "Code: {}",
 
     # Pause Menu
     "pause_titre": "Paused",

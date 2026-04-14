@@ -53,9 +53,25 @@ class MenusMixin:
         bh = self._hauteur_bouton()
         cy = self.cy
 
+        # Mode de connexion : "ip" ou "code"
+        self.mode_rejoindre = "ip" if not RELAY_HOST else "code"
+
+        # --- Champ IP ---
         self.input_box_ip   = pygame.Rect(cx - lw // 2, cy - 30, lw, 46)
         self.input_ip_texte = ""
         self.input_ip_actif = False
+
+        # --- Champ Code Room ---
+        self.input_box_code   = pygame.Rect(cx - lw // 2, cy - 30, lw, 46)
+        self.input_code_texte = ""
+        self.input_code_actif = False
+
+        # --- Bouton toggle mode ---
+        self.btn_mode_connexion = Bouton(
+            cx - lw // 2, cy - 30 - bh - 16, lw, bh,
+            langue.get_texte("rejoindre_mode_code" if self.mode_rejoindre == "code" else "rejoindre_mode_ip"),
+            self.police_bouton, style="ghost"
+        )
 
         self.btn_connecter       = Bouton(cx - lw // 2, cy + 40, lw, bh,
                                         langue.get_texte("rejoindre_connecter"),
@@ -68,7 +84,7 @@ class MenusMixin:
         lw_coller = 90
         self.btn_coller_ip = Bouton(
             cx + lw // 2 + 10, cy - 30, lw_coller, 46,
-            "📋 Coller", self.police_bouton, style="ghost"
+            "Coller", self.police_bouton, style="ghost"
         )
 
     def creer_widgets_menu_parametres(self):
@@ -256,6 +272,38 @@ class MenusMixin:
     #  GESTION + DESSIN — MENU REJOINDRE
     # ==================================================================
 
+    def _tenter_connexion_rejoindre(self):
+        """Lance la connexion selon le mode actuel (IP ou Code Room)."""
+        if self.mode_rejoindre == "code":
+            code = self.input_code_texte.strip().upper()
+            if len(code) < 4:
+                self.message_erreur_connexion = langue.get_texte("rejoindre_code_invalide")
+                return
+            if self.connecter_relay(code):
+                self.etat_jeu = "EN_JEU"
+        else:
+            hote = self.input_ip_texte if self.input_ip_texte else "localhost"
+            if self.connecter(hote):
+                self.etat_jeu = "EN_JEU"
+
+    def _coller_presse_papier(self):
+        """Récupère le texte du presse-papier (multi-plateforme)."""
+        try:
+            texte = pygame.scrap.get(pygame.SCRAP_TEXT)
+            if texte:
+                return texte.decode('utf-8', errors='ignore').rstrip('\x00').strip()
+        except Exception:
+            pass
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['powershell', '-command', 'Get-Clipboard'],
+                capture_output=True, text=True, timeout=2
+            )
+            return result.stdout.strip()
+        except Exception:
+            return ""
+
     def gerer_menu_rejoindre(self, pos_souris):
         if self.message_erreur_connexion:
             self.btn_erreur_ok.verifier_survol(pos_souris)
@@ -269,48 +317,62 @@ class MenusMixin:
         self.btn_connecter.verifier_survol(pos_souris)
         self.btn_retour_rejoindre.verifier_survol(pos_souris)
         self.btn_coller_ip.verifier_survol(pos_souris)
+        if RELAY_HOST:
+            self.btn_mode_connexion.verifier_survol(pos_souris)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.etat_jeu = "QUITTER"
+
             if self.btn_retour_rejoindre.verifier_clic(event):
                 self.etat_jeu = "MENU_PRINCIPAL"
-            if self.btn_connecter.verifier_clic(event):
-                hote = self.input_ip_texte if self.input_ip_texte else "localhost"
-                if self.connecter(hote):
-                    self.etat_jeu = "EN_JEU"
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                self.input_ip_actif = self.input_box_ip.collidepoint(event.pos)
-            if self.btn_coller_ip.verifier_clic(event):
-                try:
-                    texte_presse_papier = pygame.scrap.get(pygame.SCRAP_TEXT)
-                    if texte_presse_papier:
-                        ip_collee = texte_presse_papier.decode('utf-8', errors='ignore').rstrip('\x00').strip()
-                        if ip_collee:
-                            self.input_ip_texte = ip_collee
-                            self.input_ip_actif = True
-                except Exception:
-                    try:
-                        import subprocess
-                        result = subprocess.run(
-                            ['powershell', '-command', 'Get-Clipboard'],
-                            capture_output=True, text=True, timeout=2
-                        )
-                        ip_collee = result.stdout.strip()
-                        if ip_collee:
-                            self.input_ip_texte = ip_collee
-                    except Exception:
-                        pass
 
-            if event.type == pygame.KEYDOWN and self.input_ip_actif:
-                if event.key == pygame.K_RETURN:
-                    hote = self.input_ip_texte if self.input_ip_texte else "localhost"
-                    if self.connecter(hote):
-                        self.etat_jeu = "EN_JEU"
-                elif event.key == pygame.K_BACKSPACE:
-                    self.input_ip_texte = self.input_ip_texte[:-1]
+            # Toggle mode IP / Code Room
+            if RELAY_HOST and self.btn_mode_connexion.verifier_clic(event):
+                if self.mode_rejoindre == "ip":
+                    self.mode_rejoindre = "code"
+                    self.btn_mode_connexion.texte = langue.get_texte("rejoindre_mode_code")
                 else:
-                    self.input_ip_texte += event.unicode
+                    self.mode_rejoindre = "ip"
+                    self.btn_mode_connexion.texte = langue.get_texte("rejoindre_mode_ip")
+
+            if self.btn_connecter.verifier_clic(event):
+                self._tenter_connexion_rejoindre()
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if self.mode_rejoindre == "ip":
+                    self.input_ip_actif = self.input_box_ip.collidepoint(event.pos)
+                    self.input_code_actif = False
+                else:
+                    self.input_code_actif = self.input_box_code.collidepoint(event.pos)
+                    self.input_ip_actif = False
+
+            if self.btn_coller_ip.verifier_clic(event):
+                texte_colle = self._coller_presse_papier()
+                if texte_colle:
+                    if self.mode_rejoindre == "ip":
+                        self.input_ip_texte = texte_colle
+                        self.input_ip_actif = True
+                    else:
+                        self.input_code_texte = texte_colle.upper()[:6]
+                        self.input_code_actif = True
+
+            # Saisie clavier
+            if event.type == pygame.KEYDOWN:
+                if self.mode_rejoindre == "ip" and self.input_ip_actif:
+                    if event.key == pygame.K_RETURN:
+                        self._tenter_connexion_rejoindre()
+                    elif event.key == pygame.K_BACKSPACE:
+                        self.input_ip_texte = self.input_ip_texte[:-1]
+                    else:
+                        self.input_ip_texte += event.unicode
+                elif self.mode_rejoindre == "code" and self.input_code_actif:
+                    if event.key == pygame.K_RETURN:
+                        self._tenter_connexion_rejoindre()
+                    elif event.key == pygame.K_BACKSPACE:
+                        self.input_code_texte = self.input_code_texte[:-1]
+                    elif len(self.input_code_texte) < 6 and event.unicode.isalpha():
+                        self.input_code_texte += event.unicode.upper()
 
     def dessiner_menu_rejoindre(self):
         dessiner_fond_echo(self.ecran, self.largeur_ecran, self.hauteur_ecran,
@@ -320,35 +382,74 @@ class MenusMixin:
                             self.cx, self.hauteur_ecran // 7)
 
         pan_w = self._largeur_bouton() + 80
-        pan_h = 220
+        pan_h = 280 if RELAY_HOST else 220
         pan_rect = pygame.Rect(self.cx - pan_w // 2,
                             self.cy - pan_h // 2 - 20,
                             pan_w, pan_h)
         dessiner_panneau(self.ecran, pan_rect)
 
-        label = self.police_texte.render(
-            langue.get_texte("rejoindre_label_ip"), True, COULEUR_TEXTE)
-        self.ecran.blit(label, label.get_rect(
-            center=(self.cx, pan_rect.y + 36)))
+        y_contenu = pan_rect.y + 36
 
-        bord_color = COULEUR_CYAN if self.input_ip_actif else COULEUR_CYAN_SOMBRE
+        # Bouton toggle mode (si relay configuré)
+        if RELAY_HOST:
+            self.btn_mode_connexion.rect.center = (self.cx, y_contenu)
+            self.btn_mode_connexion.dessiner(self.ecran)
+            y_contenu += 46
+
+        # Label
+        if self.mode_rejoindre == "code":
+            label_texte = langue.get_texte("rejoindre_label_code")
+        else:
+            label_texte = langue.get_texte("rejoindre_label_ip")
+        label = self.police_texte.render(label_texte, True, COULEUR_TEXTE)
+        self.ecran.blit(label, label.get_rect(center=(self.cx, y_contenu)))
+
+        y_contenu += 28
+
+        # Champ de saisie
+        if self.mode_rejoindre == "code":
+            # Champ code room
+            input_box = self.input_box_code
+            input_box.y = y_contenu
+            is_actif = self.input_code_actif
+            texte = self.input_code_texte
+        else:
+            # Champ IP
+            input_box = self.input_box_ip
+            input_box.y = y_contenu
+            is_actif = self.input_ip_actif
+            texte = self.input_ip_texte
+
+        bord_color = COULEUR_CYAN if is_actif else COULEUR_CYAN_SOMBRE
         pygame.draw.rect(self.ecran, COULEUR_INPUT_BOX,
-                        self.input_box_ip, border_radius=6)
+                        input_box, border_radius=6)
         pygame.draw.rect(self.ecran, bord_color,
-                        self.input_box_ip, width=1, border_radius=6)
+                        input_box, width=1, border_radius=6)
 
-        ip_surf = self.police_texte.render(self.input_ip_texte, True, COULEUR_TEXTE)
-        self.ecran.blit(ip_surf, (self.input_box_ip.x + 12,
-                                self.input_box_ip.y + 10))
+        # Affichage texte avec espacement pour les codes
+        if self.mode_rejoindre == "code":
+            texte_affiche = "  ".join(texte) if texte else ""
+            txt_surf = self.police_texte.render(texte_affiche, True, COULEUR_TEXTE)
+        else:
+            txt_surf = self.police_texte.render(texte, True, COULEUR_TEXTE)
 
-        if self.input_ip_actif and int(time.time() * 2) % 2 == 0:
-            cx_cur = self.input_box_ip.x + 14 + ip_surf.get_width()
-            cy_cur = self.input_box_ip.y + 8
+        self.ecran.blit(txt_surf, (input_box.x + 12, input_box.y + 10))
+
+        if is_actif and int(time.time() * 2) % 2 == 0:
+            cx_cur = input_box.x + 14 + txt_surf.get_width()
+            cy_cur = input_box.y + 8
             pygame.draw.rect(self.ecran, COULEUR_CYAN,
                             pygame.Rect(cx_cur, cy_cur, 2,
                                         self.police_texte.get_height() - 6))
 
+        # Bouton coller
+        self.btn_coller_ip.rect.y = input_box.y
         self.btn_coller_ip.dessiner(self.ecran)
+
+        # Boutons action
+        y_btns = input_box.y + 60
+        self.btn_connecter.rect.y = y_btns
+        self.btn_retour_rejoindre.rect.y = y_btns + self._hauteur_bouton() + 12
         self.btn_connecter.dessiner(self.ecran)
         self.btn_retour_rejoindre.dessiner(self.ecran)
 

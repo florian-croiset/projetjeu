@@ -116,6 +116,7 @@ class Serveur:
         self.running          = True
         self._etat_broadcast  = None
         self._broadcast_lock  = threading.Lock()
+        self.code_room        = None       # Room code relay (si activé)
 
     # ------------------------------------------------------------------
     #  CREATION DES ENTITES
@@ -534,45 +535,97 @@ class Serveur:
     #  DÉMARRAGE
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    #  ACCEPTATION CLIENT (direct ou relay)
+    # ------------------------------------------------------------------
+
+    def _accepter_client(self, connexion_client, adresse):
+        """Accepte un client (direct ou relay). Même logique pour les deux."""
+        print(f"[SERVEUR] Tentative de connexion depuis {adresse}")
+
+        if not self._ids_pool:
+            print(f"[SERVEUR] Connexion refusee — Serveur plein (3/3)")
+            try:
+                send_complet(connexion_client, {"erreur": "SERVEUR_PLEIN"})
+                time.sleep(0.1)
+                connexion_client.close()
+            except Exception as e:
+                print(f"[SERVEUR] Erreur lors du refus : {e}")
+            return
+
+        id_joueur = self._ids_pool.pop(0)
+        print(f"[SERVEUR] Joueur {id_joueur} accepte depuis {adresse}")
+
+        self.clients[connexion_client] = id_joueur
+        thread_client = threading.Thread(
+            target=self.gerer_client,
+            args=(connexion_client, id_joueur),
+            daemon=True,
+        )
+        thread_client.start()
+        print(f"[SERVEUR] Thread client démarré pour joueur {id_joueur} depuis {adresse}")
+
+    # ------------------------------------------------------------------
+    #  RELAY : écoute des clients relayés
+    # ------------------------------------------------------------------
+
+    def _ecouter_relay(self):
+        """Thread relay : crée une room et accepte les clients relayés."""
+        from reseau.relay_client import relay_creer_room, relay_attendre_client, relay_ouvrir_canal_data
+        try:
+            ctrl, self.code_room = relay_creer_room(RELAY_HOST, RELAY_PORT)
+            print(f"[SERVEUR] Relay connecté — Code Room : {self.code_room}")
+        except Exception as e:
+            print(f"[SERVEUR] Impossible de se connecter au relay ({RELAY_HOST}:{RELAY_PORT}): {e}")
+            return
+
+        while self.running:
+            try:
+                slot_id = relay_attendre_client(ctrl, RELAY_HOST, RELAY_PORT)
+                print(f"[SERVEUR] Nouveau client relay (slot {slot_id})")
+                data_sock = relay_ouvrir_canal_data(RELAY_HOST, RELAY_PORT, self.code_room, slot_id)
+                self._accepter_client(data_sock, ("relay", slot_id))
+            except EOFError:
+                print("[SERVEUR] Connexion relay perdue")
+                break
+            except Exception as e:
+                print(f"[SERVEUR] Erreur relay: {e}")
+                break
+
+        self.code_room = None
+        print("[SERVEUR] Thread relay terminé")
+
+    # ------------------------------------------------------------------
+    #  DÉMARRAGE
+    # ------------------------------------------------------------------
+
     def demarrer(self):
         thread_boucle_jeu = threading.Thread(target=self.boucle_jeu_serveur)
         thread_boucle_jeu.daemon = True
         thread_boucle_jeu.start()
+
+        # Démarrer le thread relay si configuré
+        if RELAY_HOST:
+            thread_relay = threading.Thread(target=self._ecouter_relay, daemon=True)
+            thread_relay.start()
 
         self.serveur_socket.listen()
         print("[SERVEUR] En attente de connexions...")
 
         while True:
             connexion_client, adresse = self.serveur_socket.accept()
-            print(f"[SERVEUR] Tentative de connexion depuis {adresse}")
-
-            if not self._ids_pool:
-                print(f"[SERVEUR] Connexion refusee — Serveur plein (3/3)")
-                try:
-                    send_complet(connexion_client, {"erreur": "SERVEUR_PLEIN"})
-                    time.sleep(0.1)
-                    connexion_client.close()
-                except Exception as e:
-                    print(f"[SERVEUR] Erreur lors du refus : {e}")
-                continue
-
-            id_joueur = self._ids_pool.pop(0)
-            print(f"[SERVEUR] Joueur {id_joueur} accepte depuis {adresse}")
-
-            self.clients[connexion_client] = id_joueur
-            thread_client = threading.Thread(
-                target=self.gerer_client,
-                args=(connexion_client, id_joueur),
-                daemon=True,
-            )
-            thread_client.start()
-            print(f"[SERVEUR] Thread client démarré pour joueur {id_joueur} depuis {adresse}")
+            self._accepter_client(connexion_client, adresse)
 
 
-def main(id_slot, type_lancement):
+def creer_serveur(id_slot, type_lancement):
+    """Crée et retourne une instance Serveur (sans la démarrer)."""
     pygame.init()
     ip = obtenir_ip_locale()
     print(f"[SERVEUR] IP locale : {ip}")
     est_nouvelle_partie = (type_lancement == "nouvelle")
-    serveur_jeu = Serveur(id_slot=id_slot, est_nouvelle_partie=est_nouvelle_partie)
-    serveur_jeu.demarrer()
+    return Serveur(id_slot=id_slot, est_nouvelle_partie=est_nouvelle_partie)
+
+
+def main(id_slot, type_lancement):
+    s = creer_serveur(id_slot, type_lancement)
+    s.demarrer()
