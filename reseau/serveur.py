@@ -292,6 +292,8 @@ class Serveur:
             print(f"[SERVEUR] Timeout joueur {id_joueur} (pas de données depuis 10s) : {e}")
         except socket.error as e:
             print(f"[SERVEUR] Erreur socket joueur {id_joueur} ({type(e).__name__}): {e}")
+        except ValueError as e:
+            print(f"[SERVEUR] Protocole invalide joueur {id_joueur}: {e}")
         finally:
             print(f"[SERVEUR] Client {id_joueur} deconnecte.")
             connexion_client.close()
