@@ -110,6 +110,14 @@ ECHO_DIR_DEMI_ANGLE = 25           # ±15° autour de la direction (cône de 30�
 ARGENT_AME_LIBRE = 5
 COULEUR_AME_LIBRE = (0, 220, 180)  # Turquoise
 
+# -- Âmes Loot (butin ennemi) --
+COULEUR_AME_LOOT = (0, 200, 160)
+VITESSE_BURST_LOOT = 4.0           # Vélocité max initiale de dispersion
+REBOND_AMORTISSEMENT = 0.2         # Facteur de rebond sur murs/sol
+SEUIL_REPOS_LOOT = 0.5             # Vélocité sous laquelle l'orbe se pose
+DUREE_MAX_DISPERSION = 3000        # ms, force repos après ce délai
+DUREE_VIE_AME_LOOT = 60000         # ms, despawn après repos
+
 # -- Clé --
 HAVE_KEY = False  # Variable globale, mise à True quand le joueur ramasse une clé
 

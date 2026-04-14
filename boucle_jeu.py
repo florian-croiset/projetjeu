@@ -25,6 +25,7 @@ from core.ennemi import Ennemi
 from core.demon_slime_boss import DemonSlimeBoss
 from core.ame_perdue import AmePerdue
 from core.ame_libre import AmeLibre
+from core.ame_loot import AmeLoot
 from core.cle import Cle
 from core.porte import Porte
 from core.orbe_capacite import OrbeCapacite
@@ -252,6 +253,8 @@ class BoucleJeuMixin:
             ame.dessiner(surface_virtuelle, camera_offset, temps_ms)
         for ame in self.ames_libres_locales.values():
             ame.dessiner(surface_virtuelle, camera_offset, temps_ms)
+        for ame in self.ames_loot_locales.values():
+            ame.dessiner(surface_virtuelle, camera_offset, temps_ms)
 
         # --- Clé ---
         if self.cle_locale and not self.cle_locale.est_ramassee:
@@ -397,6 +400,16 @@ class BoucleJeuMixin:
                             dal['x'], dal['y'], dal.get('valeur'))
                     self.ames_libres_locales[dal['id']].set_etat(dal)
 
+                # --- Âmes loot ---
+                ids_loot = {a['id'] for a in donnees_recues.get('ames_loot', [])}
+                for id_local in list(self.ames_loot_locales.keys()):
+                    if id_local not in ids_loot:
+                        del self.ames_loot_locales[id_local]
+                for dl in donnees_recues.get('ames_loot', []):
+                    if dl['id'] not in self.ames_loot_locales:
+                        self.ames_loot_locales[dl['id']] = AmeLoot(dl['x'], dl['y'], dl.get('valeur', 1))
+                    self.ames_loot_locales[dl['id']].set_etat(dl)
+
                 # --- Orbes de capacité ---
                 ids_orbes = {o['id'] for o in donnees_recues.get('orbes_capacite', [])}
                 for id_local in list(self.orbes_capacite_locaux.keys()):
@@ -528,6 +541,7 @@ class BoucleJeuMixin:
             self.ennemis_locaux    = {}
             self.ames_perdues_locales  = {}
             self.ames_libres_locales   = {}
+            self.ames_loot_locales     = {}
             self.orbes_capacite_locaux = {}   # NOUVEAU
             self.porte_locale          = None  # NOUVEAU
             self.cle_locale            = None
@@ -551,6 +565,7 @@ class BoucleJeuMixin:
         self.ennemis_locaux        = {}
         self.ames_perdues_locales  = {}
         self.ames_libres_locales   = {}
+        self.ames_loot_locales     = {}
         self.orbes_capacite_locaux = {}   # NOUVEAU
         self.porte_locale          = None  # NOUVEAU
         self.cle_locale            = None
