@@ -440,7 +440,10 @@ class Serveur:
                     joueur.gerer_attaque(temps_actuel)
                     if joueur.est_en_attaque and joueur.rect_attaque:
                         for id_ennemi, ennemi in list(self.ennemis.items()):
-                            if not ennemi.est_mort and joueur.rect_attaque.colliderect(ennemi.rect):
+                            if (not ennemi.est_mort
+                                    and id_ennemi not in joueur.ennemis_touches  # hit registry
+                                    and joueur.rect_attaque.colliderect(ennemi.rect)):
+                                joueur.ennemis_touches.add(id_ennemi)  # enregistre avant d'infliger
                                 mort = ennemi.prendre_degat(DEGATS_JOUEUR, temps_actuel)
                                 if mort:
                                     cx, cy = ennemi.rect.centerx, ennemi.rect.centery
