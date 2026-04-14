@@ -18,6 +18,7 @@ from core.ennemi import Ennemi
 from core.boss_room import BossRoom
 from core.ame_perdue import AmePerdue
 from core.ame_libre import AmeLibre
+from core.ame_loot import AmeLoot
 from core.cle import Cle
 from core.porte import Porte
 from core.orbe_capacite import OrbeCapacite
@@ -50,6 +51,7 @@ class Serveur:
         self.ennemis             = {}
         self.ames_perdues        = {}
         self.ames_libres         = {}
+        self.ames_loot           = {}
         self.orbes_capacite      = {}   # NOUVEAU
         self.vis_map_precedente  = {}
         self.cle                 = None
@@ -353,6 +355,19 @@ class Serveur:
                             joueur.argent += ame.valeur
                             del self.ames_libres[id_ame]
 
+                # 1b. Âmes loot : physique + collecte + despawn
+                for id_ame, ame in list(self.ames_loot.items()):
+                    ame.mettre_a_jour(temps_actuel, self.rects_collision)
+                    if ame.est_expiree(temps_actuel):
+                        del self.ames_loot[id_ame]
+                        continue
+                    for id_joueur, joueur in self.joueurs.items():
+                        if joueur.rect.colliderect(ame.rect):
+                            joueur.argent += ame.valeur
+                            if id_ame in self.ames_loot:
+                                del self.ames_loot[id_ame]
+                            break
+
                 # 2. Orbes de capacité : animation + collecte
                 for orbe in list(self.orbes_capacite.values()):
                     if not orbe.est_ramasse:
@@ -428,7 +443,11 @@ class Serveur:
                             if not ennemi.est_mort and joueur.rect_attaque.colliderect(ennemi.rect):
                                 mort = ennemi.prendre_degat(DEGATS_JOUEUR, temps_actuel)
                                 if mort:
-                                    joueur.argent += ennemi.argent_drop
+                                    cx, cy = ennemi.rect.centerx, ennemi.rect.centery
+                                    for _ in range(ennemi.argent_drop):
+                                        ame = AmeLoot(cx, cy, valeur=1)
+                                        ame.temps_creation = temps_actuel
+                                        self.ames_loot[ame.id] = ame
                         for id_ame, ame in list(self.ames_perdues.items()):
                             if ame.id_joueur == id_joueur:
                                 if joueur.rect_attaque.colliderect(ame.rect):
@@ -488,6 +507,7 @@ class Serveur:
                         'ennemis':       [e.get_etat() for e in self.ennemis.values()],
                         'ames_perdues':  [a.get_etat() for a in self.ames_perdues.values()],
                         'ames_libres':   [a.get_etat() for a in self.ames_libres.values()],
+                        'ames_loot':     [a.get_etat() for a in self.ames_loot.values()],
                         'orbes_capacite': [o.get_etat() for o in self.orbes_capacite.values()],
                         'cle':           self.cle.get_etat() if self.cle else None,
                         'porte':         self.porte.get_etat() if self.porte else None,
