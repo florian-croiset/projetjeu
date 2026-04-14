@@ -17,6 +17,7 @@ import copy
 from parametres import *
 from utils import envoyer_logs, music
 from reseau import serveur
+from reseau.relay_server import demarrer_relay_thread
 from reseau.protocole import recv_complet, send_complet
 from ui.camera import calculer_camera
 from core.carte import Carte
@@ -513,9 +514,23 @@ class BoucleJeuMixin:
     def lancer_partie_locale(self, id_slot, est_nouvelle_partie=False):
         type_lancement  = "nouvelle" if est_nouvelle_partie else "charger"
         self._serveur_instance = None
+        self._relay_instance   = None
+
+        # Auto-démarrer le relay server en tant que thread
+        try:
+            self._relay_instance = demarrer_relay_thread(RELAY_PORT)
+            print(f"[CLIENT] Relay auto-démarré sur le port {RELAY_PORT}")
+        except Exception as e:
+            print(f"[CLIENT] Impossible de démarrer le relay: {e}")
+            self._relay_instance = None
+
+        relay_host = "localhost" if self._relay_instance else ""
+        relay_port = RELAY_PORT
 
         def _demarrer_serveur():
-            self._serveur_instance = serveur.creer_serveur(id_slot, type_lancement)
+            self._serveur_instance = serveur.creer_serveur(
+                id_slot, type_lancement,
+                relay_host=relay_host, relay_port=relay_port)
             self._serveur_instance.demarrer()
 
         thread_serveur = threading.Thread(target=_demarrer_serveur, daemon=True)
@@ -529,7 +544,7 @@ class BoucleJeuMixin:
         if connecte:
             self.etat_jeu = "EN_JEU"
             # Récupérer le code room du serveur (si relay actif)
-            if RELAY_HOST and self._serveur_instance:
+            if relay_host and self._serveur_instance:
                 for _ in range(40):  # max 2 secondes
                     if self._serveur_instance.code_room:
                         self.code_room = self._serveur_instance.code_room
@@ -607,12 +622,14 @@ class BoucleJeuMixin:
             self.client_socket = None
             return False
 
-    def connecter_relay(self, code_room):
+    def connecter_relay(self, code_room, relay_host=None, relay_port=None):
         """Se connecte au serveur via le relay avec un room code."""
         from reseau.relay_client import relay_rejoindre
+        host = relay_host or RELAY_HOST
+        port = relay_port or RELAY_PORT
         try:
-            print(f"[CLIENT] Connexion relay avec code '{code_room}'...")
-            self.client_socket = relay_rejoindre(RELAY_HOST, RELAY_PORT, code_room)
+            print(f"[CLIENT] Connexion relay ({host}:{port}) avec code '{code_room}'...")
+            self.client_socket = relay_rejoindre(host, port, code_room)
             print(f"[CLIENT] Relay bridgé, en attente du handshake serveur...")
             self.client_socket.settimeout(15.0)
             self.client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -656,10 +673,19 @@ class BoucleJeuMixin:
                 self.client_socket.close()
             except Exception:
                 pass
+        # Arrêter le relay embarqué si présent
+        relay = getattr(self, '_relay_instance', None)
+        if relay:
+            try:
+                relay.arreter()
+                print("[CLIENT] Relay embarqué arrêté")
+            except Exception as e:
+                print(f"[CLIENT] Erreur arrêt relay: {e}")
         self.client_socket         = None
         self.mon_id                = -1
         self.code_room             = None
         self._serveur_instance     = None
+        self._relay_instance       = None
         self.joueurs_locaux        = {}
         self.ennemis_locaux        = {}
         self.ames_perdues_locales  = {}
