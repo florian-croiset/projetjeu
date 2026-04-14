@@ -325,7 +325,7 @@ class BoucleJeuMixin:
             # Masquer la souris en jeu (plein écran), la montrer en pause/menus
             en_plein_ecran = self.parametres.get('video', {}).get('plein_ecran', False)
             if en_plein_ecran:
-                pygame.mouse.set_visible(self.etat_jeu_interne == "PAUSE")
+                pygame.mouse.set_visible(self.etat_jeu_interne in ("PAUSE", "PARAMETRES_JEU"))
 
             pos_souris       = pygame.mouse.get_pos()
             commandes_a_envoyer = {
@@ -338,6 +338,17 @@ class BoucleJeuMixin:
                 commandes_a_envoyer = self.gerer_evenements_jeu()
             elif self.etat_jeu_interne == "PAUSE":
                 self.gerer_evenements_pause(pos_souris)
+            elif self.etat_jeu_interne == "PARAMETRES_JEU":
+                if not self.parametres_temp:
+                    self.parametres_temp = copy.deepcopy(self.parametres)
+                # Sentinel : gerer_menu_parametres positionne etat_jeu = etat_jeu_precedent
+                # quand l'utilisateur quitte (Retour/Appliquer/Escape). On utilise une
+                # valeur spéciale pour détecter cet événement sans quitter la boucle réseau.
+                self.etat_jeu_precedent = "_RETOUR_PAUSE"
+                self.gerer_menu_parametres(pos_souris)
+                if self.etat_jeu == "_RETOUR_PAUSE":
+                    self.etat_jeu = "EN_JEU"
+                    self.etat_jeu_interne = "PAUSE"
 
             if self.etat_jeu != "EN_JEU" or not self.running:
                 break
@@ -465,6 +476,8 @@ class BoucleJeuMixin:
                 self.dessiner_jeu()
                 if self.etat_jeu_interne == "PAUSE":
                     self.dessiner_menu_pause()
+                elif self.etat_jeu_interne == "PARAMETRES_JEU":
+                    self.dessiner_menu_parametres()
 
             except EOFError as e:
                 print(f"[CLIENT] Serveur deconnecte: {e}")
