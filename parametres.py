@@ -124,6 +124,10 @@ HAVE_KEY = False  # Variable globale, mise à True quand le joueur ramasse une c
 # -- Paramètres Réseau --
 PORT_SERVEUR = 5555
 
+# -- Relay (connexion par room code) --
+RELAY_HOST = ""         # Vide = relay désactivé. Ex: "relay.example.com" ou "1.2.3.4"
+RELAY_PORT = 7777
+
 # -- Paramètres de la Caméra --
 ZOOM_CAMERA = 2.5
 

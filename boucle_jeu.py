@@ -512,11 +512,13 @@ class BoucleJeuMixin:
 
     def lancer_partie_locale(self, id_slot, est_nouvelle_partie=False):
         type_lancement  = "nouvelle" if est_nouvelle_partie else "charger"
-        thread_serveur  = threading.Thread(
-            target=serveur.main,
-            args=(id_slot, type_lancement),
-            daemon=True,
-        )
+        self._serveur_instance = None
+
+        def _demarrer_serveur():
+            self._serveur_instance = serveur.creer_serveur(id_slot, type_lancement)
+            self._serveur_instance.demarrer()
+
+        thread_serveur = threading.Thread(target=_demarrer_serveur, daemon=True)
         thread_serveur.start()
         connecte = False
         for _ in range(6):
@@ -526,8 +528,34 @@ class BoucleJeuMixin:
                 break
         if connecte:
             self.etat_jeu = "EN_JEU"
+            # Récupérer le code room du serveur (si relay actif)
+            if RELAY_HOST and self._serveur_instance:
+                for _ in range(40):  # max 2 secondes
+                    if self._serveur_instance.code_room:
+                        self.code_room = self._serveur_instance.code_room
+                        print(f"[CLIENT] Code Room : {self.code_room}")
+                        break
+                    time.sleep(0.05)
         else:
             self.etat_jeu = "MENU_PRINCIPAL"
+
+    def _finaliser_connexion(self):
+        """Initialise les données locales après un handshake réussi."""
+        if getattr(sys, 'frozen', False):
+            dossier_script = sys._MEIPASS
+        else:
+            dossier_script = os.path.dirname(os.path.abspath(__file__))
+        chemin_map = os.path.join(dossier_script, "assets/MapS2.tmx")
+        self.carte             = Carte(chemin_map)
+        self.vis_map_locale    = self.carte.creer_carte_visibilite_vierge()
+        self.joueurs_locaux    = {}
+        self.ennemis_locaux    = {}
+        self.ames_perdues_locales  = {}
+        self.ames_libres_locales   = {}
+        self.ames_loot_locales     = {}
+        self.orbes_capacite_locaux = {}
+        self.porte_locale          = None
+        self.cle_locale            = None
 
     def connecter(self, hote):
         try:
@@ -555,22 +583,7 @@ class BoucleJeuMixin:
             self.mon_id = reponse
             print(f"[CLIENT] Connecté avec succès (ID joueur : {self.mon_id})")
             self.message_erreur_connexion = None
-
-            if getattr(sys, 'frozen', False):
-                dossier_script = sys._MEIPASS
-            else:
-                dossier_script = os.path.dirname(os.path.abspath(__file__))
-            chemin_map = os.path.join(dossier_script, "assets/MapS2.tmx")
-            self.carte             = Carte(chemin_map)
-            self.vis_map_locale    = self.carte.creer_carte_visibilite_vierge()
-            self.joueurs_locaux    = {}
-            self.ennemis_locaux    = {}
-            self.ames_perdues_locales  = {}
-            self.ames_libres_locales   = {}
-            self.ames_loot_locales     = {}
-            self.orbes_capacite_locaux = {}   # NOUVEAU
-            self.porte_locale          = None  # NOUVEAU
-            self.cle_locale            = None
+            self._finaliser_connexion()
             return True
 
         except socket.timeout:
@@ -594,6 +607,48 @@ class BoucleJeuMixin:
             self.client_socket = None
             return False
 
+    def connecter_relay(self, code_room):
+        """Se connecte au serveur via le relay avec un room code."""
+        from reseau.relay_client import relay_rejoindre
+        try:
+            print(f"[CLIENT] Connexion relay avec code '{code_room}'...")
+            self.client_socket = relay_rejoindre(RELAY_HOST, RELAY_PORT, code_room)
+            print(f"[CLIENT] Relay bridgé, en attente du handshake serveur...")
+            self.client_socket.settimeout(15.0)
+            self.client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            reponse = recv_complet(self.client_socket)
+            print(f"[CLIENT] Handshake reçu via relay : {reponse}")
+
+            if isinstance(reponse, dict) and "erreur" in reponse:
+                if reponse["erreur"] == "SERVEUR_PLEIN":
+                    print(f"[CLIENT] Connexion refusée : serveur plein")
+                    self.message_erreur_connexion = "Le serveur est plein !\n(3/3 joueurs)"
+                    self.client_socket.close()
+                    self.client_socket = None
+                    return False
+
+            self.mon_id = reponse
+            print(f"[CLIENT] Connecté via relay (ID joueur : {self.mon_id})")
+            self.message_erreur_connexion = None
+            self._finaliser_connexion()
+            return True
+
+        except ConnectionError as e:
+            print(f"[CLIENT] Echec relay: {e}")
+            self.message_erreur_connexion = str(e).replace("Relay: ", "")
+            self.client_socket = None
+            return False
+        except socket.timeout:
+            print(f"[CLIENT] Echec relay: TIMEOUT après connexion au relay")
+            self.message_erreur_connexion = "Timeout : le serveur ne répond pas\nvia le relay."
+            self.client_socket = None
+            return False
+        except Exception as e:
+            print(f"[CLIENT] Echec relay: {type(e).__name__}: {e}")
+            self.message_erreur_connexion = f"Échec connexion relay :\n{e}"
+            self.client_socket = None
+            return False
+
     def nettoyer_connexion(self):
         pygame.mouse.set_visible(True)
         if self.client_socket:
@@ -603,13 +658,15 @@ class BoucleJeuMixin:
                 pass
         self.client_socket         = None
         self.mon_id                = -1
+        self.code_room             = None
+        self._serveur_instance     = None
         self.joueurs_locaux        = {}
         self.ennemis_locaux        = {}
         self.ames_perdues_locales  = {}
         self.ames_libres_locales   = {}
         self.ames_loot_locales     = {}
-        self.orbes_capacite_locaux = {}   # NOUVEAU
-        self.porte_locale          = None  # NOUVEAU
+        self.orbes_capacite_locaux = {}
+        self.porte_locale          = None
         self.cle_locale            = None
         self.carte                 = None
         self.vis_map_locale        = None

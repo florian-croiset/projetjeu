@@ -71,6 +71,18 @@ class HudMixin:
         if MODE_DEV:
             self._dessiner_debug_hud()
 
+        # Code Room (affiché en haut à droite quand on héberge)
+        if getattr(self, 'code_room', None):
+            from utils import langue
+            code_txt = langue.get_texte("hud_code_room").format(self.code_room)
+            code_surf = self.police_texte.render(code_txt, True, COULEUR_CYAN)
+            code_rect = code_surf.get_rect(topright=(self.largeur_ecran - 24, 24))
+            # Fond semi-transparent
+            bg = pygame.Surface((code_rect.width + 16, code_rect.height + 8), pygame.SRCALPHA)
+            bg.fill((0, 0, 0, 140))
+            self.ecran.blit(bg, (code_rect.x - 8, code_rect.y - 4))
+            self.ecran.blit(code_surf, code_rect)
+
     # ------------------------------------------------------------------
     #  INDICATEUR COOLDOWN ECHO — WIDGET COMPLET
     # ------------------------------------------------------------------
