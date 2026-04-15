@@ -42,11 +42,11 @@ Dans un monde plongé dans l'obscurité totale, le joueur ne peut voir son envir
 
 Ce projet a été réalisé par une équipe de 5 étudiants :
 
-1. **[Amaury Giraud--Laforet]** - [Rôle principal]
-2. **[Florian Croiset]** - [Rôle principal]
-3. **[Eric Sahakian]** - [Rôle principal]
-4. **[Gaspard Sapin]** - [Rôle principal]
-5. **[Jules Cohen]** - [Rôle principal]
+1. **[Amaury Giraud--Laforet]** - Chef de projet, IA, Objets
+2. **[Florian Croiset]** - Menu, site, Musique
+3. **[Eric Sahakian]** - Level design, Graphismes
+4. **[Gaspard Sapin]** - Déplacements, Mécaniques, Boss
+5. **[Jules Cohen]** - Lore, Réseau, Jouabilité
 
 ### Site web du projet
 
