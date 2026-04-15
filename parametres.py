@@ -184,5 +184,5 @@ HALOS_MENU = False  # Passer à False pour désactiver les halos animés des men
 FOND_MENU = False  # Passer à False pour un fond noir uni
 REVELATION = False
 ASSOMBRISSEMENT = True  # False = tout illuminé sans halo | True = obscurité avec halo autour du joueur
-TICK_RATE_RESEAU = 60  # envois réseau par seconde (vs 60 pour la physique)
+TICK_RATE_RESEAU = 10  # envois réseau par seconde (vs 60 pour la physique)
 

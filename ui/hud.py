@@ -15,11 +15,38 @@ class HudMixin:
     """Méthodes d'affichage du HUD en jeu."""
 
     # ------------------------------------------------------------------
+    #  CACHE HUD (fonts + surfaces réutilisables)
+    # ------------------------------------------------------------------
+
+    def _init_hud_cache(self):
+        """Initialise les fonts et surfaces cachées du HUD. Appelé une seule fois."""
+        if hasattr(self, '_hud_cache_ok'):
+            return
+        self._font_echo_icon   = pygame.font.Font(None, max(20, 22))  # rayon=22
+        self._font_label_small = pygame.font.Font(None, 16)
+        self._font_label_medium = pygame.font.Font(None, 22)
+        self._font_capacite    = pygame.font.Font(None, 13)
+        # Surfaces réutilisables pour le widget echo (taille fixe)
+        self._widget_surf_cache = pygame.Surface((130, 22 * 2 + 4), pygame.SRCALPHA)
+        self._surf_c_cache      = pygame.Surface((22 * 2 + 2, 22 * 2 + 2), pygame.SRCALPHA)
+        # Surface halo flash ennemi (60x60)
+        self._flash_halo_surf = pygame.Surface((60, 60), pygame.SRCALPHA)
+        # Cache des surfaces tmp flash par taille d'ennemi
+        self._flash_tmp_cache = {}
+        # Surface overlay debug
+        self._debug_panel_cache = None
+        # Surface overlay mort
+        self._mort_overlay_cache = None
+        self._mort_overlay_size  = None
+        self._hud_cache_ok = True
+
+    # ------------------------------------------------------------------
     #  ENTRÉE PRINCIPALE
     # ------------------------------------------------------------------
 
     def dessiner_hud(self):
         """Dessine le HUD complet."""
+        self._init_hud_cache()
         mon_joueur = self.joueurs_locaux.get(self.mon_id)
         if not mon_joueur:
             return
@@ -102,16 +129,16 @@ class HudMixin:
         pret         = ratio >= 1.0
 
         # ---- Fond du widget (panneau semi-transparent) ----
-        widget_w = 130
-        widget_h = rayon * 2 + 4
-        widget_surf = pygame.Surface((widget_w, widget_h), pygame.SRCALPHA)
+        widget_surf = self._widget_surf_cache
+        widget_surf.fill((0, 0, 0, 0))
         widget_surf.fill((8, 6, 20, 160))
         pygame.draw.rect(widget_surf, (30, 20, 60, 180),
                          widget_surf.get_rect(), width=1, border_radius=6)
         self.ecran.blit(widget_surf, (x - 2, y - 2))
 
         # ---- Cercle de cooldown ----
-        surf_c = pygame.Surface((rayon * 2 + 2, rayon * 2 + 2), pygame.SRCALPHA)
+        surf_c = self._surf_c_cache
+        surf_c.fill((0, 0, 0, 0))
         scx    = rayon + 1
         scy    = rayon + 1
 
@@ -142,9 +169,8 @@ class HudMixin:
             pygame.draw.circle(surf_c, (255, 255, 255, flash_alpha), (scx, scy), rayon - 4)
 
         # Icône centrale "E" (touche d'activation)
-        police_e = pygame.font.Font(None, max(20, rayon))
         couleur_e = COULEUR_CYAN if pret else (100, 80, 140)
-        icone_e = police_e.render("E", True, couleur_e)
+        icone_e = self._font_echo_icon.render("E", True, couleur_e)
         surf_c.blit(icone_e, icone_e.get_rect(center=(scx, scy)))
 
         self.ecran.blit(surf_c, (cx_cercle - rayon - 1, cy_cercle - rayon - 1))
@@ -154,16 +180,14 @@ class HudMixin:
         ly = cy_cercle - 18
 
         # Ligne 1 : mot "ECHO" en petit gris
-        p_label = pygame.font.Font(None, 16)
-        label_titre = p_label.render("ECHO", True, (100, 85, 130))
+        label_titre = self._font_label_small.render("ECHO", True, (100, 85, 130))
         self.ecran.blit(label_titre, (lx, ly))
         ly += label_titre.get_height() + 2
 
         # Ligne 2 : état principal — grand, lisible
-        p_etat = pygame.font.Font(None, 22)
         if pret:
             # "PRÊT" en vert/cyan lumineux
-            etat_surf = p_etat.render("PRÊT", True, COULEUR_CYAN)
+            etat_surf = self._font_label_medium.render("PRÊT", True, COULEUR_CYAN)
         else:
             # Décompte en secondes avec couleur progressive
             restant   = (COOLDOWN_ECHO - elapsed) / 1000
@@ -171,7 +195,7 @@ class HudMixin:
             r_c = int(220 * t_ratio + 0   * (1 - t_ratio))
             g_c = int(60  * t_ratio + 200 * (1 - t_ratio))
             b_c = int(60  * t_ratio + 80  * (1 - t_ratio))
-            etat_surf = p_etat.render(f"{restant:.1f}s", True, (r_c, g_c, b_c))
+            etat_surf = self._font_label_medium.render(f"{restant:.1f}s", True, (r_c, g_c, b_c))
 
         self.ecran.blit(etat_surf, (lx, ly))
         ly += etat_surf.get_height() + 2
@@ -197,7 +221,7 @@ class HudMixin:
         if ratio <= 0:
             return
 
-        nb_points = max(4, int(ratio * 48))  # résolution de l'arc
+        nb_points = max(4, int(ratio * 16))  # résolution de l'arc
         epaisseur  = 4                         # épaisseur de la piste colorée
         angle_debut = -math.pi / 2             # 12h = -90°
 
@@ -241,7 +265,7 @@ class HudMixin:
         for icone, couleur in capacites:
             pygame.draw.circle(self.ecran, couleur,
                                (cx + taille // 2, y + taille // 2), taille // 2)
-            s = pygame.font.Font(None, 13).render(icone, True, (255, 255, 255))
+            s = self._font_capacite.render(icone, True, (255, 255, 255))
             self.ecran.blit(s, s.get_rect(center=(cx + taille // 2, y + taille // 2)))
             cx += taille + espace
 
@@ -292,7 +316,9 @@ class HudMixin:
         ht_pan = len(lignes) * lh + pad * 2
         x0     = self.largeur_ecran - lw_pan - 12
         y0     = 12
-        panel  = pygame.Surface((lw_pan, ht_pan), pygame.SRCALPHA)
+        if self._debug_panel_cache is None or self._debug_panel_cache.get_size() != (lw_pan, ht_pan):
+            self._debug_panel_cache = pygame.Surface((lw_pan, ht_pan), pygame.SRCALPHA)
+        panel = self._debug_panel_cache
         panel.fill((8, 8, 20, 180))
         pygame.draw.rect(panel, COULEUR_CYAN_SOMBRE,
                          panel.get_rect(), width=1, border_radius=6)
@@ -310,9 +336,12 @@ class HudMixin:
             self._mort_depuis = pygame.time.get_ticks()
         elapsed = pygame.time.get_ticks() - self._mort_depuis
         alpha   = min(200, int(200 * min(elapsed, 800) / 800))
-        overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-        overlay.fill((80, 0, 0, alpha))
-        surface.blit(overlay, (0, 0))
+        sz = surface.get_size()
+        if self._mort_overlay_cache is None or self._mort_overlay_size != sz:
+            self._mort_overlay_cache = pygame.Surface(sz, pygame.SRCALPHA)
+            self._mort_overlay_size = sz
+        self._mort_overlay_cache.fill((80, 0, 0, alpha))
+        surface.blit(self._mort_overlay_cache, (0, 0))
         if elapsed > 600:
             if not hasattr(self, '_police_mort'):
                 self._police_mort = pygame.font.Font(None, 48)
