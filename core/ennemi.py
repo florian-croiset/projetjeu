@@ -186,61 +186,51 @@ class Ennemi:
 
     def _dessiner_coeurs(self, surface, rect_visuel):
         """
-        Barre de vie sous forme de cœurs discrets.
-
-        Chaque carré = 1 PV max. Plein = PV restant, vide = dégât subi.
-        Couleur du remplissage : rouge → orange → jaune selon la vie restante.
-        Centrée au-dessus du sprite, avec ombre et bordure pour lisibilité.
+        Barre de vie sous forme de cœurs discrets (cachée par PV).
         """
-        coeur_w    = 7    # largeur d'un cœur en pixels
-        coeur_h    = 6    # hauteur d'un cœur
-        espacement = 3    # px entre deux cœurs
-        marge_bas  = 4    # px entre la barre et le haut du sprite
+        coeur_w    = 7
+        coeur_h    = 6
+        espacement = 3
+        marge_bas  = 4
 
         total_w = self.pv_max * coeur_w + (self.pv_max - 1) * espacement
-        bx      = rect_visuel.centerx - total_w // 2
-        by      = rect_visuel.top - coeur_h - marge_bas
 
-        # Couleur selon ratio de vie restante
-        ratio = self.pv / self.pv_max
-        if ratio > 0.6:
-            couleur_plein = _COULEUR_PV_PLEIN
-        elif ratio > 0.35:
-            couleur_plein = _COULEUR_PV_MOITIE
-        else:
-            couleur_plein = _COULEUR_PV_BAS
+        # Rebuild le cache seulement si les PV ont changé
+        if not hasattr(self, '_cache_pv_val') or self._cache_pv_val != self.pv or self._cache_pv_max != self.pv_max:
+            self._cache_pv_val = self.pv
+            self._cache_pv_max = self.pv_max
+            # Surface avec marge pour l'ombre (+1px)
+            self._cache_barre_pv = pygame.Surface((total_w + 1, coeur_h + 1), pygame.SRCALPHA)
+            surf = self._cache_barre_pv
 
-        for i in range(self.pv_max):
-            cx = bx + i * (coeur_w + espacement)
-
-            # 1. Ombre portée (décalée 1px bas-droite)
-            pygame.draw.rect(surface, (8, 4, 4),
-                             pygame.Rect(cx + 1, by + 1, coeur_w, coeur_h),
-                             border_radius=2)
-
-            # 2. Fond sombre (slot vide)
-            pygame.draw.rect(surface, _COULEUR_PV_FOND,
-                             pygame.Rect(cx, by, coeur_w, coeur_h),
-                             border_radius=2)
-
-            if i < self.pv:
-                # 3a. Remplissage coloré (PV restant)
-                pygame.draw.rect(surface, couleur_plein,
-                                 pygame.Rect(cx, by, coeur_w, coeur_h),
-                                 border_radius=2)
-                # 3b. Petit reflet en haut (donne du relief)
-                pygame.draw.rect(surface, (255, 200, 200),
-                                 pygame.Rect(cx + 1, by + 1, coeur_w - 2, 1))
+            ratio = self.pv / self.pv_max
+            if ratio > 0.6:
+                couleur_plein = _COULEUR_PV_PLEIN
+            elif ratio > 0.35:
+                couleur_plein = _COULEUR_PV_MOITIE
             else:
-                # 3c. Slot vide légèrement visible
-                pygame.draw.rect(surface, _COULEUR_COEUR_VIDE,
-                                 pygame.Rect(cx, by, coeur_w, coeur_h),
-                                 border_radius=2)
+                couleur_plein = _COULEUR_PV_BAS
 
-            # 4. Bordure fine sur chaque slot
-            pygame.draw.rect(surface, _COULEUR_PV_BORD,
-                             pygame.Rect(cx, by, coeur_w, coeur_h),
-                             width=1, border_radius=2)
+            for i in range(self.pv_max):
+                cx = i * (coeur_w + espacement)
+                pygame.draw.rect(surf, (8, 4, 4),
+                                 pygame.Rect(cx + 1, 1, coeur_w, coeur_h), border_radius=2)
+                pygame.draw.rect(surf, _COULEUR_PV_FOND,
+                                 pygame.Rect(cx, 0, coeur_w, coeur_h), border_radius=2)
+                if i < self.pv:
+                    pygame.draw.rect(surf, couleur_plein,
+                                     pygame.Rect(cx, 0, coeur_w, coeur_h), border_radius=2)
+                    pygame.draw.rect(surf, (255, 200, 200),
+                                     pygame.Rect(cx + 1, 1, coeur_w - 2, 1))
+                else:
+                    pygame.draw.rect(surf, _COULEUR_COEUR_VIDE,
+                                     pygame.Rect(cx, 0, coeur_w, coeur_h), border_radius=2)
+                pygame.draw.rect(surf, _COULEUR_PV_BORD,
+                                 pygame.Rect(cx, 0, coeur_w, coeur_h), width=1, border_radius=2)
+
+        bx = rect_visuel.centerx - total_w // 2
+        by = rect_visuel.top - coeur_h - marge_bas
+        surface.blit(self._cache_barre_pv, (bx, by))
 
     # ------------------------------------------------------------------
     #  RÉSEAU

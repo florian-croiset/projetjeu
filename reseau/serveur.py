@@ -71,6 +71,7 @@ class Serveur:
         self.carte_jeu = Carte(chemin_map)
 
         self.rects_collision      = self.carte_jeu.get_rects_collisions()
+        self.carte_jeu.construire_grille_collision()
         self.points_sauvegarde_map = self.scanner_points_sauvegarde()
 
         # ===== SAUVEGARDE =====
@@ -231,83 +232,127 @@ class Serveur:
         connexion_client.settimeout(10.0)
         connexion_client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
+        # Drapeau partagé pour arrêter les sous-threads quand l'un tombe
+        client_actif = [True]
+
+        def thread_recv():
+            """Reçoit les commandes du client en continu."""
+            try:
+                while self.running and client_actif[0]:
+                    try:
+                        commandes = recv_complet(connexion_client)
+                    except EOFError:
+                        break
+
+                    with self.lock:
+                        if id_joueur not in self.joueurs:
+                            break
+                        self.joueurs[id_joueur].commandes = commandes['clavier']
+
+                        if commandes.get('echo'):
+                            t_echo = pygame.time.get_ticks()
+                            joueur = self.joueurs[id_joueur]
+                            if t_echo - joueur.dernier_echo_temps > COOLDOWN_ECHO:
+                                joueur.dernier_echo_temps = t_echo
+                                self.echos_en_cours.append({
+                                    'id_joueur':       id_joueur,
+                                    'cx':              joueur.rect.centerx,
+                                    'cy':              joueur.rect.centery,
+                                    'debut':           t_echo,
+                                    'rayon_precedent': 0,
+                                    'type':            'normal',
+                                    'portee_max':      PORTEE_ECHO,
+                                })
+
+                        if commandes.get('echo_dir'):
+                            t_echo_dir = pygame.time.get_ticks()
+                            joueur = self.joueurs[id_joueur]
+                            if (joueur.peut_echo_dir
+                                    and t_echo_dir - joueur.dernier_echo_dir_temps > COOLDOWN_ECHO_DIR):
+                                joueur.dernier_echo_dir_temps = t_echo_dir
+                                self.echos_en_cours.append({
+                                    'id_joueur':       id_joueur,
+                                    'cx':              joueur.rect.centerx,
+                                    'cy':              joueur.rect.centery,
+                                    'debut':           t_echo_dir,
+                                    'rayon_precedent': 0,
+                                    'type':            'dir',
+                                    'portee_max':      PORTEE_ECHO_DIR,
+                                    'direction':       joueur.direction,
+                                })
+
+                        if commandes.get('toggle_torche'):
+                            self.torche_allumee = not self.torche_allumee
+
+            except (socket.timeout, socket.error, ValueError):
+                pass
+            finally:
+                client_actif[0] = False
+
+        def thread_send():
+            """Envoie l'état au client à TICK_RATE_RESEAU Hz."""
+            intervalle = 1.0 / TICK_RATE_RESEAU
+            try:
+                while self.running and client_actif[0]:
+                    debut = time.time()
+
+                    with self._broadcast_lock:
+                        etat_commun = self._etat_broadcast
+
+                    if etat_commun is None:
+                        time.sleep(0.005)
+                        continue
+
+                    with self.lock:
+                        vis_delta = None
+                        vis_full = None
+                        if self.vis_map_dirty.get(id_joueur):
+                            vis_actuelle = self.cartes_visibilite.get(id_joueur)
+                            if vis_actuelle is not None:
+                                precedente = self.vis_map_precedente.get(id_joueur)
+                                if precedente is not None:
+                                    delta = []
+                                    for y in range(len(vis_actuelle)):
+                                        for x in range(len(vis_actuelle[y])):
+                                            if vis_actuelle[y][x] and not precedente[y][x]:
+                                                delta.append((x, y))
+                                    vis_delta = delta
+                                else:
+                                    vis_full = [row[:] for row in vis_actuelle]
+                                self.vis_map_precedente[id_joueur] = [row[:] for row in vis_actuelle]
+                                self.vis_map_dirty[id_joueur] = False
+
+                    donnees_pour_client = {**etat_commun, 'vis_map': vis_full, 'vis_delta': vis_delta}
+                    send_complet(connexion_client, donnees_pour_client)
+
+                    elapsed = time.time() - debut
+                    if elapsed < intervalle:
+                        time.sleep(intervalle - elapsed)
+
+            except (socket.error, OSError):
+                pass
+            finally:
+                client_actif[0] = False
+
+        t_recv = threading.Thread(target=thread_recv, daemon=True)
+        t_send = threading.Thread(target=thread_send, daemon=True)
+        t_recv.start()
+        t_send.start()
+
+        # Attendre que l'un des deux threads se termine (= déconnexion)
+        t_recv.join()
+        t_send.join()
+
+        print(f"[SERVEUR] Client {id_joueur} deconnecte.")
         try:
-            while self.running:
-                try:
-                    commandes = recv_complet(connexion_client)
-                except EOFError:
-                    break
-
-                with self.lock:
-                    self.joueurs[id_joueur].commandes = commandes['clavier']
-
-                    if commandes.get('echo'):
-                        t_echo  = pygame.time.get_ticks()
-                        joueur  = self.joueurs[id_joueur]
-                        if t_echo - joueur.dernier_echo_temps > COOLDOWN_ECHO:
-                            joueur.dernier_echo_temps = t_echo
-                            self.echos_en_cours.append({
-                                'id_joueur':       id_joueur,
-                                'cx':              joueur.rect.centerx,
-                                'cy':              joueur.rect.centery,
-                                'debut':           t_echo,
-                                'rayon_precedent': 0,
-                                'type':            'normal',
-                                'portee_max':      PORTEE_ECHO,
-                            })
-
-                    if commandes.get('echo_dir'):
-                        t_echo_dir = pygame.time.get_ticks()
-                        joueur     = self.joueurs[id_joueur]
-                        if (joueur.peut_echo_dir
-                                and t_echo_dir - joueur.dernier_echo_dir_temps > COOLDOWN_ECHO_DIR):
-                            joueur.dernier_echo_dir_temps = t_echo_dir
-                            self.echos_en_cours.append({
-                                'id_joueur':       id_joueur,
-                                'cx':              joueur.rect.centerx,
-                                'cy':              joueur.rect.centery,
-                                'debut':           t_echo_dir,
-                                'rayon_precedent': 0,
-                                'type':            'dir',
-                                'portee_max':      PORTEE_ECHO_DIR,
-                                'direction':       joueur.direction,
-                            })
-
-                    if commandes.get('toggle_torche'):
-                        self.torche_allumee = not self.torche_allumee
-
-                with self._broadcast_lock:
-                    etat_commun = self._etat_broadcast
-
-                if etat_commun is None:
-                    time.sleep(0.001)
-                    continue
-
-                with self.lock:
-                    vis_a_envoyer = None
-                    if self.vis_map_dirty.get(id_joueur):
-                        vis_actuelle = self.cartes_visibilite.get(id_joueur)
-                        if vis_actuelle is not None:
-                            vis_a_envoyer = [row[:] for row in vis_actuelle]
-                            self.vis_map_dirty[id_joueur] = False
-
-                donnees_pour_client = {**etat_commun, 'vis_map': vis_a_envoyer}
-                send_complet(connexion_client, donnees_pour_client)
-
-        except socket.timeout as e:
-            print(f"[SERVEUR] Timeout joueur {id_joueur} (pas de données depuis 10s) : {e}")
-        except socket.error as e:
-            print(f"[SERVEUR] Erreur socket joueur {id_joueur} ({type(e).__name__}): {e}")
-        except ValueError as e:
-            print(f"[SERVEUR] Protocole invalide joueur {id_joueur}: {e}")
-        finally:
-            print(f"[SERVEUR] Client {id_joueur} deconnecte.")
             connexion_client.close()
-            with self.lock:
-                if connexion_client in self.clients:
-                    del self.clients[connexion_client]
-                if id_joueur in self.joueurs:
-                    del self.joueurs[id_joueur]
+        except Exception:
+            pass
+        with self.lock:
+            if connexion_client in self.clients:
+                del self.clients[connexion_client]
+            if id_joueur in self.joueurs:
+                del self.joueurs[id_joueur]
                 if id_joueur in self.cartes_visibilite:
                     del self.cartes_visibilite[id_joueur]
                 if id_joueur in self.vis_map_precedente:
@@ -352,12 +397,12 @@ class Serveur:
                 self.echos_en_cours = echos_restants
 
             # Flash sonar sur les ennemis
+            portee_echo_sq = PORTEE_ECHO * PORTEE_ECHO
             for echo in echos_restants:
                 for ennemi in self.ennemis.values():
                     dx   = ennemi.rect.centerx - echo['cx']
                     dy   = ennemi.rect.centery - echo['cy']
-                    dist = (dx**2 + dy**2) ** 0.5
-                    if dist <= PORTEE_ECHO:
+                    if dx*dx + dy*dy <= portee_echo_sq:
                         ennemi.flash_echo_temps = temps_actuel
 
             with self.lock:
@@ -374,7 +419,7 @@ class Serveur:
 
                 # 1b. Âmes loot : physique + collecte + despawn
                 for id_ame, ame in list(self.ames_loot.items()):
-                    ame.mettre_a_jour(temps_actuel, self.rects_collision)
+                    ame.mettre_a_jour(temps_actuel, self.carte_jeu.get_rects_proches(ame.rect))
                     if ame.est_expiree(temps_actuel):
                         del self.ames_loot[id_ame]
                         continue
@@ -420,17 +465,7 @@ class Serveur:
                                                 self.porte.LARGEUR + 16, self.porte.HAUTEUR)):
                                 self.porte.tenter_ouverture(joueur)
 
-                # 5. Collision physique avec la porte
-                if self.porte and not self.porte.est_ouverte:
-                    rect_porte = self.porte.rect_collision
-                    if rect_porte.width > 0 and rect_porte.height > 0:
-                        # S'assurer que la porte figure dans les collisions
-                        self._rects_collision_avec_porte = (
-                            self.rects_collision + [rect_porte])
-                    else:
-                        self._rects_collision_avec_porte = self.rects_collision
-                else:
-                    self._rects_collision_avec_porte = self.rects_collision
+                # 5. (Collision porte intégrée dans la section 8)
 
                 # 6. Ennemis — physique + respawn
                 for id_ennemi, ennemi in list(self.ennemis.items()):
@@ -439,7 +474,8 @@ class Serveur:
                             ennemi.respawn()
                             print(f"[SERVEUR] Ennemi {id_ennemi} ({ennemi.type_ennemi}) respawn !")
                     else:
-                        ennemi.appliquer_logique(self.rects_collision, self.carte_jeu)
+                        rects_proches = self.carte_jeu.get_rects_proches(ennemi.rect)
+                        ennemi.appliquer_logique(rects_proches, self.carte_jeu)
 
                 # 7. Boss Room
                 if not self.boss_room.boss_defeated:
@@ -448,10 +484,18 @@ class Serveur:
                         self.joueurs)
                 self._temps_precedent = temps_actuel
 
-                # 8. Joueurs
-                rects = getattr(self, '_rects_collision_avec_porte', self.rects_collision)
+                # 8. Joueurs — collisions spatiales + porte
+                porte_rect = None
+                if self.porte and not self.porte.est_ouverte:
+                    r = self.porte.rect_collision
+                    if r.width > 0 and r.height > 0:
+                        porte_rect = r
                 for id_joueur, joueur in list(self.joueurs.items()):
-                    joueur.appliquer_physique(rects)
+                    rects_proches = self.carte_jeu.get_rects_proches(joueur.rect)
+                    if porte_rect and joueur.rect.colliderect(
+                            porte_rect.inflate(TAILLE_TUILE * 2, TAILLE_TUILE * 2)):
+                        rects_proches = rects_proches + [porte_rect]
+                    joueur.appliquer_physique(rects_proches)
 
                     # A. Attaque
                     joueur.gerer_attaque(temps_actuel)

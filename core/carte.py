@@ -17,7 +17,7 @@ class Carte:
         # Optimisation rendu : cache GID→Surface + surface pré-cuite
         self._cache_tuiles = {}        # Évite subsurface() à chaque frame
         self._carte_prebake = None     # Surface monde entier pré-rendue
-        self._prebake_vis_hash = None  # Hash de la vis_map au dernier rendu
+        self._vis_map_dirty = True     # Flag de rebuild (remplace le hash)
         
         self._directions = [(math.cos(i/NB_RAYONS_ECHO * 2*math.pi), math.sin(i/NB_RAYONS_ECHO * 2*math.pi)) for i in range(NB_RAYONS_ECHO)]
         
@@ -290,15 +290,12 @@ class Carte:
         off_x, off_y = camera_offset
         lv, hv = surface.get_size()
 
-        # Hash de la vis_map pour détecter tout changement de visibilité
-        vis_hash = hash(bytes(b for row in vis_map for b in row))
-
         map_w = self.largeur_map * TAILLE_TUILE
         map_h = self.hauteur_map * TAILLE_TUILE
 
         if (self._carte_prebake is None
                 or self._carte_prebake.get_size() != (map_w, map_h)
-                or vis_hash != self._prebake_vis_hash):
+                or self._vis_map_dirty):
             # Reconstruction de la surface pré-cuite (espace monde, une seule fois par changement de vis_map)
             self._carte_prebake = pygame.Surface((map_w, map_h))
             self._carte_prebake.fill(COULEUR_FOND)
@@ -331,7 +328,7 @@ class Carte:
                         elif tuile_type == 3:
                             pygame.draw.rect(self._carte_prebake, COULEUR_SAUVEGARDE, rect)
 
-            self._prebake_vis_hash = vis_hash
+            self._vis_map_dirty = False
 
         # Simple blit de la fenêtre caméra depuis la surface pré-cuite
         surface.fill(COULEUR_FOND)
@@ -345,6 +342,45 @@ class Carte:
                 if self.map_data[y][x] == 1:
                     rects.append(pygame.Rect(x * TAILLE_TUILE, y * TAILLE_TUILE, TAILLE_TUILE, TAILLE_TUILE))
         return rects
+
+    # ------------------------------------------------------------------
+    #  GRILLE SPATIALE POUR COLLISIONS
+    # ------------------------------------------------------------------
+
+    _CELL_SIZE = TAILLE_TUILE * 4  # 128px par cellule
+
+    def construire_grille_collision(self):
+        """Construit une grille spatiale à partir des rects de collision."""
+        self._grille_collision = {}
+        cs = self._CELL_SIZE
+        for y in range(self.hauteur_map):
+            for x in range(self.largeur_map):
+                if self.map_data[y][x] == 1:
+                    r = pygame.Rect(x * TAILLE_TUILE, y * TAILLE_TUILE,
+                                    TAILLE_TUILE, TAILLE_TUILE)
+                    cle = (x * TAILLE_TUILE // cs, y * TAILLE_TUILE // cs)
+                    self._grille_collision.setdefault(cle, []).append(r)
+
+    def get_rects_proches(self, rect, marge=None):
+        """Retourne les rects de collision dans les cellules chevauchées par rect + marge.
+
+        La marge (par défaut TAILLE_TUILE*2) compense le déplacement entre la
+        requête et les vérifications de collision après mouvement.
+        """
+        if marge is None:
+            marge = TAILLE_TUILE * 2
+        cs = self._CELL_SIZE
+        x_min = (rect.left   - marge) // cs
+        x_max = (rect.right  + marge) // cs
+        y_min = (rect.top    - marge) // cs
+        y_max = (rect.bottom + marge) // cs
+        resultat = []
+        for cy in range(y_min, y_max + 1):
+            for cx in range(x_min, x_max + 1):
+                cellule = self._grille_collision.get((cx, cy))
+                if cellule:
+                    resultat.extend(cellule)
+        return resultat
     
     # def reveler_par_echo_partiel(self, centre_x, centre_y, portee, vis_map):
     #     """Révélation progressive : repart de 0 jusqu'à portee pixels."""
