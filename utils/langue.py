@@ -30,7 +30,8 @@ FR = {
     "rejoindre_mode_code": "Mode : Code Room",
     "rejoindre_code_invalide": "Code invalide",
     "rejoindre_label_ip_relay": "IP de l'hôte :",
-    "hud_code_room": "Code : {}",
+    "param_code_room_label": "Code partie :",
+    "param_code_room_vide": "Partie non lancée",
 
     # Menu Pause
     "pause_titre": "Pause",
@@ -97,7 +98,8 @@ EN = {
     "rejoindre_mode_code": "Mode: Room Code",
     "rejoindre_code_invalide": "Invalid code",
     "rejoindre_label_ip_relay": "Host IP:",
-    "hud_code_room": "Code: {}",
+    "param_code_room_label": "Game code:",
+    "param_code_room_vide": "No game running",
 
     # Pause Menu
     "pause_titre": "Paused",

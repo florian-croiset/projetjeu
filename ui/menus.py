@@ -842,6 +842,20 @@ class MenusMixin:
                 f"{obtenir_ip_vpn()}   (copier)",
                 self.btn_copier_ip_hamachi)
 
+        # Code room — affiché sous l'IP VPN
+        code_val = getattr(self, 'code_room', None)
+        if code_val:
+            code_txt = code_val
+            code_color = COULEUR_CYAN
+        else:
+            code_txt = langue.get_texte("param_code_room_vide")
+            code_color = COULEUR_TEXTE_SOMBRE
+        lbl_code = self.police_texte.render(langue.get_texte("param_code_room_label"), True, COULEUR_TEXTE)
+        self.ecran.blit(lbl_code, (col_gauche + 20, y + 6))
+        val_code = self.police_texte.render(code_txt, True, code_color)
+        self.ecran.blit(val_code, (col_droite, y + 6))
+        y += esp_ligne
+
         aide = self.police_petit.render(
             "Cliquez pour copier dans le presse-papiers", True, COULEUR_TEXTE_SOMBRE)
         self.ecran.blit(aide, (col_gauche + 20, y))

@@ -50,6 +50,7 @@ class Serveur:
         self.clients             = {}
         self.joueurs             = {}
         self.cartes_visibilite   = {}
+        self.vis_map_dirty       = {}
         self.ennemis             = {}
         self.ames_perdues        = {}
         self.ames_libres         = {}
@@ -219,7 +220,10 @@ class Serveur:
                 self.cartes_visibilite[id_joueur] = self.carte_jeu.creer_carte_visibilite_vierge()
             else:
                 self.cartes_visibilite[id_joueur] = [row[:] for row in vis_sauvegarde]
+        else:
+            self.cartes_visibilite[id_joueur] = self.carte_jeu.creer_carte_visibilite_vierge()
         self.vis_map_precedente[id_joueur] = None
+        self.vis_map_dirty[id_joueur] = True
 
         print(f"[SERVEUR] Envoi handshake (ID={id_joueur}) au client {connexion_client.getpeername()}...")
         send_complet(connexion_client, id_joueur)
@@ -280,13 +284,12 @@ class Serveur:
                     continue
 
                 with self.lock:
-                    vis_actuelle = self.cartes_visibilite.get(id_joueur)
-                    vis_prec     = self.vis_map_precedente.get(id_joueur)
-                    if vis_actuelle != vis_prec:
-                        vis_a_envoyer = [row[:] for row in vis_actuelle]
-                        self.vis_map_precedente[id_joueur] = [row[:] for row in vis_actuelle]
-                    else:
-                        vis_a_envoyer = None
+                    vis_a_envoyer = None
+                    if self.vis_map_dirty.get(id_joueur):
+                        vis_actuelle = self.cartes_visibilite.get(id_joueur)
+                        if vis_actuelle is not None:
+                            vis_a_envoyer = [row[:] for row in vis_actuelle]
+                            self.vis_map_dirty[id_joueur] = False
 
                 donnees_pour_client = {**etat_commun, 'vis_map': vis_a_envoyer}
                 send_complet(connexion_client, donnees_pour_client)
@@ -309,6 +312,8 @@ class Serveur:
                     del self.cartes_visibilite[id_joueur]
                 if id_joueur in self.vis_map_precedente:
                     del self.vis_map_precedente[id_joueur]
+                if id_joueur in self.vis_map_dirty:
+                    del self.vis_map_dirty[id_joueur]
                 if id_joueur not in self._ids_pool:
                     self._ids_pool.append(id_joueur)
                     self._ids_pool.sort()
@@ -342,6 +347,7 @@ class Serveur:
                                     echo['cx'], echo['cy'], rayon_max,
                                     self.cartes_visibilite[echo['id_joueur']])
                             echo['rayon_precedent'] = rayon_max
+                            self.vis_map_dirty[echo['id_joueur']] = True
                         echos_restants.append(echo)
                 self.echos_en_cours = echos_restants
 
