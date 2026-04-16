@@ -137,6 +137,9 @@ class MenusMixin:
             self.btn_appliquer_params, self.btn_retour_params
         ]
 
+        self._ip_locale_cache = None
+        self._ip_vpn_cache    = None
+
     def creer_widgets_menu_confirmation(self):
         cx = self.cx
         cy = self.cy
@@ -226,6 +229,8 @@ class MenusMixin:
             if self.btn_parametres.verifier_clic(event):
                 self.parametres_temp = copy.deepcopy(self.parametres)
                 self.etat_jeu_precedent = "MENU_PRINCIPAL"
+                self._ip_locale_cache = obtenir_ip_locale()
+                self._ip_vpn_cache    = obtenir_ip_vpn()
                 self.etat_jeu = "MENU_PARAMETRES"
             if self.btn_quitter.verifier_clic(event):
                 self.etat_jeu = "QUITTER"
@@ -836,10 +841,10 @@ class MenusMixin:
 
         section(langue.get_texte("param_section_reseau"))
         ligne_ip("IP Locale (LAN) :",
-                f"{obtenir_ip_locale()}   (copier)",
+                f"{self._ip_locale_cache or '...'}   (copier)",
                 self.btn_copier_ip_locale)
         ligne_ip("IP VPN (Tailscale/Hamachi) :",
-                f"{obtenir_ip_vpn()}   (copier)",
+                f"{self._ip_vpn_cache or '...'}   (copier)",
                 self.btn_copier_ip_hamachi)
 
         # Code room — affiché sous l'IP VPN
