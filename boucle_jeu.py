@@ -124,7 +124,7 @@ class BoucleJeuMixin:
                     music.pause()
                 if event.key == key('attaque'):
                     commandes['clavier']['attaque'] = True
-                    music.jouer_sfx('attaque')
+                    music.jouer_sfx_slash_joueur()
                 if event.key == key('echo'):
                     commandes['echo'] = True
                     music.jouer_sfx('echo')
@@ -459,6 +459,9 @@ class BoucleJeuMixin:
             if self.porte_locale is None:
                 self.porte_locale = Porte(data_porte['x'], data_porte['y'])
             self.porte_locale.set_etat(data_porte)
+            if not self._porte_etait_en_ouverture and self.porte_locale.en_ouverture:
+                music.jouer_sfx('porte')
+            self._porte_etait_en_ouverture = self.porte_locale.en_ouverture
 
         # --- Boss ---
         data_boss = donnees_recues.get('boss_room')
@@ -471,6 +474,10 @@ class BoucleJeuMixin:
                     json_path=os.path.join(_base, "demon_slime.json"),
                     png_path =os.path.join(_base, "assets", "demon_slime.png"))
             self.boss_local.set_etat(data_boss['boss'])
+            etat_boss_actuel = data_boss['boss']['state']
+            if self._boss_etat_precedent != 'CLEAVE' and etat_boss_actuel == 'CLEAVE':
+                music.jouer_sfx('slash_boss')
+            self._boss_etat_precedent = etat_boss_actuel
 
         # --- Clé ---
         data_cle = donnees_recues.get('cle')
@@ -749,6 +756,9 @@ class BoucleJeuMixin:
                 print("[CLIENT] Relay embarqué arrêté")
             except Exception as e:
                 print(f"[CLIENT] Erreur arrêt relay: {e}")
+        music.torche_boucle_stop()
+        if hasattr(self, 'torche') and self.torche:
+            self.torche.allumee = False
         self.client_socket         = None
         self.mon_id                = -1
         self.code_room             = None
@@ -764,4 +774,7 @@ class BoucleJeuMixin:
         self.cle_locale            = None
         self.carte                 = None
         self.vis_map_locale        = None
+        self.boss_local            = None
+        self._porte_etait_en_ouverture = False
+        self._boss_etat_precedent  = None
         self.etat_jeu_interne      = "JEU"

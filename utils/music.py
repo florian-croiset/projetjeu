@@ -29,6 +29,9 @@ _volume_musique  = 0.5
 # Cache des SFX : { 'saut': pygame.mixer.Sound, ... }
 _sons: dict = {}
 
+# Index de rotation pour les sons d'attaque joueur
+_slash_joueur_idx = 0
+
 # Channel dédié à la boucle de flamme (torche)
 _channel_torche: pygame.mixer.Channel = None
 
@@ -37,7 +40,11 @@ _LISTE_SFX = {
     'saut':           'saut', # DONE
     'double_saut':    'double_saut', # DONE
     'dash':           'dash',
-    'attaque':        'attaque',
+    'attaque':        'Slash1',
+    'slash2':         'Slash2',
+    'slash3':         'Slash3',
+    'porte':          'Audio_porte',
+    'slash_boss':     'SlashBoss1',
     'degat':          'degat', # DONE
     'mort':           'mort', # DONE
     'ennemi_mort':    'ennemi_mort', # DONE
@@ -243,6 +250,19 @@ def jouer_sfx(nom: str):
     """Joue un son court par nom. Silencieux si SFX désactivés ou manquant."""
     if not _sfx_actifs:
         return
+    son = _sons.get(nom)
+    if son is not None:
+        son.play()
+
+
+def jouer_sfx_slash_joueur():
+    """Joue un son d'attaque joueur en rotation : Slash1 → Slash2 → Slash3 → ..."""
+    global _slash_joueur_idx
+    if not _sfx_actifs:
+        return
+    noms = ['attaque', 'slash2', 'slash3']
+    nom = noms[_slash_joueur_idx % 3]
+    _slash_joueur_idx += 1
     son = _sons.get(nom)
     if son is not None:
         son.play()

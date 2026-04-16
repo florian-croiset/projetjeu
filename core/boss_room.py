@@ -106,7 +106,6 @@ class BossRoom:
                         # Bypass du TEMPS_INVINCIBILITE — le boss force les dégâts
                         joueur.pv -= self.BOSS_ATTACK_DAMAGE
                         joueur.dernier_degat_temps = temps_actuel
-                        joueur.sons_a_jouer.append('degat')
                         if joueur.pv <= 0:
                             joueur.pv = 0
                             joueur.sons_a_jouer.append('mort')

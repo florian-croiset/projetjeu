@@ -284,7 +284,22 @@ class Serveur:
                                 })
 
                         if commandes.get('toggle_torche'):
-                            self.torche_allumee = not self.torche_allumee
+                            nouvelle_valeur = not self.torche_allumee
+                            self.torche_allumee = nouvelle_valeur
+                            # Checkpoint à l'allumage (hôte uniquement)
+                            if nouvelle_valeur and id_joueur == 0 and id_joueur in self.joueurs:
+                                joueur_ckpt = self.joueurs[id_joueur]
+                                x_tuile = joueur_ckpt.rect.x // TAILLE_TUILE
+                                y_tuile = joueur_ckpt.rect.y // TAILLE_TUILE
+                                id_ckpt = f"{x_tuile}_{y_tuile}"
+                                self.donnees_partie["id_dernier_checkpoint"] = id_ckpt
+                                self.donnees_partie["vis_map"] = [
+                                    row[:] for row in self.cartes_visibilite[id_joueur]]
+                                self.donnees_partie["argent"] = joueur_ckpt.argent
+                                self.donnees_partie["ameliorations"]["double_saut"] = joueur_ckpt.peut_double_saut
+                                self.donnees_partie["ameliorations"]["dash"] = joueur_ckpt.peut_dash
+                                gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
+                                print(f"[SERVEUR] Checkpoint torche sauvegardé : {id_ckpt}, argent={joueur_ckpt.argent}")
 
             except (socket.timeout, socket.error, ValueError):
                 pass
