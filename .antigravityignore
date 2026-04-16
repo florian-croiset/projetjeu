@@ -1,0 +1,58 @@
+# --- Antigravity Ignore ---
+# This file tells Antigravity which files to ignore when scanning the repository.
+
+# Git
+.git/
+
+# IDEs and Editors
+.vscode/
+.idea/
+.claude/
+.claudignore
+
+# Python and Virtual Environments
+__pycache__/
+.venv/
+env/
+venv/
+*.py[cod]
+*$py.class
+
+# Build and Distribution
+build/
+dist/
+client.spec
+*.iss
+
+# Assets and Binary Files (To save context window)
+assets/
+favicon.ico
+favicon.png
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.ico
+*.wav
+*.mp3
+*.ogg
+Map.tmx
+
+# Game Data and Saves
+slot_*.json
+save_slots.json
+map.json
+demon_slime.json
+parametres.json
+controls.json
+settings.json
+
+# Logs and Temps
+*.log
+temp/
+data/
+hamachi.txt
+
+# Environment variables
+.env

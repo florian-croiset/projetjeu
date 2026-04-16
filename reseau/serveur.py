@@ -111,7 +111,7 @@ class Serveur:
             rects_collision = self.rects_collision,
         )
 
-        self.cle              = Cle(x=1011, y=1027)
+        # self.cle              = Cle(x=1011, y=1027)  # Deplace vers boucle_jeu_serveur apres mort boss
         self._ids_pool        = list(range(3))
         self.torche_allumee   = False
         self.torche_x         = 32
@@ -174,8 +174,8 @@ class Serveur:
         - Dash : zone intermédiaire, récompense la progression.
         """
         configs = [
-            (747,  900, 'double_saut'),   # Zone basse-gauche, accessible sans dash
-            (1510, 400, 'dash'),           # Zone plus haute, nécessite le double saut
+            (419,  1190, 'double_saut'),   # Zone basse-gauche, accessible sans dash
+            (2920, 1126, 'dash'),           # Zone plus haute, nécessite le double saut
         ]
         for x, y, capacite in configs:
             orbe = OrbeCapacite(x, y, capacite)
@@ -188,7 +188,7 @@ class Serveur:
         Positionnée comme point de progression logique (après la clé).
         """
         # Porte placée dans un couloir clé de la map
-        self.porte = Porte(x=1200, y=900)
+        self.porte = Porte(x=995, y=960)
         print(f"[SERVEUR] Porte créée à ({self.porte.x}, {self.porte.y})")
 
     # ------------------------------------------------------------------
@@ -489,6 +489,14 @@ class Serveur:
                     self.boss_room.update(
                         temps_actuel - getattr(self, '_temps_precedent', temps_actuel),
                         self.joueurs)
+                    
+                    if self.boss_room.boss_defeated:
+                        # Le boss vient de mourir -> Drop la cle au centre du boss
+                        bx = self.boss_room.boss.pos.x + self.boss_room.boss.sprite_w // 2
+                        by = self.boss_room.boss.pos.y + self.boss_room.boss.sprite_h // 2
+                        self.cle = Cle(bx, by)
+                        print(f"[SERVEUR] Le boss a lâché la clé à ({bx}, {by})")
+
                 self._temps_precedent = temps_actuel
 
                 # 8. Joueurs — collisions spatiales + porte
