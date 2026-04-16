@@ -287,6 +287,7 @@ class Joueur:
             'est_en_dash': self.est_en_dash,
             'have_key': self.have_key,
             'peut_echo_dir': self.peut_echo_dir,
+            'dernier_echo_temps': self.dernier_echo_temps,
             'sons': sons,  # ← liste des sons à jouer ce tick
         }
 
@@ -303,6 +304,7 @@ class Joueur:
         self.est_en_dash = data.get('est_en_dash', False)
         self.have_key = data.get('have_key', False)
         self.peut_echo_dir = data.get('peut_echo_dir', False)
+        self.dernier_echo_temps = data.get('dernier_echo_temps', self.dernier_echo_temps)
 
         etat_attaque = data.get('attaque')
         if etat_attaque and etat_attaque['actif'] and etat_attaque['rect']:
