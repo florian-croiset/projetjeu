@@ -35,8 +35,8 @@ class Serveur:
         self.serveur_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
         try:
-            self.serveur_socket.bind(('0.0.0.0', PORT_SERVEUR))
             ip_serveur = obtenir_ip_locale()
+            self.serveur_socket.bind((ip_serveur, PORT_SERVEUR))
             print(f"[SERVEUR] Demarre sur le port {PORT_SERVEUR}")
             print(f"[SERVEUR] IP locale : {ip_serveur}")
         except OSError as e:

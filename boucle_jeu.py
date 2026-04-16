@@ -18,7 +18,7 @@ from parametres import *
 from utils import envoyer_logs, music
 from reseau import serveur
 from reseau.relay_server import demarrer_relay_thread
-from reseau.protocole import recv_complet, send_complet
+from reseau.protocole import recv_complet, send_complet, obtenir_ip_locale
 from ui.camera import calculer_camera
 from core.carte import Carte
 from core.joueur import Joueur
@@ -592,7 +592,7 @@ class BoucleJeuMixin:
             print(f"[CLIENT] Impossible de démarrer le relay: {e}")
             self._relay_instance = None
 
-        relay_host = "localhost" if self._relay_instance else ""
+        relay_host = obtenir_ip_locale() if self._relay_instance else ""
         relay_port = RELAY_PORT
 
         def _demarrer_serveur():
@@ -606,7 +606,7 @@ class BoucleJeuMixin:
         connecte = False
         for _ in range(6):
             time.sleep(0.5)
-            connecte = self.connecter("localhost")
+            connecte = self.connecter(obtenir_ip_locale())
             if connecte:
                 break
         if connecte:

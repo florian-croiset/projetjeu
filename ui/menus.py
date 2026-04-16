@@ -276,7 +276,7 @@ class MenusMixin:
         """Lance la connexion selon le mode actuel (IP ou Code Room)."""
         if self.mode_rejoindre == "code":
             code = self.input_code_texte.strip().upper()
-            relay_ip = self.input_ip_texte.strip() if self.input_ip_texte.strip() else "localhost"
+            relay_ip = self.input_ip_texte.strip() if self.input_ip_texte.strip() else obtenir_ip_locale()
             print(f"[MENU] Tentative connexion Code Room: relay_ip='{relay_ip}', code='{code}'")
             if len(code) < 4:
                 print(f"[MENU] Code trop court ({len(code)} chars), rejeté")
@@ -289,7 +289,7 @@ class MenusMixin:
             else:
                 print(f"[MENU] Connexion relay échouée")
         else:
-            hote = self.input_ip_texte if self.input_ip_texte else "localhost"
+            hote = self.input_ip_texte if self.input_ip_texte else obtenir_ip_locale()
             print(f"[MENU] Tentative connexion IP directe: hote='{hote}'")
             if self.connecter(hote):
                 print(f"[MENU] Connexion directe réussie !")

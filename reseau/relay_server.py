@@ -10,7 +10,7 @@ import secrets
 import string
 import time
 import sys
-
+from reseau.protocole import obtenir_ip_locale
 
 TAILLE_BUF = 8192
 EXPIRATION_ROOM = 300       # 5 minutes sans activité
@@ -61,7 +61,8 @@ class RelayServer:
     def demarrer(self):
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._server_socket.bind(('0.0.0.0', self.port))
+        ip_serveur = obtenir_ip_locale()
+        self._server_socket.bind((ip_serveur, self.port))
         self._server_socket.listen()
         self._running = True
         print(f"[RELAY] Démarré sur le port {self.port}")
