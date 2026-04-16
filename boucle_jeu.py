@@ -362,7 +362,7 @@ class BoucleJeuMixin:
             for x, y in donnees_recues['vis_delta']:
                 self.vis_map_locale[y][x] = True
             if self.carte and donnees_recues['vis_delta']:
-                self.carte._vis_map_dirty = True
+                self.carte._tuiles_a_reveler.extend(donnees_recues['vis_delta'])
 
         # --- Joueurs ---
         ids_serveur = {j['id'] for j in donnees_recues['joueurs']}
