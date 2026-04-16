@@ -21,12 +21,17 @@ def obtenir_ip_locale():
 def obtenir_ip_vpn():
     """Retourne l'IP VPN (Tailscale ou Hamachi) si disponible."""
     import subprocess
+    import sys
     # Essayer de récupérer l'IP Tailscale via la CLI (très très fiable sous Linux/Crostini)
     try:
+        kwargs = {}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
         output = subprocess.check_output(
-            ["tailscale", "ip", "-4"], 
-            stderr=subprocess.DEVNULL, 
-            timeout=1
+            ["tailscale", "ip", "-4"],
+            stderr=subprocess.DEVNULL,
+            timeout=1,
+            **kwargs
         ).decode('utf-8').strip()
         if output:
             return output.split('\\n')[0].strip()
@@ -37,22 +42,21 @@ def obtenir_ip_vpn():
     try:
         hostname = socket.gethostname()
         all_ips = socket.gethostbyname_ex(hostname)[2]
-        
+
         # IP Hamachi (commence par 25.)
         for ip in all_ips:
             if ip.startswith("25."):
                 return ip
-                
+
         # IP Tailscale sous Windows (100.x.x.x). Sous Linux/Crostini on utilise la commande en haut
         # car Crostini utilise aussi 100.x pour son IP locale.
-        import sys
         if sys.platform != "linux":
             for ip in all_ips:
                 if ip.startswith("100."):
                     return ip
     except Exception:
         pass
-        
+
     return "Non connecté"
 
 
