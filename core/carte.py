@@ -18,6 +18,7 @@ class Carte:
         self._cache_tuiles = {}        # Évite subsurface() à chaque frame
         self._carte_prebake = None     # Surface monde entier pré-rendue
         self._vis_map_dirty = True     # Flag de rebuild (remplace le hash)
+        self._tuiles_a_reveler = []    # Buffer de (x, y) à patcher sur le prebake
         
         self._directions = [(math.cos(i/NB_RAYONS_ECHO * 2*math.pi), math.sin(i/NB_RAYONS_ECHO * 2*math.pi)) for i in range(NB_RAYONS_ECHO)]
         
@@ -286,6 +287,28 @@ class Carte:
                     vis_map[tuile_y][tuile_x] = True
                     break  # Stop au premier mur : pas de traversée
 
+    def _dessiner_tuile_prebake(self, x, y):
+        """Dessine une seule tuile sur la surface pré-cuite."""
+        px = x * TAILLE_TUILE
+        py = y * TAILLE_TUILE
+        tile_dessine = False
+        for gids_layer in self.layers_gids:
+            gid = gids_layer[y][x]
+            if gid != 0 and self.tileset:
+                tile_surf = self.get_tile_surface(gid)
+                if tile_surf:
+                    self._carte_prebake.blit(tile_surf, (px, py))
+                    tile_dessine = True
+        if not tile_dessine:
+            tuile_type = self.map_data[y][x]
+            rect = pygame.Rect(px, py, TAILLE_TUILE, TAILLE_TUILE)
+            if tuile_type == 1:
+                pygame.draw.rect(self._carte_prebake, COULEUR_MUR_VISIBLE, rect)
+            elif tuile_type == 2:
+                pygame.draw.rect(self._carte_prebake, COULEUR_GUIDE, rect)
+            elif tuile_type == 3:
+                pygame.draw.rect(self._carte_prebake, COULEUR_SAUVEGARDE, rect)
+
     def dessiner_carte(self, surface, vis_map, camera_offset=(0,0)):
         off_x, off_y = camera_offset
         lv, hv = surface.get_size()
@@ -296,7 +319,7 @@ class Carte:
         if (self._carte_prebake is None
                 or self._carte_prebake.get_size() != (map_w, map_h)
                 or self._vis_map_dirty):
-            # Reconstruction de la surface pré-cuite (espace monde, une seule fois par changement de vis_map)
+            # Chemin A — Reconstruction complète
             self._carte_prebake = pygame.Surface((map_w, map_h))
             self._carte_prebake.fill(COULEUR_FOND)
 
@@ -308,27 +331,19 @@ class Carte:
                 for x in range(self.largeur_map):
                     if not vis_map[y][x]:
                         continue
-                    px = x * TAILLE_TUILE
-                    py = y * TAILLE_TUILE
-                    tile_dessine = False
-                    for gids_layer in self.layers_gids:
-                        gid = gids_layer[y][x]
-                        if gid != 0 and self.tileset:
-                            tile_surf = self.get_tile_surface(gid)
-                            if tile_surf:
-                                self._carte_prebake.blit(tile_surf, (px, py))
-                                tile_dessine = True
-                    if not tile_dessine:
-                        tuile_type = self.map_data[y][x]
-                        rect = pygame.Rect(px, py, TAILLE_TUILE, TAILLE_TUILE)
-                        if tuile_type == 1:
-                            pygame.draw.rect(self._carte_prebake, COULEUR_MUR_VISIBLE, rect)
-                        elif tuile_type == 2:
-                            pygame.draw.rect(self._carte_prebake, COULEUR_GUIDE, rect)
-                        elif tuile_type == 3:
-                            pygame.draw.rect(self._carte_prebake, COULEUR_SAUVEGARDE, rect)
+                    self._dessiner_tuile_prebake(x, y)
 
             self._vis_map_dirty = False
+            self._tuiles_a_reveler.clear()
+
+        elif self._tuiles_a_reveler:
+            # Chemin B — Patch incrémental (tuiles nouvellement révélées)
+            for x, y in self._tuiles_a_reveler:
+                if 0 <= x < self.largeur_map and 0 <= y < self.hauteur_map:
+                    self._dessiner_tuile_prebake(x, y)
+            self._tuiles_a_reveler.clear()
+
+        # Chemin C implicite — rien à faire si pas dirty et pas de tuiles
 
         # Simple blit de la fenêtre caméra depuis la surface pré-cuite
         surface.fill(COULEUR_FOND)

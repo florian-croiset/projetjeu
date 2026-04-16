@@ -300,8 +300,11 @@ class HudMixin:
         couleur_fps = ((0, 220, 120) if fps >= FPS * 0.85
                        else (255, 180, 0) if fps >= FPS * 0.5
                        else (255, 60, 60))
+        mon_joueur = self.joueurs_locaux.get(self.mon_id)
         lignes = [
             (f"FPS : {fps:.0f} / {FPS}", couleur_fps),
+            (f"Pos : {mon_joueur.rect.x}, {mon_joueur.rect.y}" if mon_joueur else "Pos : —",
+             COULEUR_TEXTE_SOMBRE),
             (f"Joueurs : {len(self.joueurs_locaux)}",  COULEUR_TEXTE_SOMBRE),
             (f"Ennemis : {len(self.ennemis_locaux)}",  COULEUR_TEXTE_SOMBRE),
             (f"Entités : {len(self.joueurs_locaux)+len(self.ennemis_locaux)+len(self.ames_perdues_locales)+len(self.ames_libres_locales)}",
