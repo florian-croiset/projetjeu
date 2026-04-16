@@ -341,6 +341,19 @@ class BoucleJeuMixin:
                 donnees = recv_complet(self.client_socket)
 
                 with self._reseau_lock:
+                    # Accumuler les vis_delta pour éviter la perte de tuiles
+                    # quand plusieurs états arrivent entre deux frames
+                    if self._dernier_etat_serveur is not None and self._nouvel_etat_disponible:
+                        ancien_delta = self._dernier_etat_serveur.get('vis_delta')
+                        if ancien_delta and donnees.get('vis_map') is None:
+                            nouveau_delta = donnees.get('vis_delta')
+                            if nouveau_delta is not None:
+                                donnees['vis_delta'] = ancien_delta + nouveau_delta
+                            else:
+                                donnees['vis_delta'] = ancien_delta
+                        ancien_full = self._dernier_etat_serveur.get('vis_map')
+                        if ancien_full is not None and donnees.get('vis_map') is None:
+                            donnees['vis_map'] = ancien_full
                     self._dernier_etat_serveur = donnees
                     self._nouvel_etat_disponible = True
 
@@ -358,7 +371,7 @@ class BoucleJeuMixin:
             self.vis_map_locale = donnees_recues['vis_map']
             if self.carte:
                 self.carte._vis_map_dirty = True
-        elif donnees_recues.get('vis_delta') is not None and self.vis_map_locale:
+        if donnees_recues.get('vis_delta') and self.vis_map_locale:
             for x, y in donnees_recues['vis_delta']:
                 self.vis_map_locale[y][x] = True
             if self.carte and donnees_recues['vis_delta']:

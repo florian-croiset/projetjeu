@@ -56,7 +56,8 @@ class Serveur:
         self.ames_libres         = {}
         self.ames_loot           = {}
         self.orbes_capacite      = {}   # NOUVEAU
-        self.vis_map_precedente  = {}
+        self.vis_delta_buffer    = {}   # {id_joueur: set((x,y),...)}
+        self.vis_needs_full      = {}   # {id_joueur: bool} — forcer vis_full au 1er tick
         self.cle                 = None
         self.porte               = None  # NOUVEAU
         self.echos_en_cours      = []
@@ -223,8 +224,9 @@ class Serveur:
                 self.cartes_visibilite[id_joueur] = [row[:] for row in vis_sauvegarde]
         else:
             self.cartes_visibilite[id_joueur] = self.carte_jeu.creer_carte_visibilite_vierge()
-        self.vis_map_precedente[id_joueur] = None
         self.vis_map_dirty[id_joueur] = True
+        self.vis_delta_buffer[id_joueur] = set()
+        self.vis_needs_full[id_joueur] = True  # Forcer vis_full au premier tick
 
         print(f"[SERVEUR] Envoi handshake (ID={id_joueur}) au client {connexion_client.getpeername()}...")
         send_complet(connexion_client, id_joueur)
@@ -306,21 +308,19 @@ class Serveur:
                     with self.lock:
                         vis_delta = None
                         vis_full = None
-                        if self.vis_map_dirty.get(id_joueur):
+                        needs_full = self.vis_needs_full.get(id_joueur, False)
+                        if needs_full:
                             vis_actuelle = self.cartes_visibilite.get(id_joueur)
                             if vis_actuelle is not None:
-                                precedente = self.vis_map_precedente.get(id_joueur)
-                                if precedente is not None:
-                                    delta = []
-                                    for y in range(len(vis_actuelle)):
-                                        for x in range(len(vis_actuelle[y])):
-                                            if vis_actuelle[y][x] and not precedente[y][x]:
-                                                delta.append((x, y))
-                                    vis_delta = delta
-                                else:
-                                    vis_full = [row[:] for row in vis_actuelle]
-                                self.vis_map_precedente[id_joueur] = [row[:] for row in vis_actuelle]
-                                self.vis_map_dirty[id_joueur] = False
+                                vis_full = [row[:] for row in vis_actuelle]
+                            self.vis_needs_full[id_joueur] = False
+                            self.vis_delta_buffer[id_joueur].clear()
+                            self.vis_map_dirty[id_joueur] = False
+                        elif self.vis_map_dirty.get(id_joueur):
+                            buf = self.vis_delta_buffer.get(id_joueur)
+                            vis_delta = list(buf)
+                            buf.clear()
+                            self.vis_map_dirty[id_joueur] = False
 
                     donnees_pour_client = {**etat_commun, 'vis_map': vis_full, 'vis_delta': vis_delta}
                     send_complet(connexion_client, donnees_pour_client)
@@ -355,10 +355,12 @@ class Serveur:
                 del self.joueurs[id_joueur]
                 if id_joueur in self.cartes_visibilite:
                     del self.cartes_visibilite[id_joueur]
-                if id_joueur in self.vis_map_precedente:
-                    del self.vis_map_precedente[id_joueur]
                 if id_joueur in self.vis_map_dirty:
                     del self.vis_map_dirty[id_joueur]
+                if id_joueur in self.vis_delta_buffer:
+                    del self.vis_delta_buffer[id_joueur]
+                if hasattr(self, 'vis_needs_full') and id_joueur in self.vis_needs_full:
+                    del self.vis_needs_full[id_joueur]
                 if id_joueur not in self._ids_pool:
                     self._ids_pool.append(id_joueur)
                     self._ids_pool.sort()
@@ -382,15 +384,20 @@ class Serveur:
                         rayon_max  = int((elapsed / ECHO_DUREE_REVEAL) * portee_max)
                         rayon_prec = echo.get('rayon_precedent', 0)
                         if rayon_max > rayon_prec and echo['id_joueur'] in self.cartes_visibilite:
+                            id_j = echo['id_joueur']
+                            buf = self.vis_delta_buffer.get(id_j)
+                            if buf is None:
+                                buf = set()
+                                self.vis_delta_buffer[id_j] = buf
                             if echo.get('type') == 'dir':
                                 self.carte_jeu.reveler_par_echo_dir_partiel(
                                     echo['cx'], echo['cy'], rayon_max,
-                                    self.cartes_visibilite[echo['id_joueur']],
-                                    echo['direction'])
+                                    self.cartes_visibilite[id_j],
+                                    echo['direction'], delta_set=buf)
                             else:
                                 self.carte_jeu.reveler_par_echo_partiel(
                                     echo['cx'], echo['cy'], rayon_max,
-                                    self.cartes_visibilite[echo['id_joueur']])
+                                    self.cartes_visibilite[id_j], delta_set=buf)
                             echo['rayon_precedent'] = rayon_max
                             self.vis_map_dirty[echo['id_joueur']] = True
                         echos_restants.append(echo)
