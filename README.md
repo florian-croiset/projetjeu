@@ -1,621 +1,323 @@
-# Écho 🎮
+# Écho
 
-**Projet de jeu vidéo multijoueur coopératif - Cycle Préparatoire S1 & S2**
+**Jeu d'action-plateforme 2D coopératif — Projet étudiant Cycle Préparatoire S1 & S2**
+
+*Développé par la team Nightberry*
 
 ---
 
-## 📋 Table des matières
+## Table des matières
 
-- [Présentation du projet](#présentation-du-projet)
-- [Équipe de développement](#équipe-de-développement)
-- [Fonctionnalités principales](#fonctionnalités-principales)
-- [Architecture technique](#architecture-technique)
+- [Présentation](#présentation)
+- [Équipe](#équipe)
 - [Installation et lancement](#installation-et-lancement)
-- [Guide de jeu](#guide-de-jeu)
+- [Contrôles](#contrôles)
+- [Mécaniques de jeu](#mécaniques-de-jeu)
+- [Architecture technique](#architecture-technique)
 - [Structure du projet](#structure-du-projet)
 - [Système de sauvegarde](#système-de-sauvegarde)
-- [Technologies utilisées](#technologies-utilisées)
-- [Développements futurs](#développements-futurs)
-- [Crédits et remerciements](#crédits-et-remerciements)
+- [Technologies](#technologies)
 
 ---
 
-## 🎯 Présentation du projet
+## Présentation
 
-**Écho** est un jeu d'action-plateforme 2D développé dans le cadre d'un projet étudiant de première année du cycle préparatoire. Le jeu s'inspire du genre "Metroidvania" en proposant une exploration progressive basée sur un système de vision unique : **l'écholocalisation**.
+**Écho** est un jeu d'action-plateforme 2D coopératif en Python/Pygame où les joueurs ne perçoivent leur environnement que par **écholocalisation** (raycasting). Plongé dans l'obscurité totale, le joueur émet des échos sonores qui révèlent progressivement et définitivement la carte autour de lui.
 
-### Concept principal
+Le jeu s'inspire du genre **Metroidvania** (progression par capacités débloquables ouvrant de nouvelles zones) et de **Dark Souls** (système d'âmes perdues à la mort). Jusqu'à 3 joueurs peuvent coopérer via une architecture client-serveur TCP.
 
-Dans un monde plongé dans l'obscurité totale, le joueur ne peut voir son environnement qu'en utilisant des échos sonores. Cette mécanique centrale crée une expérience de jeu unique où l'exploration devient un défi permanent. Les joueurs doivent régulièrement émettre des échos pour révéler progressivement la carte et naviguer dans des labyrinthes complexes.
+### Fonctionnalités principales
 
-### Caractéristiques distinctives
-
-- **Vision par écholocalisation** : Système de raycasting révélant progressivement l'environnement
-- **Multijoueur coopératif** : Jusqu'à 3 joueurs peuvent explorer ensemble (architecture client-serveur)
-- **Progression Metroidvania** : Déblocage de capacités (double saut, dash) ouvrant de nouvelles zones
-- **Système d'âmes** : Mécanisme inspiré de Dark Souls pour la gestion de la mort
-- **Sauvegarde persistante** : 3 emplacements de sauvegarde avec checkpoints
-
----
-
-## 👥 Équipe de développement
-
-Ce projet a été réalisé par une équipe de 5 étudiants :
-
-1. **[Amaury Giraud--Laforet]** - Chef de projet, IA, Objets
-2. **[Florian Croiset]** - Menu, site, Musique
-3. **[Eric Sahakian]** - Level design, Graphismes
-4. **[Gaspard Sapin]** - Déplacements, Mécaniques, Boss
-5. **[Jules Cohen]** - Lore, Réseau, Jouabilité
-
-### Site web du projet
-
-Un site web compagnon a été développé pour promouvoir le jeu et présenter l'équipe.  
-🔗 (https://florian-croiset.github.io/jeusite/)
+- **Écholocalisation** : vision uniquement par rayons — radiale (360°) ou directionnelle (cône ±25°, débloquable)
+- **Multijoueur coopératif** : jusqu'à 3 joueurs, LAN ou WAN via serveur relais
+- **Progression Metroidvania** : double saut, dash, écho directionnel débloquables
+- **Système d'âmes** : à la mort, une âme perdue contenant votre argent apparaît sur place et peut être récupérée
+- **Boss** : Demon Slime avec salle dédiée
+- **3 emplacements de sauvegarde** persistants avec checkpoints
 
 ---
 
-## ✨ Fonctionnalités principales
+## Équipe
 
-### 🎮 Mécaniques de jeu
+| Membre | Contributions |
+|--------|--------------|
+| **Amaury Giraud--Laforet** | Chef de projet, IA ennemis, objets |
+| **Florian Croiset** | Menus, site web, musique |
+| **Eric Sahakian** | Level design, graphismes |
+| **Gaspard Sapin** | Déplacements, mécaniques de jeu, boss |
+| **Jules Cohen** | Lore, réseau, jouabilité |
 
-#### Écholocalisation
-- **Cooldown** : 6 secondes entre chaque écho
-- **Portée** : 250 pixels de rayon
-- **Précision** : 360 rayons lancés pour une détection précise
-- Les échos révèlent les murs, les checkpoints et les points d'intérêt
-
-#### Système de combat
-- **Attaque de mêlée** : Portée de 40 pixels
-- **Dégâts** : 1 point par coup
-- **Cooldown** : 500ms entre les attaques
-- **Feedback visuel** : Hitbox affichée pendant l'attaque
-
-#### Capacités débloquables
-1. **Double Saut**
-   - Force : 10 unités (légèrement moins puissant que le saut normal)
-   - Permet d'atteindre des plateformes inaccessibles
-
-2. **Dash**
-   - Distance : 4 blocs (128 pixels)
-   - Durée : 150ms
-   - Cooldown : 600ms
-   - Utilisable 1 fois en l'air avant de retoucher le sol
-
-#### Système d'âmes perdues
-Inspiré de la série Dark Souls :
-- À la mort, le joueur laisse une **âme perdue** contenant tout son argent
-- L'âme apparaît à l'endroit de la mort
-- Le joueur peut la récupérer en l'attaquant
-- Une nouvelle mort fait disparaître l'ancienne âme définitivement
-
-### 🌐 Multijoueur
-
-#### Architecture réseau
-- **Type** : Client-Serveur via sockets TCP
-- **Port** : 5555 (configurable)
-- **Capacité** : 3 joueurs maximum simultanément
-- **Protocole** : Sérialisation avec pickle pour l'échange de données
-
-#### Fonctionnalités réseau
-- L'hôte héberge le serveur et joue simultanément
-- Les clients se connectent via l'IP locale de l'hôte
-- Synchronisation en temps réel des positions, actions et états
-- Cartes de visibilité individuelles par joueur
-- Partage des ennemis et des âmes perdues
-
-### 💾 Système de sauvegarde
-
-#### Emplacements
-- **3 slots** de sauvegarde indépendants
-- Sauvegarde automatique aux checkpoints (tuiles jaunes de type 3)
-- Stockage au format JSON pour faciliter le débogage
-
-#### Données sauvegardées
-- Position du dernier checkpoint
-- Carte de visibilité révélée
-- Argent collecté
-- Capacités débloquées (double saut, dash)
-- Items récupérés (système préparé pour extensions futures)
-
-### 🗺️ Carte et environnement
-
-#### Système de tilemap
-- Grille de tuiles de 32×32 pixels
-- Carte actuelle : 32×24 tuiles (1024×768 pixels)
-- Types de tuiles :
-  - `0` : Zone vide (accessible)
-  - `1` : Mur (solide, visible après écho)
-  - `2` : Point de repère (toujours visible, sert de guide)
-  - `3` : Point de sauvegarde (checkpoint)
-
-#### Caméra
-- Système de caméra centrée sur le joueur
-- Zoom configurable (défaut : 2.5×)
-- Défilement fluide suivant les mouvements
+Site web du projet : [florian-croiset.github.io/jeusite](https://florian-croiset.github.io/jeusite/)
 
 ---
 
-## 🏗️ Architecture technique
-
-### Structure modulaire
-
-Le projet est organisé en modules Python spécialisés pour faciliter la maintenance et l'évolution :
-
-```
-metroidvania-echo/
-├── client.py              # Point d'entrée client + boucle de jeu
-├── serveur.py             # Logique serveur + autorité du jeu
-├── joueur.py              # Classe Joueur (physique, combat, capacités)
-├── ennemi.py              # Classe Ennemi (IA, patrouille, PV)
-├── ame_perdue.py          # Système d'âmes perdues
-├── carte.py               # Gestion tilemap et écholocalisation
-├── bouton.py              # Composant UI pour les menus
-├── parametres.py          # Constantes globales du jeu
-├── gestion_parametres.py  # Lecture/écriture parametres.json
-├── gestion_sauvegarde.py  # Lecture/écriture des slots
-├── points_sauvegarde.py   # Gestion des checkpoints
-├── langue.py              # Système i18n (FR/EN)
-├── parametres.json        # Configuration utilisateur
-├── slot_1.json            # Sauvegarde emplacement 1
-├── slot_2.json            # Sauvegarde emplacement 2
-├── slot_3.json            # Sauvegarde emplacement 3
-└── Map.tmx                # Carte Tiled (potentiel futur)
-```
-
-### Physique et collisions
-
-#### Gravité et mouvement
-- **Gravité** : 0.6 unités/frame
-- **Vitesse joueur** : 5 pixels/frame
-- **Force de saut** : 13 unités
-- Limitation de la vélocité verticale à 10 unités
-
-#### Gestion des collisions
-- Détection AABB (Axis-Aligned Bounding Box)
-- Séparation des collisions X et Y
-- Résolution immédiate pour éviter les overlaps
-- Distinction entre surfaces solides et traversables
-
-### Système de raycasting
-
-L'écholocalisation utilise un algorithme de raycasting optimisé :
-
-1. **Lancement des rayons** : 360 rayons équidistants depuis le joueur
-2. **Marche de rayon** : Avancement progressif pixel par pixel
-3. **Détection** : Arrêt au premier obstacle ou à la portée max
-4. **Mise à jour** : Révélation permanente des tuiles touchées
-
-```python
-for i in range(NB_RAYONS_ECHO):  # 360 rayons
-    angle = (i / NB_RAYONS_ECHO) * 2 * math.pi
-    for dist in range(1, PORTEE_ECHO):  # Portée 250
-        x = centre_x + dist * math.cos(angle)
-        y = centre_y + dist * math.sin(angle)
-        # Vérification collision et révélation
-```
-
-### Réseau et synchronisation
-
-#### Architecture Client-Serveur
-
-**Serveur (Autorité)**
-- Gère la physique pour tous les joueurs
-- Exécute l'IA des ennemis
-- Détecte les collisions et les interactions
-- Applique les règles du jeu
-- Distribue l'état du monde à tous les clients
-
-**Client (Affichage)**
-- Capture les inputs du joueur local
-- Envoie les commandes au serveur
-- Reçoit l'état du monde
-- Affiche le rendu graphique
-- Gère l'interface utilisateur
-
-#### Protocole de communication
-
-**Client → Serveur** (chaque frame)
-```python
-{
-    'clavier': {
-        'gauche': bool,
-        'droite': bool,
-        'saut': bool,
-        'attaque': bool,
-        'dash': bool
-    },
-    'echo': bool
-}
-```
-
-**Serveur → Client** (chaque frame)
-```python
-{
-    'joueurs': [état_joueur1, état_joueur2, ...],
-    'vis_map': [[bool, bool, ...], ...],
-    'ennemis': [état_ennemi1, état_ennemi2, ...],
-    'ames_perdues': [état_ame1, état_ame2, ...]
-}
-```
-
----
-
-## 🚀 Installation et lancement
+## Installation et lancement
 
 ### Prérequis
 
-- **Python** 3.8 ou supérieur
-- **Pygame** 2.0 ou supérieur
+- Python 3.8+
+- Pygame 2.1+, NumPy 2.4+
 
 ### Installation
 
-1. **Cloner le dépôt**
 ```bash
-git clone [URL_DU_DEPOT]
-cd metroidvania-echo
+git clone https://github.com/florian-croiset/projetjeu
+cd projetjeu
+pip install -r requirements.txt
 ```
 
-2. **Installer les dépendances**
-```bash
-pip install pygame
-```
-
-3. **Vérifier les fichiers**
-```bash
-# S'assurer que tous les fichiers .py sont présents
-ls *.py
-
-# Vérifier la présence de parametres.json
-cat parametres.json
-```
-
-### Lancement du jeu
-
-#### Mode Solo / Hébergement
+### Lancer le jeu
 
 ```bash
-python client.py
+python3 main.py
+# ou
+make all
 ```
 
-Puis dans le menu :
-1. Sélectionner **"Héberger une partie"**
-2. Choisir **"Nouvelle Partie"** ou **"Continuer"**
-3. Sélectionner un emplacement de sauvegarde (1, 2 ou 3)
-4. Le serveur démarre automatiquement
-5. L'IP locale s'affiche dans la console (pour que d'autres joueurs se connectent)
+### Héberger une partie multijoueur
 
-#### Mode Multijoueur (Client)
+Depuis le menu principal → **Héberger** → choisir un emplacement de sauvegarde. Le serveur démarre automatiquement dans un thread séparé. L'IP locale s'affiche pour que d'autres joueurs se connectent.
 
-1. Lancer le jeu : `python client.py`
-2. Sélectionner **"Rejoindre une partie"**
-3. Entrer l'IP de l'hôte (affichée dans sa console)
-4. Se connecter
+### Rejoindre une partie
 
-### Configuration
+Deux modes disponibles dans le menu **Rejoindre** :
 
-Le fichier `parametres.json` permet de personnaliser :
+1. **IP directe** — entrer l'IP de l'hôte (même LAN, ou VPN type Tailscale/Hamachi + port `5555/TCP` ouvert)
+2. **Code de salle** — l'hôte partage un code à 6 caractères via un serveur relais (WAN sans redirection de port)
 
-```json
-{
-    "jouabilite": {
-        "langue": "fr",           // "fr" ou "en"
-        "sensibilite_souris": 0.5
-    },
-    "video": {
-        "plein_ecran": false,
-        "vsync": false
-    },
-    "controles": {
-        "gauche": "q",
-        "droite": "d",
-        "saut": "space",
-        "echo": "e",
-        "attaque": "k",
-        "dash": "c"
-    }
-}
+### Serveur relais (WAN sans NAT)
+
+```bash
+python3 -m reseau.relay_server        # port 7777 par défaut
+python3 -m reseau.relay_server 8888   # port personnalisé
 ```
+
+Configurer `RELAY_HOST` / `RELAY_PORT` dans `parametres.py`.
 
 ---
 
-## 🎲 Guide de jeu
+## Contrôles
 
-### Contrôles par défaut
+| Action | Touche par défaut |
+|--------|------------------|
+| Se déplacer | Q / D |
+| Sauter / Double saut | Espace |
+| Dash | C |
+| Écho radial | E |
+| Attaque | K |
+| Pause | Échap |
 
-| Action | Touche | Description |
-|--------|--------|-------------|
-| **Déplacement gauche** | Q | Se déplacer vers la gauche |
-| **Déplacement droite** | D | Se déplacer vers la droite |
-| **Saut** | Espace | Sauter (maintenir pour sauter plus haut) |
-| **Double saut** | Espace (×2) | Second saut en l'air (après déblocage) |
-| **Dash** | C | Propulsion rapide (après déblocage) |
-| **Écho** | E | Révéler l'environnement (cooldown 6s) |
-| **Attaque** | K | Attaque de mêlée |
-| **Pause** | Échap | Mettre le jeu en pause |
-
-### Objectifs et progression
-
-#### Phase d'exploration
-1. **Révéler la carte** : Utiliser les échos pour découvrir l'environnement
-2. **Trouver les checkpoints** : Repérer les tuiles jaunes (type 3) pour sauvegarder
-3. **Collecter des âmes** : Vaincre les ennemis pour gagner de l'argent (10 âmes/ennemi)
-
-#### Système de progression
-- Les **points de repère** (tuiles grises foncées) sont toujours visibles et servent de guides
-- Les **checkpoints** sauvegardent automatiquement la progression
-- Les **capacités** débloquées persistent entre les sessions
-- La **carte révélée** est sauvegardée et reste visible
-
-#### Gestion de la mort
-1. À la mort, une **âme perdue** apparaît à votre position
-2. Vous réapparaissez au dernier checkpoint **sans argent**
-3. Retournez récupérer votre âme pour retrouver votre argent
-4. **Attention** : Mourir avant de récupérer l'âme la fait disparaître définitivement
-
-### Conseils stratégiques
-
-- **Utilisez les échos avec parcimonie** : Le cooldown de 6 secondes vous oblige à anticiper
-- **Mémorisez la carte** : La vision révélée reste permanente, profitez-en
-- **Explorez méthodiquement** : Les points de repère vous guident vers les zones importantes
-- **Gérez votre argent** : Ne prenez pas de risques inutiles avec une grosse somme
-- **Coopérez en multijoueur** : Chaque joueur a sa propre vision, partagez vos découvertes
-- **Maîtrisez le dash** : Un seul dash en l'air, utilisez-le pour franchir les gouffres
+Les touches sont reconfigurables dans `parametres.json` (menu Paramètres en jeu).
 
 ---
 
-## 📁 Structure du projet
+## Mécaniques de jeu
 
-### Modules principaux
+### Écholocalisation
 
-#### `client.py` - Interface et rendu
-- Boucle de jeu principale
-- Capture des inputs clavier/souris
-- Affichage graphique (joueurs, ennemis, carte, UI)
-- Gestion des menus (principal, pause, paramètres, slots)
-- Communication avec le serveur
-- Système de caméra
+| Mode | Portée | Cooldown | Angle | Condition |
+|------|--------|----------|-------|-----------|
+| Écho radial | 150 px | 2,5 s | 360° | Disponible dès le début |
+| Écho directionnel | 300 px | 4 s | Cône ±25° | Débloquable (orbe) |
 
-#### `serveur.py` - Logique de jeu
-- Boucle de simulation physique (60 FPS)
-- IA des ennemis (patrouille, détection du vide)
-- Détection et résolution des combats
-- Gestion de la mort et du respawn
-- Sauvegarde automatique aux checkpoints
-- Distribution de l'état du jeu aux clients
+Les rayons sont lancés pixel par pixel depuis le joueur. Les tuiles touchées sont révélées **définitivement** dans la `vis_map` sauvegardée. Les torches proches fournissent un halo de visibilité passif.
 
-#### `joueur.py` - Entité joueur
-- Physique (gravité, saut, dash)
-- Stats (PV, argent)
-- Combat (attaque, hitbox)
-- Capacités spéciales (double saut, dash)
-- Sérialisation pour le réseau
+### Capacités débloquables
 
-#### `carte.py` - Environnement
-- Chargement de la tilemap
-- Raycasting pour l'écholocalisation
-- Gestion des cartes de visibilité individuelles
-- Rendu de la carte avec offset caméra
-- Détection de collisions
+Chaque capacité est obtenue en récupérant une **orbe** (objet interactif sur la carte).
 
-#### `ennemi.py` - Adversaires
-- IA de patrouille simple
-- Détection du vide (changement de direction)
-- Système de PV et dégâts
-- Feedback visuel (clignotement)
+- **Double saut** : second saut en l'air (force 10 vs 13 pour le saut normal)
+- **Dash** : propulsion de 4 tuiles (128 px) en 150 ms, cooldown 600 ms, 1 utilisation max en l'air
+- **Écho directionnel** : voir tableau ci-dessus
 
-#### `ame_perdue.py` - Système d'âmes
-- Objet laissé à la mort
-- Stockage de l'argent perdu
-- Récupération par attaque
+### Combat
 
-### Modules utilitaires
+- **Attaque de mêlée** : portée 40 px, cooldown 600 ms
+- **Ennemis** : patrouille, détection du vide, feedback visuel à l'impact
+- **Boss Demon Slime** : salle dédiée avec déclenchement de combat
 
-#### `gestion_sauvegarde.py`
-- Création de sauvegardes vierges
-- Lecture/écriture des fichiers `slot_X.json`
-- Validation de l'intégrité des données
-- Gestion des chemins absolus
+### Système d'âmes perdues (inspiration Dark Souls)
 
-#### `gestion_parametres.py`
-- Lecture/écriture de `parametres.json`
-- Création de paramètres par défaut
-- Validation et complétion automatique
+1. À la mort, une **âme perdue** apparaît à l'endroit du décès avec tout votre argent
+2. Le joueur réapparaît au dernier checkpoint sans argent
+3. Récupérer l'âme en l'attaquant restaure l'argent
+4. Mourir une seconde fois sans l'avoir récupérée la fait disparaître définitivement
 
-#### `points_sauvegarde.py`
-- Conversion ID checkpoint ↔ coordonnées
-- Noms lisibles pour l'affichage
-- Gestion du point de départ
+### Objets du monde
 
-#### `langue.py` - Internationalisation
-- Dictionnaires de traduction (FR/EN)
-- Fonction `get_texte(cle)` pour récupérer les chaînes
-- Support de nouvelles langues facilité
-
-#### `bouton.py` - Composant UI
-- Classe réutilisable pour les menus
-- Gestion du survol et des clics
-- Rendu avec bordures arrondies
-
-#### `parametres.py` - Configuration
-- Toutes les constantes du jeu
-- Valeurs de gameplay (vitesse, dégâts, cooldowns)
-- Couleurs et dimensions
-- Facilite le game design et le balancing
+| Objet | Rôle |
+|-------|------|
+| `OrbeCapacite` | Débloque une capacité au contact |
+| `Porte` | Porte interactive (nécessite une clé) |
+| `Cle` | Ramassable, ouvre une porte |
+| `AmePerdue` | Loot de l'argent du joueur à sa mort |
+| `AmeLoot` | Loot des ennemis vaincus |
 
 ---
 
-## 💾 Système de sauvegarde
+## Architecture technique
 
-### Format de sauvegarde
+L'autorité est séparée : **le serveur possède toute la logique de jeu** (physique, IA, combats, collisions) et **le client possède le rendu, les inputs et l'affichage**.
 
-Chaque slot est un fichier JSON structuré :
+### Serveur (`reseau/serveur.py`)
+
+Tourne dans un thread séparé au moment de l'hébergement.
+
+- Physique joueurs : gravité (0,6 u/frame), AABB, mouvement (5 px/frame), saut (force 13), dash
+- IA ennemis : patrouille, détection du vide, respawn timers
+- Résolution de combats : mêlée, boss
+- Objets : portes, orbes, clés, âmes, torches
+- Détection des checkpoints et sauvegarde automatique
+- Diffusion de l'état à tous les clients à **60 Hz**
+
+### Client (`main.py` → `client.py`)
+
+`Client` est composé de trois mixins :
+
+| Mixin | Fichier | Rôle |
+|-------|---------|------|
+| `BoucleJeuMixin` | `boucle_jeu.py` | Boucle de jeu, envoi inputs, réception état serveur, rendu |
+| `MenusMixin` | `ui/menus.py` | Tous les écrans de menu |
+| `HudMixin` | `ui/hud.py` | HUD en jeu (barre de vie, mort/respawn, boss) |
+
+### Protocole réseau
+
+- **Transport** : TCP sur port `5555`
+- **Encodage** : préfixe 4 octets (big-endian, longueur) + objet Python sérialisé avec `pickle` — voir `reseau/protocole.py` (`send_complet` / `recv_complet`)
+- **Client → Serveur** : dict d'inputs (touches pressées, actions)
+- **Serveur → Client** : état complet du monde (joueurs, ennemis, âmes, boss, clés, portes, orbes, cartes de visibilité)
+
+### Système d'écholocalisation (`core/carte.py`)
+
+```python
+for i in range(NB_RAYONS_ECHO):          # 360 rayons
+    angle = (i / NB_RAYONS_ECHO) * 2 * pi
+    for dist in range(1, PORTEE_ECHO):   # 150 px
+        x = cx + dist * cos(angle)
+        y = cy + dist * sin(angle)
+        # → révèle la tuile, arrêt sur mur
+```
+
+La surface de carte pré-baked (`_carte_prebake`) n'est reconstruite que lorsque `vis_map` change. La caméra applique un masque halo (`ui/camera.py` → `creer_masque_halo`) pour l'obscurité ambiante.
+
+---
+
+## Structure du projet
+
+```
+projetjeu/
+├── main.py                        # Point d'entrée
+├── client.py                      # Classe Client (mixins)
+├── boucle_jeu.py                  # BoucleJeuMixin
+├── parametres.py                  # Toutes les constantes du jeu
+├── parametres.json                # Configuration utilisateur (langue, touches, vidéo)
+│
+├── core/                          # Logique de jeu
+│   ├── carte.py                   # Tilemap + raycasting écholocalisation
+│   ├── joueur.py                  # Physique, combat, capacités
+│   ├── ennemi.py                  # IA ennemis
+│   ├── demon_slime_boss.py        # Boss principal
+│   ├── boss_room.py               # Gestion de la salle boss
+│   ├── ame_perdue.py              # Âme du joueur à la mort
+│   ├── ame_libre.py / ame_loot.py # Âmes loot ennemis
+│   ├── orbe_capacite.py           # Objets débloquant des capacités
+│   ├── porte.py                   # Portes interactives
+│   ├── cle.py                     # Clés
+│   ├── torche.py                  # Torches (halo passif)
+│   ├── map.py                     # Chargement carte JSON
+│   └── astar.py                   # Pathfinding A*
+│
+├── reseau/                        # Réseau
+│   ├── serveur.py                 # Serveur autoritaire (TCP, threadé)
+│   ├── protocole.py               # send_complet / recv_complet
+│   ├── relay_server.py            # Serveur relais WAN (code de salle)
+│   └── relay_client.py            # Helpers côté client pour le relais
+│
+├── ui/                            # Interface
+│   ├── menus.py                   # MenusMixin — tous les menus
+│   ├── hud.py                     # HudMixin — HUD en jeu
+│   ├── camera.py                  # Caméra + masque halo
+│   ├── bouton.py                  # Composant bouton réutilisable
+│   ├── effets_visuels.py          # Effets visuels
+│   ├── splash_screen.py           # Écran de démarrage
+│   └── tutoriel.py                # Tutoriel
+│
+├── sauvegarde/                    # Persistance
+│   ├── gestion_sauvegarde.py      # Lecture/écriture slots JSON
+│   ├── gestion_parametres.py      # Lecture/écriture parametres.json
+│   └── points_sauvegarde.py       # ID checkpoint ↔ coordonnées
+│
+├── utils/                         # Utilitaires
+│   ├── langue.py                  # i18n FR/EN
+│   ├── music.py                   # Gestion musique
+│   ├── envoyer_logs.py            # Envoi de logs
+│   └── install_package.py         # Installation dépendances runtime
+│
+└── assets/                        # Ressources
+    ├── MapS2.tmx                  # Carte Tiled (XML, couches Wall.* / Sol.*)
+    ├── tileset.png                # Tileset
+    ├── sprite_perso*.png          # Sprites joueurs
+    ├── demon_slime.png            # Sprite boss
+    ├── Torche.png                 # Sprite torche
+    └── musique.mp3                # Musique d'ambiance
+```
+
+### Format de carte
+
+Fichier TMX (`assets/MapS2.tmx`) parsé en XML par `core/carte.py`. Les couches nommées `Wall.*` et `Sol.*` génèrent des tuiles solides (type 1) ; le reste est vide (type 0). Fallback : `map.json` (grille plate). Taille de tuile : **32×32 px**.
+
+---
+
+## Système de sauvegarde
+
+3 emplacements → `slot_1.json`, `slot_2.json`, `slot_3.json`. Sauvegarde automatique au contact d'un checkpoint (tuile type 3), uniquement pour l'hôte.
+
+### Format JSON
 
 ```json
 {
     "id_dernier_checkpoint": "3_21",
-    "vis_map": [
-        [true, false, false, ...],
-        [false, true, false, ...],
-        ...
-    ],
+    "vis_map": [[true, false, ...], ...],
     "items": [],
     "ameliorations": {
         "double_saut": true,
-        "dash": false
+        "dash": false,
+        "echo_dir": false
     },
     "argent": 150
 }
 ```
 
-### Champs détaillés
-
-| Champ | Type | Description |
-|-------|------|-------------|
-| `id_dernier_checkpoint` | string | Format "x_y" de la tuile checkpoint |
-| `vis_map` | 2D array | Carte booléenne de visibilité (même taille que map_data) |
-| `items` | array | Liste des items collectés (système extensible) |
-| `ameliorations` | object | Capacités débloquées (double_saut, dash, etc.) |
-| `argent` | integer | Âmes collectées et sauvegardées |
-
-### Mécanisme de sauvegarde
-
-1. **Déclenchement** : Contact avec une tuile de type 3
-2. **Vérification** : Uniquement pour l'hôte (id_joueur == 0)
-3. **Données capturées** :
-   - Position actuelle → nouveau checkpoint
-   - Carte de visibilité complète
-   - Argent en possession
-   - Capacités débloquées
-4. **Écriture** : Sérialisation JSON avec indentation (lisibilité)
-
-### Chargement
-
-```python
-# Au démarrage du serveur
-donnees = gestion_sauvegarde.charger_partie(id_slot)
-if donnees:
-    # Restauration de l'état
-    spawn = points_sauvegarde.get_coords_par_id(donnees["id_dernier_checkpoint"])
-    joueur.argent = donnees.get("argent", 0)
-    joueur.peut_double_saut = donnees["ameliorations"]["double_saut"]
-    # etc.
-```
+| Champ | Description |
+|-------|-------------|
+| `id_dernier_checkpoint` | Coordonnées "x_y" de la tuile checkpoint |
+| `vis_map` | Grille booléenne de visibilité (même taille que la carte) |
+| `ameliorations` | Capacités débloquées |
+| `argent` | Âmes/argent au moment de la sauvegarde |
 
 ---
 
-## 🛠️ Technologies utilisées
+## Technologies
 
-### Langage et bibliothèques
+| Technologie | Usage |
+|-------------|-------|
+| **Python 3.8+** | Langage principal |
+| **Pygame 2.1+** | Rendu 2D, événements, boucle de jeu |
+| **NumPy 2.4+** | Génération du masque halo (caméra) |
+| **socket / pickle / struct** | Réseau TCP (stdlib) |
+| **json** | Sauvegardes et configuration |
+| **threading** | Serveur et relais dans des threads séparés |
+| **Tiled Map Editor** | Création de la carte (`assets/MapS2.tmx`) |
 
-- **Python 3.8+** : Langage principal
-  - Facilité d'apprentissage pour un projet étudiant
-  - Syntaxe claire et lisible
-  - Riche écosystème de bibliothèques
+### Flags de debug (`parametres.py`)
 
-- **Pygame 2.0+** : Framework de jeu 2D
-  - Gestion de la fenêtre et des événements
-  - Rendu graphique 2D (sprites, formes, texte)
-  - Gestion du temps et de la boucle de jeu
-  - Manipulation des surfaces et transformations
-
-### Réseau
-
-- **Sockets TCP** (bibliothèque standard `socket`)
-  - Communication fiable client-serveur
-  - Sérialisation avec `pickle` pour l'échange d'objets Python
-  - Threading pour gérer plusieurs clients simultanément
-
-### Données
-
-- **JSON** : Format de sauvegarde
-  - Lisible et éditable manuellement
-  - Facilite le débogage
-  - Support natif en Python (`json` module)
-
-- **Pickle** : Sérialisation réseau
-  - Transmission rapide d'objets complexes
-  - Support des types Python natifs
-
-### Outils de développement
-
-- **Git** : Gestion de versions
-- **VS Code / PyCharm** : Environnements de développement
-- **Tiled Map Editor** : Création de cartes (Map.tmx)
+| Flag | Effet |
+|------|-------|
+| `MODE_DEV = True` | Compteur FPS, overlay debug, capture logs |
+| `REVELATION = True` | Révèle toute la carte (bypass écholocalisation) |
+| `ASSOMBRISSEMENT = False` | Désactive l'obscurité / le halo |
 
 ---
 
-## 🔮 Développements futurs
-
-### Fonctionnalités planifiées
-
-#### Court terme
-- [ ] **Système de boutique** : Dépenser l'argent pour acheter des améliorations
-- [ ] **Plus de capacités** : Escalade, glissade murale, double dash
-- [ ] **Variété d'ennemis** : Différents patterns d'IA, ennemis volants, boss
-- [ ] **Particules et effets** : Traînées de dash, échos visuels, impacts
-- [ ] **Sound design** : Musique d'ambiance, bruitages d'écho, effets sonores
-
-#### Moyen terme
-- [ ] **Cartes TMX** : Chargement de cartes créées avec Tiled
-- [ ] **Système de quêtes** : Objectifs secondaires, dialogues NPC
-- [ ] **Items et inventaire** : Clés, potions, équipements
-- [ ] **Sauvegarde cloud** : Synchronisation entre machines
-- [ ] **Lobby multijoueur** : Liste de serveurs publics, chat
-
-#### Long terme
-- [ ] **Campagne complète** : Histoire scénarisée, cinématiques
-- [ ] **Mode compétitif** : PvP, courses contre la montre
-- [ ] **Éditeur de niveaux** : Création de cartes par la communauté
-- [ ] **Modding** : Support de scripts Lua, assets personnalisés
-- [ ] **Portage** : Version web (Pygame Web), mobile
-
-### Améliorations techniques
-
-- **Optimisation réseau** : Interpolation, prédiction client, delta compression
-- **Système d'entités-composants** : Architecture ECS pour plus de flexibilité
-- **Shaders** : Effets visuels avancés (glow, distorsion)
-- **Pathfinding** : IA ennemie plus sophistiquée (A*, navigation meshes)
-- **Génération procédurale** : Cartes aléatoires, mode roguelite
-
----
-
-## 📜 Crédits et remerciements
-
-### Équipe de développement
-
-### Ressources et inspirations
-
-- **Hollow Knight** : Inspiration pour le game feel et l'atmosphère
-- **Dark Souls** : Système d'âmes perdues
-- **Rain World** : IA ennemie et level design
-- **Pygame Documentation** : [pygame.org](https://www.pygame.org/docs/)
-- **Real Python** : Tutoriels réseau et bonnes pratiques
-
-### Remerciements
-
-- **Enseignants et encadrants** du cycle préparatoire pour leur soutien
-- **Communauté Pygame** pour les ressources et l'entraide
-- **Testeurs** ayant fourni des retours précieux
-
----
-
-## 📄 Licence
-
-Ce projet est un travail étudiant à but éducatif. Le code source est fourni tel quel pour référence et apprentissage.
-
-**Projet réalisé dans le cadre du cycle préparatoire - S1 & S2**  
-**Institution : [Nom de l'école à compléter]**  
-**Année académique : [Année à compléter]**
-
----
-
-## 📞 Contact
-
-Pour toute question concernant ce projet :
-
-- **Site web du jeu** : https://florian-croiset.github.io/jeusite/
-- **Dépôt GitHub** : https://github.com/florian-croiset/projetjeu
----
-
-*README généré avec ❤️ par la team Nightberry*
+*Projet réalisé dans le cadre du Cycle Préparatoire — Année académique 2024-2025*  
+*Dépôt GitHub : [florian-croiset/projetjeu](https://github.com/florian-croiset/projetjeu)*
