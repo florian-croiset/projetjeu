@@ -96,6 +96,8 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
         self.cle_locale = None
         self.torche = Torche(x=551, y=1025)
         self.boss_local = None
+        self._porte_etait_en_ouverture = False
+        self._boss_etat_precedent = None
 
         # Polices
         h = self.hauteur_ecran

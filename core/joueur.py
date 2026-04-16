@@ -201,8 +201,7 @@ class Joueur:
             self.est_en_attaque = True
             self.dernier_attaque_temps = temps_actuel
             self.commandes['attaque'] = False
-            # Événement son attaque → client
-            self.sons_a_jouer.append('attaque')
+            # Son d'attaque géré côté client (keypress) pour éviter le doublon
             return True
 
         if self.est_en_attaque:
