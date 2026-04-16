@@ -256,7 +256,7 @@ class MenusMixin:
         for btn in self.boutons_menu_principal:
             btn.dessiner(self.ecran)
 
-        ver = self.police_petit.render("v1.2 — Beta", True, COULEUR_TEXTE_SOMBRE)
+        ver = self.police_petit.render("v1.4 — Beta", True, COULEUR_TEXTE_SOMBRE)
         self.ecran.blit(ver, (self.largeur_ecran - ver.get_width() - 20,
                             self.hauteur_ecran - ver.get_height() - 12))
 
