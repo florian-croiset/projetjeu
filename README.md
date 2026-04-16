@@ -319,5 +319,5 @@ Fichier TMX (`assets/MapS2.tmx`) parsé en XML par `core/carte.py`. Les couches 
 
 ---
 
-*Projet réalisé dans le cadre du Cycle Préparatoire — Année académique 2024-2025*  
+*Projet réalisé dans le cadre du Cycle Préparatoire — Année académique 2025-2026*  
 *Dépôt GitHub : [florian-croiset/projetjeu](https://github.com/florian-croiset/projetjeu)*
