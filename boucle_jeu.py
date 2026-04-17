@@ -19,7 +19,7 @@ from utils import envoyer_logs, music
 from reseau import serveur
 from reseau.relay_server import demarrer_relay_thread
 from reseau.protocole import recv_complet, send_complet, obtenir_ip_locale
-from ui.camera import calculer_camera
+from ui.camera import calculer_camera, creer_masque_halo
 from core.carte import Carte
 from core.joueur import Joueur
 from core.ennemi import Ennemi
@@ -77,6 +77,11 @@ class BoucleJeuMixin:
                 self.gerer_menu_parametres(pos_souris)
                 self.dessiner_menu_parametres()
 
+            elif self.etat_jeu == "MENU_LUMINOSITE":
+                self.gerer_menu_luminosite(pos_souris)
+                if self.etat_jeu == "MENU_LUMINOSITE":
+                    self.dessiner_menu_luminosite()
+
             elif self.etat_jeu == "EN_JEU":
                 if self.etat_jeu_interne != "PAUSE":
                     self.etat_jeu_interne = "JEU"
@@ -120,6 +125,10 @@ class BoucleJeuMixin:
                 envoyer_logs.envoyer_maintenant()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+                    try:
+                        self._dernier_frame_jeu = self.ecran.copy()
+                    except Exception:
+                        self._dernier_frame_jeu = None
                     self.etat_jeu_interne = "PAUSE"
                     music.pause()
                 if event.key == key('attaque'):
@@ -132,6 +141,20 @@ class BoucleJeuMixin:
                     commandes['clavier']['dash'] = True
                     music.jouer_sfx('dash')
                 if event.key == key('echo_dir'):
+                    commandes['echo_dir'] = True
+                    music.jouer_sfx('echo_dir')
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                ms = self._codes_souris.get
+                if ms('attaque') and event.button == ms('attaque'):
+                    commandes['clavier']['attaque'] = True
+                    music.jouer_sfx_slash_joueur()
+                if ms('echo') and event.button == ms('echo'):
+                    commandes['echo'] = True
+                    music.jouer_sfx('echo')
+                if ms('dash') and event.button == ms('dash'):
+                    commandes['clavier']['dash'] = True
+                    music.jouer_sfx('dash')
+                if ms('echo_dir') and event.button == ms('echo_dir'):
                     commandes['echo_dir'] = True
                     music.jouer_sfx('echo_dir')
                 if event.key == pygame.K_l:
@@ -157,6 +180,12 @@ class BoucleJeuMixin:
             commandes['clavier']['droite'] = True
         if key('saut') and touches[key('saut')]:
             commandes['clavier']['saut'] = True
+        if self._codes_souris:
+            souris = pygame.mouse.get_pressed(num_buttons=5)
+            for action in ('gauche', 'droite', 'saut'):
+                btn = self._codes_souris.get(action)
+                if btn and 1 <= btn <= 5 and souris[btn - 1]:
+                    commandes['clavier'][action] = True
 
         mon_joueur = self.joueurs_locaux.get(self.mon_id)
         if mon_joueur and mon_joueur.pv <= 0:
@@ -291,7 +320,13 @@ class BoucleJeuMixin:
             if not hasattr(self, '_obscurite') or self._obscurite.get_size() != sz:
                 self._obscurite = pygame.Surface(sz, pygame.SRCALPHA)
             obscurite = self._obscurite
-            obscurite.fill((0, 0, 10, 220))
+            lum = self.parametres.get('video', {}).get('luminosite', 0.3)
+            alpha_base = int(220 * (1.0 - lum * 0.8))
+            if getattr(self, '_halo_alpha_max', None) != alpha_base:
+                self._masque_halo_joueur = creer_masque_halo(RAYON_HALO_JOUEUR, HALO_DEGRADE_ETENDUE, alpha_max=alpha_base)
+                self._masque_halo_torche = creer_masque_halo(RAYON_LUMIERE_TORCHE, HALO_DEGRADE_ETENDUE, alpha_max=alpha_base)
+                self._halo_alpha_max = alpha_base
+            obscurite.fill((0, 0, 10, alpha_base))
             rayon = RAYON_HALO_JOUEUR
             cx = mon_joueur.rect.centerx - camera_offset[0]
             cy = mon_joueur.rect.centery - camera_offset[1]
@@ -521,7 +556,7 @@ class BoucleJeuMixin:
             # Masquer la souris en jeu (plein écran), la montrer en pause/menus
             en_plein_ecran = self.parametres.get('video', {}).get('plein_ecran', False)
             if en_plein_ecran:
-                pygame.mouse.set_visible(self.etat_jeu_interne in ("PAUSE", "PARAMETRES_JEU"))
+                pygame.mouse.set_visible(self.etat_jeu_interne in ("PAUSE", "PARAMETRES_JEU", "LUMINOSITE_JEU"))
 
             pos_souris = pygame.mouse.get_pos()
             commandes_a_envoyer = {
@@ -542,6 +577,8 @@ class BoucleJeuMixin:
                 if self.etat_jeu == "_RETOUR_PAUSE":
                     self.etat_jeu = "EN_JEU"
                     self.etat_jeu_interne = "PAUSE"
+            elif self.etat_jeu_interne == "LUMINOSITE_JEU":
+                self.gerer_menu_luminosite(pos_souris)
 
             if self.etat_jeu != "EN_JEU" or not self.running:
                 break
@@ -575,6 +612,8 @@ class BoucleJeuMixin:
                 self.dessiner_menu_pause()
             elif self.etat_jeu_interne == "PARAMETRES_JEU":
                 self.dessiner_menu_parametres()
+            elif self.etat_jeu_interne == "LUMINOSITE_JEU":
+                self.dessiner_menu_luminosite()
 
             pygame.display.flip()
             self.horloge.tick(FPS)

@@ -21,7 +21,8 @@ def creer_parametres_defaut():
             "plein_ecran": False,
             "vsync": False,
             "musique": True,
-            "resolution": [1920, 1080]
+            "resolution": [1920, 1080],
+            "luminosite": 0.3
         },
         "controles": {
             "gauche": "q",
