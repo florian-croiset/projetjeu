@@ -371,3 +371,47 @@ class HudMixin:
         pygame.draw.rect(self.ecran, (220, 180, 180), (bar_x, bar_y, bar_w, bar_h), 1)
         nom = self.police_petit.render("Demon Slime", True, (220, 180, 180))
         self.ecran.blit(nom, (bar_x, bar_y - 18))
+
+
+    def _dessiner_badge_torche(self, surface, camera_offset):
+        """
+        Affiche un petit badge [L] au-dessus de la torche
+        pour indiquer la touche d'interaction, avant la première utilisation.
+        """
+        if not hasattr(self, '_font_badge_torche'):
+            self._font_badge_torche = pygame.font.Font(None, 18)
+
+        off_x, off_y = camera_offset
+        temps_ms = pygame.time.get_ticks()
+
+        # Position : centré au-dessus du sprite torche, avec flottement
+        flottement = math.sin(temps_ms / 400) * 3
+        bx = self.torche.x + TAILLE_TUILE // 2 - off_x
+        by = self.torche.y - 18 + int(flottement) - off_y
+
+        # Nom de la touche (depuis les paramètres, fallback "L")
+        nom_touche = self.parametres.get('controles', {}).get('torche', 'l').upper()
+
+        # Fond arrondi
+        label = self._font_badge_torche.render(nom_touche, True, (255, 255, 255))
+        pad_x, pad_y = 6, 3
+        w = label.get_width() + pad_x * 2
+        h = label.get_height() + pad_y * 2
+        badge = pygame.Surface((w, h), pygame.SRCALPHA)
+        badge.fill((0, 0, 0, 0))
+        pygame.draw.rect(badge, (30, 20, 60, 210),
+                        badge.get_rect(), border_radius=4)
+        pygame.draw.rect(badge, COULEUR_CYAN_SOMBRE,
+                        badge.get_rect(), width=1, border_radius=4)
+        badge.blit(label, (pad_x, pad_y))
+
+        surface.blit(badge, (bx - w // 2, by - h))
+
+        # Petite flèche pointant vers la torche
+        arrow_x = bx
+        arrow_y = by + 2
+        pygame.draw.polygon(surface, COULEUR_CYAN_SOMBRE, [
+            (arrow_x - 4, arrow_y),
+            (arrow_x + 4, arrow_y),
+            (arrow_x,     arrow_y + 5),
+        ])
