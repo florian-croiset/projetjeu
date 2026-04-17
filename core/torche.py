@@ -23,12 +23,14 @@ class Torche:
         self.rect = pygame.Rect(x, y, TAILLE_TUILE, TAILLE_TUILE * 2)
         self.allumee = False
         self.sprite = _charger_sprite_torche()
+        self.jamais_utilisee = True
 
         # Particules de flamme
         self.particules = []
 
     def toggle(self):
         self.allumee = not self.allumee
+        self.jamais_utilisee = False
         if self.allumee:
             self.particules = []
         return self.allumee

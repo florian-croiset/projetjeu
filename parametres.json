@@ -10,7 +10,8 @@
         "resolution": [
             1600,
             900
-        ]
+        ],
+        "luminosite": 0.3
     },
     "controles": {
         "gauche": "q",

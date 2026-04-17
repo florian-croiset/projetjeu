@@ -157,21 +157,20 @@ class BoucleJeuMixin:
                 if ms('echo_dir') and event.button == ms('echo_dir'):
                     commandes['echo_dir'] = True
                     music.jouer_sfx('echo_dir')
-                if event.key == pygame.K_l:
-                    if self.mon_id not in self.joueurs_locaux:
-                        continue
-                    joueur = self.joueurs_locaux[self.mon_id]
-                    vient_dallumer = self.torche.toggle()
-                    if vient_dallumer:
-                        music.torche_boucle_start()
-                    else:
-                        music.torche_boucle_stop()
-                    commandes['toggle_torche'] = True
-                    if vient_dallumer:
-                        dx = joueur.rect.centerx - self.torche.x
-                        dy = joueur.rect.centery - self.torche.y
-                        if (dx**2 + dy**2)**0.5 <= DISTANCE_TORCHE_ECHO:
-                            commandes['echo'] = True
+                if event.key == key('torche'):
+                    if self.mon_id in self.joueurs_locaux:
+                        joueur = self.joueurs_locaux[self.mon_id]
+                        vient_dallumer = self.torche.toggle()
+                        if vient_dallumer:
+                            music.torche_boucle_start()
+                        else:
+                            music.torche_boucle_stop()
+                        commandes['toggle_torche'] = True
+                        if vient_dallumer:
+                            dx = joueur.rect.centerx - self.torche.x
+                            dy = joueur.rect.centery - self.torche.y
+                            if (dx**2 + dy**2)**0.5 <= DISTANCE_TORCHE_ECHO:
+                                commandes['echo'] = True
 
         touches = pygame.key.get_pressed()
         if key('gauche') and touches[key('gauche')]:
@@ -341,6 +340,14 @@ class BoucleJeuMixin:
                                (tx - rayon_t - 1, ty - rayon_t - 1),
                                special_flags=pygame.BLEND_RGBA_MIN)
             surface_virtuelle.blit(obscurite, (0, 0))
+        
+        # --- Badge torche (après obscurité pour être visible)
+        if self.torche.jamais_utilisee and mon_joueur:
+            dx = mon_joueur.rect.centerx - self.torche.x
+            dy = mon_joueur.rect.centery - self.torche.y
+            if (dx**2 + dy**2)**0.5 <= DISTANCE_TORCHE_ECHO * 3:
+                self._dessiner_badge_torche(surface_virtuelle, camera_offset)
+        
 
         if mon_joueur and mon_joueur.pv <= 0:
             if self._mort_depuis is None:
