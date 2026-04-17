@@ -9,6 +9,7 @@ import time
 from parametres import *
 from utils import langue, music
 from ui.bouton import Bouton
+from ui.slider import Slider
 from ui.effets_visuels import dessiner_fond_echo, dessiner_titre_neon, dessiner_separateur_neon, dessiner_panneau
 from sauvegarde import gestion_parametres, gestion_sauvegarde
 from reseau.protocole import obtenir_ip_locale, obtenir_ip_vpn
@@ -103,6 +104,7 @@ class MenusMixin:
         self.btn_changer_resolution  = _p()
         self.btn_toggle_musique      = _p()
         self.btn_toggle_sfx          = _p()
+        self.btn_ouvrir_luminosite   = _p()
         self.btn_changer_gauche      = _p()
         self.btn_changer_droite      = _p()
         self.btn_changer_saut        = _p()
@@ -128,6 +130,7 @@ class MenusMixin:
             self.btn_changer_resolution,
             self.btn_toggle_musique,
             self.btn_toggle_sfx,
+            self.btn_ouvrir_luminosite,
             self.btn_changer_gauche, self.btn_changer_droite,
             self.btn_changer_saut, self.btn_changer_echo,
             self.btn_changer_attaque, self.btn_changer_dash,
@@ -139,6 +142,36 @@ class MenusMixin:
 
         self._ip_locale_cache = None
         self._ip_vpn_cache    = None
+
+    def creer_widgets_menu_luminosite(self):
+        cx = self.cx
+        lw = self._largeur_bouton()
+        bh = self._hauteur_bouton()
+
+        largeur_slider = max(320, int(self.largeur_ecran * 0.5))
+        hauteur_slider = max(14, self.hauteur_ecran // 60)
+        y_slider = int(self.hauteur_ecran * 0.78)
+        valeur_init = self.parametres.get('video', {}).get('luminosite', 0.3)
+        self.slider_luminosite = Slider(
+            cx - largeur_slider // 2, y_slider,
+            largeur_slider, hauteur_slider,
+            valeur=valeur_init, police=self.police_texte
+        )
+
+        y_bas = self.hauteur_ecran - max(70, self.hauteur_ecran // 14)
+        self.btn_appliquer_luminosite = Bouton(
+            cx - lw - 10, y_bas, lw, bh,
+            langue.get_texte("param_appliquer"),
+            self.police_bouton, style="confirm"
+        )
+        self.btn_retour_luminosite = Bouton(
+            cx + 10, y_bas, lw, bh,
+            langue.get_texte("param_retour"),
+            self.police_bouton, style="ghost"
+        )
+
+        self._fond_luminosite = None
+        self._apercu_luminosite_cache = None
 
     def creer_widgets_menu_confirmation(self):
         cx = self.cx
@@ -654,6 +687,9 @@ class MenusMixin:
                         nom_touche = pygame.key.name(event.key)
                         self.parametres_temp['controles'][self.touche_a_modifier] = nom_touche
                         self.touche_a_modifier = None
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    self.parametres_temp['controles'][self.touche_a_modifier] = f"mouse_{event.button}"
+                    self.touche_a_modifier = None
             else:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.parametres_temp = {}
@@ -692,6 +728,8 @@ class MenusMixin:
                     self.parametres_temp['video']['musique'] = not self.parametres_temp['video'].get('musique', True)
                 if self.btn_toggle_sfx.verifier_clic(event):
                     self.parametres_temp['sons']['activer_sfx'] = not self.parametres_temp['sons'].get('activer_sfx', True)
+                if self.btn_ouvrir_luminosite.verifier_clic(event):
+                    self._ouvrir_menu_luminosite()
                 if self.btn_changer_langue.verifier_clic(event):
                     langues = ['fr', 'en']
                     actuelle = self.parametres_temp['jouabilite']['langue']
@@ -748,12 +786,18 @@ class MenusMixin:
             self.ecran.blit(s, (col_gauche, y))
             y += esp_ligne
 
+        _noms_souris = {'mouse_1': 'Clic G', 'mouse_2': 'Clic M', 'mouse_3': 'Clic D',
+                        'mouse_4': 'Souris 4', 'mouse_5': 'Souris 5'}
+
+        def _fmt_touche(val):
+            return _noms_souris.get(val, val.upper() if val else '?')
+
         def ligne_controle(label, cle_json, btn):
             nonlocal y
             lbl = self.police_texte.render(label, True, COULEUR_TEXTE)
             self.ecran.blit(lbl, (col_gauche + 20, y + 6))
             btn.rect.y = y
-            txt = params['controles'][cle_json].upper()
+            txt = _fmt_touche(params['controles'][cle_json])
             if self.touche_a_modifier == cle_json:
                 txt = langue.get_texte("param_attente_touche")
                 btn.style = "confirm"
@@ -830,6 +874,15 @@ class MenusMixin:
             langue.get_texte("param_oui"),
             langue.get_texte("param_non"))
 
+        lbl_lum = self.police_texte.render(
+            langue.get_texte("param_luminosite"), True, COULEUR_TEXTE)
+        self.ecran.blit(lbl_lum, (col_gauche + 20, y + 6))
+        self.btn_ouvrir_luminosite.rect.y = y
+        valeur_lum = params['video'].get('luminosite', 0.3)
+        self.btn_ouvrir_luminosite.texte = f"{int(round(valeur_lum * 100))} %"
+        self.btn_ouvrir_luminosite.dessiner(self.ecran)
+        y += esp_ligne
+
         section(langue.get_texte("param_section_controles"))
         ligne_controle(langue.get_texte("param_gauche"),   'gauche',  self.btn_changer_gauche)
         ligne_controle(langue.get_texte("param_droite"),   'droite',  self.btn_changer_droite)
@@ -867,6 +920,114 @@ class MenusMixin:
 
         self.btn_appliquer_params.dessiner(self.ecran)
         self.btn_retour_params.dessiner(self.ecran)
+
+    # ==================================================================
+    #  GESTION + DESSIN — MENU LUMINOSITÉ
+    # ==================================================================
+
+    def _charger_apercu_luminosite(self):
+        import os
+        if self._apercu_luminosite_cache is not None:
+            return self._apercu_luminosite_cache
+        racine = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        chemin = os.path.join(racine, "assets", "apercu_luminosite.png")
+        try:
+            img = pygame.image.load(chemin).convert()
+            img = pygame.transform.smoothscale(
+                img, (self.largeur_ecran, self.hauteur_ecran))
+            self._apercu_luminosite_cache = img
+            return img
+        except Exception:
+            fond = pygame.Surface((self.largeur_ecran, self.hauteur_ecran))
+            dessiner_fond_echo(fond, self.largeur_ecran, self.hauteur_ecran,
+                               self.temps_anim)
+            self._apercu_luminosite_cache = fond
+            return fond
+
+    def _ouvrir_menu_luminosite(self):
+        valeur = self.parametres_temp['video'].get('luminosite', 0.3)
+        self.slider_luminosite.valeur = valeur
+        self._luminosite_valeur_initiale = valeur
+        if self.etat_jeu == "EN_JEU":
+            self._fond_luminosite = getattr(self, '_dernier_frame_jeu', None)
+            if self._fond_luminosite is None:
+                self._fond_luminosite = self._charger_apercu_luminosite()
+            self.etat_jeu_interne = "LUMINOSITE_JEU"
+        else:
+            self._fond_luminosite = self._charger_apercu_luminosite()
+            self.etat_jeu = "MENU_LUMINOSITE"
+
+    def _fermer_menu_luminosite(self, appliquer):
+        if appliquer and self.parametres_temp.get('video') is not None:
+            self.parametres_temp['video']['luminosite'] = self.slider_luminosite.valeur
+        if self.etat_jeu == "EN_JEU":
+            self.etat_jeu_interne = "PARAMETRES_JEU"
+        else:
+            self.etat_jeu = "MENU_PARAMETRES"
+
+    def gerer_menu_luminosite(self, pos_souris):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.etat_jeu = "QUITTER"
+                return
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self._fermer_menu_luminosite(appliquer=False)
+                return
+            self.slider_luminosite.gerer_event(event)
+            if self.btn_appliquer_luminosite.verifier_clic(event):
+                self._fermer_menu_luminosite(appliquer=True)
+                return
+            if self.btn_retour_luminosite.verifier_clic(event):
+                self._fermer_menu_luminosite(appliquer=False)
+                return
+        self.slider_luminosite.verifier_survol(pos_souris)
+        self.btn_appliquer_luminosite.verifier_survol(pos_souris)
+        self.btn_retour_luminosite.verifier_survol(pos_souris)
+
+    def dessiner_menu_luminosite(self):
+        # --- Fond (screenshot ou frame capturée) ---
+        fond = self._fond_luminosite
+        if fond is None:
+            fond = self._charger_apercu_luminosite()
+        if fond.get_size() != (self.largeur_ecran, self.hauteur_ecran):
+            fond = pygame.transform.smoothscale(
+                fond, (self.largeur_ecran, self.hauteur_ecran))
+        self.ecran.blit(fond, (0, 0))
+
+        # --- Calque d'obscurité (prévisualisation live) ---
+        overlay = pygame.Surface(
+            (self.largeur_ecran, self.hauteur_ecran), pygame.SRCALPHA)
+        alpha = int(220 * (1.0 - self.slider_luminosite.valeur * 0.8))
+        overlay.fill((0, 0, 10, alpha))
+        self.ecran.blit(overlay, (0, 0))
+
+        # --- Bandeau semi-transparent pour lisibilité du slider ---
+        h_bandeau = int(self.hauteur_ecran * 0.30)
+        bandeau = pygame.Surface(
+            (self.largeur_ecran, h_bandeau), pygame.SRCALPHA)
+        bandeau.fill((4, 4, 15, 200))
+        self.ecran.blit(bandeau, (0, self.hauteur_ecran - h_bandeau))
+
+        # --- Titre ---
+        dessiner_titre_neon(self.ecran, self.police_bouton,
+                            langue.get_texte("param_luminosite_titre"),
+                            self.cx,
+                            self.hauteur_ecran - h_bandeau + 30)
+
+        # --- Texte d'aide ---
+        aide = self.police_petit.render(
+            langue.get_texte("param_luminosite_aide"),
+            True, COULEUR_TEXTE_SOMBRE)
+        rect_aide = aide.get_rect(
+            midtop=(self.cx, self.slider_luminosite.rect.y - 44))
+        self.ecran.blit(aide, rect_aide)
+
+        # --- Slider ---
+        self.slider_luminosite.dessiner(self.ecran)
+
+        # --- Boutons Appliquer / Retour ---
+        self.btn_appliquer_luminosite.dessiner(self.ecran)
+        self.btn_retour_luminosite.dessiner(self.ecran)
 
     # ==================================================================
     #  GESTION + DESSIN — MENU PAUSE

@@ -123,6 +123,7 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
         self.creer_widgets_menu_principal()
         self.creer_widgets_menu_rejoindre()
         self.creer_widgets_menu_parametres()
+        self.creer_widgets_menu_luminosite()
         self.creer_widgets_menu_pause()
         self.creer_widgets_menu_slots()
         self.creer_widgets_menu_confirmation()
@@ -138,11 +139,18 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
     def _recalculer_codes_touches(self):
         ctrl = self.parametres.get('controles', {})
         self._codes_touches = {}
+        self._codes_souris  = {}
         for nom, val in ctrl.items():
-            try:
-                self._codes_touches[nom] = pygame.key.key_code(val)
-            except Exception:
-                self._codes_touches[nom] = None
+            if isinstance(val, str) and val.startswith("mouse_"):
+                try:
+                    self._codes_souris[nom] = int(val.split("_")[1])
+                except (ValueError, IndexError):
+                    pass
+            else:
+                try:
+                    self._codes_touches[nom] = pygame.key.key_code(val)
+                except Exception:
+                    self._codes_touches[nom] = None
 
     # ------------------------------------------------------------------
     #  PROPRIÉTÉS DE MISE EN PAGE
@@ -181,6 +189,9 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
         self.btn_retour_rejoindre.texte = langue.get_texte("rejoindre_retour")
         self.btn_appliquer_params.texte = langue.get_texte("param_appliquer")
         self.btn_retour_params.texte   = langue.get_texte("param_retour")
+        if hasattr(self, 'btn_appliquer_luminosite'):
+            self.btn_appliquer_luminosite.texte = langue.get_texte("param_appliquer")
+            self.btn_retour_luminosite.texte    = langue.get_texte("param_retour")
         self.btn_pause_reprendre.texte = langue.get_texte("pause_reprendre")
         self.btn_pause_parametres.texte = langue.get_texte("pause_parametres")
         self.btn_popup_oui.texte       = langue.get_texte("popup_oui")
@@ -196,20 +207,33 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
 
     def appliquer_parametres_video(self, premiere_fois=False):
         if self.parametres['video']['plein_ecran']:
-            self.largeur_ecran = self.resolution_native[0]
-            self.hauteur_ecran = self.resolution_native[1]
+            new_w, new_h = self.resolution_native
             flags = pygame.SCALED | pygame.FULLSCREEN
         else:
             res = self.parametres['video'].get('resolution', [LARGEUR_ECRAN, HAUTEUR_ECRAN])
-            self.largeur_ecran = res[0]
-            self.hauteur_ecran = res[1]
+            new_w, new_h = res[0], res[1]
             flags = pygame.SCALED
 
-        self.zoom_effectif = ZOOM_CAMERA * (self.largeur_ecran / LARGEUR_ECRAN)
-        self.ecran = pygame.display.set_mode(
-            (self.largeur_ecran, self.hauteur_ecran), flags)
+        self.zoom_effectif = ZOOM_CAMERA * (new_w / LARGEUR_ECRAN)
 
+        needs_mode_change = premiere_fois
         if not premiere_fois:
+            surf = pygame.display.get_surface()
+            if surf:
+                cur_flags = surf.get_flags()
+                cur_size  = surf.get_size()
+                needs_mode_change = (
+                    (cur_size != (new_w, new_h)) or
+                    (bool(cur_flags & pygame.FULLSCREEN) != bool(flags & pygame.FULLSCREEN))
+                )
+
+        if needs_mode_change:
+            self.ecran = pygame.display.set_mode((new_w, new_h), flags)
+
+        self.largeur_ecran = new_w
+        self.hauteur_ecran = new_h
+
+        if not premiere_fois and needs_mode_change:
             h = self.hauteur_ecran
             self.police_titre  = pygame.font.Font(None, max(96, h // 7))
             self.police_bouton = pygame.font.Font(None, max(30, h // 28))
@@ -218,6 +242,7 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
             self.creer_widgets_menu_principal()
             self.creer_widgets_menu_rejoindre()
             self.creer_widgets_menu_parametres()
+            self.creer_widgets_menu_luminosite()
             self.creer_widgets_menu_pause()
             self.creer_widgets_menu_slots()
             self.creer_widgets_menu_confirmation()
