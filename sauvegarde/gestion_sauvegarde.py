@@ -4,18 +4,34 @@
 
 import json
 import os
+import sys
 from parametres import NB_SLOTS_SAUVEGARDE
 from sauvegarde import points_sauvegarde
 from core.carte import Carte
 
-# Racine du projet (un niveau au-dessus de sauvegarde/)
-_RACINE_PROJET = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def get_dossier_sauvegarde():
+    """Retourne le dossier persistant pour les sauvegardes (créé si absent)."""
+    if getattr(sys, 'frozen', False):
+        # Mode exécutable PyInstaller : dossier utilisateur persistant
+        if sys.platform == 'win32':
+            base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+        elif sys.platform == 'darwin':
+            base = os.path.expanduser('~/Library/Application Support')
+        else:  # Linux / autres
+            base = os.environ.get('XDG_DATA_HOME', os.path.expanduser('~/.local/share'))
+        dossier = os.path.join(base, 'Echo')
+    else:
+        # Mode développement : dossier racine du projet
+        dossier = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    os.makedirs(dossier, exist_ok=True)
+    return dossier
+
 
 def get_chemin_absolu_slot(id_slot):
     """Renvoie le chemin complet vers le fichier de sauvegarde."""
     nom_fichier = f"slot_{id_slot + 1}.json"
-    chemin_complet = os.path.join(_RACINE_PROJET, nom_fichier)
-    return chemin_complet
+    return os.path.join(get_dossier_sauvegarde(), nom_fichier)
 
 def creer_sauvegarde_vierge():
     """Crée un dictionnaire de données pour une nouvelle partie."""
@@ -29,6 +45,7 @@ def creer_sauvegarde_vierge():
         "id_dernier_checkpoint": id_depart,
         "vis_map": vis_map_vierge,
         "items": [],
+        "argent": 0,
         "ameliorations": {
             "double_saut": False,
             "dash": False,

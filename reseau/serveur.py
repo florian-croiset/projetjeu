@@ -297,7 +297,8 @@ class Serveur:
                                     row[:] for row in self.cartes_visibilite[id_joueur]]
                                 self.donnees_partie["argent"] = joueur_ckpt.argent
                                 self.donnees_partie["ameliorations"]["double_saut"] = joueur_ckpt.peut_double_saut
-                                self.donnees_partie["ameliorations"]["dash"] = joueur_ckpt.peut_dash
+                                self.donnees_partie["ameliorations"]["dash"]        = joueur_ckpt.peut_dash
+                                self.donnees_partie["ameliorations"]["echo_dir"]    = joueur_ckpt.peut_echo_dir
                                 gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
                                 print(f"[SERVEUR] Checkpoint torche sauvegardé : {id_ckpt}, argent={joueur_ckpt.argent}")
 
@@ -586,6 +587,7 @@ class Serveur:
                                     self.donnees_partie["argent"] = joueur.argent
                                     self.donnees_partie["ameliorations"]["double_saut"] = joueur.peut_double_saut
                                     self.donnees_partie["ameliorations"]["dash"]        = joueur.peut_dash
+                                    self.donnees_partie["ameliorations"]["echo_dir"]    = joueur.peut_echo_dir
                                     gestion_sauvegarde.sauvegarder_partie(
                                         self.id_slot, self.donnees_partie)
 

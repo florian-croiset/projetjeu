@@ -748,6 +748,14 @@ class BoucleJeuMixin:
                 self.client_socket.close()
             except Exception:
                 pass
+        # Arrêter le serveur embarqué si présent
+        srv = getattr(self, '_serveur_instance', None)
+        if srv:
+            try:
+                srv.running = False
+                srv.serveur_socket.close()
+            except Exception:
+                pass
         # Arrêter le relay embarqué si présent
         relay = getattr(self, '_relay_instance', None)
         if relay:
