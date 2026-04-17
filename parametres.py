@@ -166,7 +166,7 @@ def get_resolutions_compatibles(resolution_native):
 
 # -- Torche --
 COULEUR_TORCHE = (255, 140, 30)
-RAYON_LUMIERE_TORCHE = 120
+RAYON_LUMIERE_TORCHE = 220
 DISTANCE_TORCHE_ECHO = 30
 
 # -- Visibilité ennemis --

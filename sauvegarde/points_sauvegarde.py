@@ -24,7 +24,7 @@ def get_coords_par_id(id_point):
     try:
         x_tuile, y_tuile = map(int, id_point.split('_'))
         # On spawn centré sur le checkpoint
-        x_pixel = x_tuile * TAILLE_TUILE + (TAILLE_TUILE // 4)
+        x_pixel = x_tuile * TAILLE_TUILE
         y_pixel = y_tuile * TAILLE_TUILE
         return (x_pixel, y_pixel)
     except Exception as e:

@@ -164,8 +164,8 @@ class HudMixin:
             pygame.draw.circle(surf_c, (55, 38, 85, 200), (scx, scy), rayon, width=1)
 
         # Flash d'activation (dans les 200ms suivant l'utilisation)
-        if elapsed < 200:
-            flash_alpha = int(180 * (1.0 - elapsed / 200))
+        if 0 <= elapsed < 200:
+            flash_alpha = min(255, int(180 * (1.0 - elapsed / 200)))
             pygame.draw.circle(surf_c, (255, 255, 255, flash_alpha), (scx, scy), rayon - 4)
 
         # Icône centrale "E" (touche d'activation)
