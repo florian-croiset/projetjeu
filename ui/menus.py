@@ -1,6 +1,7 @@
 # ui/menus.py
 # Mixin pour la gestion de tous les menus du jeu.
 # Hérité par la classe Client — toutes les méthodes accèdent à self.
+# MISE À JOUR : Ajout de la touche "interagir" dans les contrôles.
 
 import pygame
 import copy
@@ -54,20 +55,16 @@ class MenusMixin:
         bh = self._hauteur_bouton()
         cy = self.cy
 
-        # Mode de connexion : "ip" ou "code"
         self.mode_rejoindre = "ip"
 
-        # --- Champ IP ---
         self.input_box_ip   = pygame.Rect(cx - lw // 2, cy - 30, lw, 46)
         self.input_ip_texte = ""
         self.input_ip_actif = False
 
-        # --- Champ Code Room ---
         self.input_box_code   = pygame.Rect(cx - lw // 2, cy - 30, lw, 46)
         self.input_code_texte = ""
         self.input_code_actif = False
 
-        # --- Bouton toggle mode (toujours disponible) ---
         self.btn_mode_connexion = Bouton(
             cx - lw // 2, cy - 30 - bh - 16, lw, bh,
             langue.get_texte("rejoindre_mode_ip"),
@@ -112,6 +109,7 @@ class MenusMixin:
         self.btn_changer_attaque     = _p()
         self.btn_changer_dash        = _p()
         self.btn_changer_echo_dir    = _p()
+        self.btn_changer_interagir   = _p()   # NOUVEAU
 
         lw = self._largeur_bouton()
         bh = self._hauteur_bouton()
@@ -134,6 +132,7 @@ class MenusMixin:
             self.btn_changer_gauche, self.btn_changer_droite,
             self.btn_changer_saut, self.btn_changer_echo,
             self.btn_changer_attaque, self.btn_changer_dash,
+            self.btn_changer_interagir,   # NOUVEAU
             self.btn_copier_ip_locale, self.btn_copier_ip_hamachi,
         ]
         self.boutons_menu_params_fixes = [
@@ -311,32 +310,21 @@ class MenusMixin:
     # ==================================================================
 
     def _tenter_connexion_rejoindre(self):
-        """Lance la connexion selon le mode actuel (IP ou Code Room)."""
         if self.mode_rejoindre == "code":
             code = self.input_code_texte.strip().upper()
             relay_ip = self.input_ip_texte.strip() if self.input_ip_texte.strip() else obtenir_ip_locale()
             print(f"[MENU] Tentative connexion Code Room: relay_ip='{relay_ip}', code='{code}'")
             if len(code) < 4:
-                print(f"[MENU] Code trop court ({len(code)} chars), rejeté")
                 self.message_erreur_connexion = langue.get_texte("rejoindre_code_invalide")
                 return
-            # Utiliser l'IP saisie comme adresse du relay
             if self.connecter_relay(code, relay_host=relay_ip, relay_port=RELAY_PORT):
-                print(f"[MENU] Connexion relay réussie !")
                 self.etat_jeu = "EN_JEU"
-            else:
-                print(f"[MENU] Connexion relay échouée")
         else:
             hote = self.input_ip_texte if self.input_ip_texte else obtenir_ip_locale()
-            print(f"[MENU] Tentative connexion IP directe: hote='{hote}'")
             if self.connecter(hote):
-                print(f"[MENU] Connexion directe réussie !")
                 self.etat_jeu = "EN_JEU"
-            else:
-                print(f"[MENU] Connexion directe échouée")
 
     def _coller_presse_papier(self):
-        """Récupère le texte du presse-papier (multi-plateforme)."""
         try:
             texte = pygame.scrap.get(pygame.SCRAP_TEXT)
             if texte:
@@ -375,7 +363,6 @@ class MenusMixin:
             if self.btn_retour_rejoindre.verifier_clic(event):
                 self.etat_jeu = "MENU_PRINCIPAL"
 
-            # Toggle mode IP / Code Room (toujours disponible)
             if self.btn_mode_connexion.verifier_clic(event):
                 if self.mode_rejoindre == "ip":
                     self.mode_rejoindre = "code"
@@ -392,7 +379,6 @@ class MenusMixin:
                     self.input_ip_actif = self.input_box_ip.collidepoint(event.pos)
                     self.input_code_actif = False
                 else:
-                    # En mode code, les deux champs sont cliquables
                     clicked_ip = self.input_box_ip.collidepoint(event.pos)
                     clicked_code = self.input_box_code.collidepoint(event.pos)
                     if clicked_ip:
@@ -414,9 +400,7 @@ class MenusMixin:
                         self.input_ip_texte = texte_colle
                         self.input_ip_actif = True
 
-            # Saisie clavier
             if event.type == pygame.KEYDOWN:
-                # Tab pour basculer entre les champs en mode code
                 if self.mode_rejoindre == "code" and event.key == pygame.K_TAB:
                     if self.input_ip_actif:
                         self.input_ip_actif = False
@@ -427,7 +411,6 @@ class MenusMixin:
                 elif self.input_ip_actif:
                     if event.key == pygame.K_RETURN:
                         if self.mode_rejoindre == "code":
-                            # Passer au champ code
                             self.input_ip_actif = False
                             self.input_code_actif = True
                         else:
@@ -452,7 +435,6 @@ class MenusMixin:
                             self.cx, self.hauteur_ecran // 7)
 
         pan_w = self._largeur_bouton() + 80
-        # Plus grand en mode code (2 champs)
         pan_h = 340 if self.mode_rejoindre == "code" else 280
         pan_rect = pygame.Rect(self.cx - pan_w // 2,
                             self.cy - pan_h // 2 - 20,
@@ -461,15 +443,11 @@ class MenusMixin:
 
         y_contenu = pan_rect.y + 36
 
-        # Bouton toggle mode (toujours visible)
         self.btn_mode_connexion.rect.center = (self.cx, y_contenu)
         self.btn_mode_connexion.dessiner(self.ecran)
         y_contenu += 46
 
         if self.mode_rejoindre == "code":
-            # --- Mode Code Room : 2 champs (IP + Code) ---
-
-            # Champ IP de l'hôte
             label_ip = self.police_texte.render(
                 langue.get_texte("rejoindre_label_ip_relay"), True, COULEUR_TEXTE)
             self.ecran.blit(label_ip, label_ip.get_rect(center=(self.cx, y_contenu)))
@@ -490,7 +468,6 @@ class MenusMixin:
                                             self.police_texte.get_height() - 6))
             y_contenu += 54
 
-            # Champ Code Room
             label_code = self.police_texte.render(
                 langue.get_texte("rejoindre_label_code"), True, COULEUR_TEXTE)
             self.ecran.blit(label_code, label_code.get_rect(center=(self.cx, y_contenu)))
@@ -512,7 +489,6 @@ class MenusMixin:
                                             self.police_texte.get_height() - 6))
 
         else:
-            # --- Mode IP directe : 1 champ ---
             label_texte = langue.get_texte("rejoindre_label_ip")
             label = self.police_texte.render(label_texte, True, COULEUR_TEXTE)
             self.ecran.blit(label, label.get_rect(center=(self.cx, y_contenu)))
@@ -532,12 +508,10 @@ class MenusMixin:
                                 pygame.Rect(cx_cur, cy_cur, 2,
                                             self.police_texte.get_height() - 6))
 
-        # Bouton coller (positionné à côté du dernier champ visible)
         last_input_y = self.input_box_code.y if self.mode_rejoindre == "code" else self.input_box_ip.y
         self.btn_coller_ip.rect.y = last_input_y
         self.btn_coller_ip.dessiner(self.ecran)
 
-        # Boutons action
         y_btns = last_input_y + 60
         self.btn_connecter.rect.y = y_btns
         self.btn_retour_rejoindre.rect.y = y_btns + self._hauteur_bouton() + 12
@@ -753,6 +727,8 @@ class MenusMixin:
                     self.touche_a_modifier = 'dash'
                 if self.btn_changer_echo_dir.verifier_clic(event):
                     self.touche_a_modifier = 'echo_dir'
+                if self.btn_changer_interagir.verifier_clic(event):   # NOUVEAU
+                    self.touche_a_modifier = 'interagir'
                 if self.btn_copier_ip_locale.verifier_clic(event):
                     ip = obtenir_ip_locale()
                     self.copier_dans_presse_papier(ip)
@@ -843,7 +819,6 @@ class MenusMixin:
                     langue.get_texte("param_oui"),
                     langue.get_texte("param_non"))
 
-        # --- Résolution (grisé si plein écran) ---
         est_plein_ecran = params['video']['plein_ecran']
         if est_plein_ecran:
             res_txt = f"{self.resolution_native[0]}x{self.resolution_native[1]}"
@@ -884,13 +859,14 @@ class MenusMixin:
         y += esp_ligne
 
         section(langue.get_texte("param_section_controles"))
-        ligne_controle(langue.get_texte("param_gauche"),   'gauche',  self.btn_changer_gauche)
-        ligne_controle(langue.get_texte("param_droite"),   'droite',  self.btn_changer_droite)
-        ligne_controle(langue.get_texte("param_saut"),     'saut',    self.btn_changer_saut)
-        ligne_controle(langue.get_texte("param_echo"),     'echo',    self.btn_changer_echo)
-        ligne_controle(langue.get_texte("param_attaque"),  'attaque', self.btn_changer_attaque)
-        ligne_controle(langue.get_texte("param_dash"), 'dash', self.btn_changer_dash)
-        ligne_controle(langue.get_texte("param_echo_dir"), 'echo_dir', self.btn_changer_echo_dir)
+        ligne_controle(langue.get_texte("param_gauche"),   'gauche',    self.btn_changer_gauche)
+        ligne_controle(langue.get_texte("param_droite"),   'droite',    self.btn_changer_droite)
+        ligne_controle(langue.get_texte("param_saut"),     'saut',      self.btn_changer_saut)
+        ligne_controle(langue.get_texte("param_echo"),     'echo',      self.btn_changer_echo)
+        ligne_controle(langue.get_texte("param_attaque"),  'attaque',   self.btn_changer_attaque)
+        ligne_controle(langue.get_texte("param_dash"),     'dash',      self.btn_changer_dash)
+        ligne_controle(langue.get_texte("param_echo_dir"), 'echo_dir',  self.btn_changer_echo_dir)
+        ligne_controle("Interagir (Pancarte)",  'interagir', self.btn_changer_interagir)   # NOUVEAU
 
         section(langue.get_texte("param_section_reseau"))
         ligne_ip("IP Locale (LAN) :",
@@ -900,7 +876,6 @@ class MenusMixin:
                 f"{self._ip_vpn_cache or '...'}   (copier)",
                 self.btn_copier_ip_hamachi)
 
-        # Code room — affiché sous l'IP VPN
         code_val = getattr(self, 'code_room', None)
         if code_val:
             code_txt = code_val
@@ -985,7 +960,6 @@ class MenusMixin:
         self.btn_retour_luminosite.verifier_survol(pos_souris)
 
     def dessiner_menu_luminosite(self):
-        # --- Fond (screenshot ou frame capturée) ---
         fond = self._fond_luminosite
         if fond is None:
             fond = self._charger_apercu_luminosite()
@@ -994,27 +968,23 @@ class MenusMixin:
                 fond, (self.largeur_ecran, self.hauteur_ecran))
         self.ecran.blit(fond, (0, 0))
 
-        # --- Calque d'obscurité (prévisualisation live) ---
         overlay = pygame.Surface(
             (self.largeur_ecran, self.hauteur_ecran), pygame.SRCALPHA)
         alpha = int(220 * (1.0 - self.slider_luminosite.valeur * 0.8))
         overlay.fill((0, 0, 10, alpha))
         self.ecran.blit(overlay, (0, 0))
 
-        # --- Bandeau semi-transparent pour lisibilité du slider ---
         h_bandeau = int(self.hauteur_ecran * 0.30)
         bandeau = pygame.Surface(
             (self.largeur_ecran, h_bandeau), pygame.SRCALPHA)
         bandeau.fill((4, 4, 15, 200))
         self.ecran.blit(bandeau, (0, self.hauteur_ecran - h_bandeau))
 
-        # --- Titre ---
         dessiner_titre_neon(self.ecran, self.police_bouton,
                             langue.get_texte("param_luminosite_titre"),
                             self.cx,
                             self.hauteur_ecran - h_bandeau + 30)
 
-        # --- Texte d'aide ---
         aide = self.police_petit.render(
             langue.get_texte("param_luminosite_aide"),
             True, COULEUR_TEXTE_SOMBRE)
@@ -1022,10 +992,7 @@ class MenusMixin:
             midtop=(self.cx, self.slider_luminosite.rect.y - 44))
         self.ecran.blit(aide, rect_aide)
 
-        # --- Slider ---
         self.slider_luminosite.dessiner(self.ecran)
-
-        # --- Boutons Appliquer / Retour ---
         self.btn_appliquer_luminosite.dessiner(self.ecran)
         self.btn_retour_luminosite.dessiner(self.ecran)
 
@@ -1039,7 +1006,6 @@ class MenusMixin:
                             langue.get_texte("pause_titre"),
                             self.cx,
                             self.cy - int(self.hauteur_ecran * 0.22))
-        est_hote = (self.mon_id == 0)
         for btn in self.boutons_menu_pause:
             btn.dessiner(self.ecran)
 

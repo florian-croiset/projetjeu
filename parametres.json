@@ -20,7 +20,8 @@
         "echo": "e",
         "attaque": "k",
         "dash": "c",
-        "echo_dir": "y"
+        "echo_dir": "y",
+        "interagir": "f"
     },
     "sons": {
         "volume_sfx": 0.8,

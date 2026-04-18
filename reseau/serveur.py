@@ -1,6 +1,6 @@
 # reseau/serveur.py
 # Gestion centrale : Physique, IA, Combat, Sauvegarde.
-# MISE À JOUR : Porte interactive, Orbes de capacités, ennemis typés.
+# MISE À JOUR : Porte interactive, Orbes de capacités, ennemis typés, Pancartes Lore.
 
 import socket
 import threading
@@ -22,6 +22,7 @@ from core.ame_loot import AmeLoot
 from core.cle import Cle
 from core.porte import Porte
 from core.orbe_capacite import OrbeCapacite
+from core.pancarte_lore import PancarteLore   # NOUVEAU
 from reseau.protocole import obtenir_ip_locale, obtenir_ip_vpn, recvall, recv_complet, send_complet
 
 
@@ -55,11 +56,12 @@ class Serveur:
         self.ames_perdues        = {}
         self.ames_libres         = {}
         self.ames_loot           = {}
-        self.orbes_capacite      = {}   # NOUVEAU
-        self.vis_delta_buffer    = {}   # {id_joueur: set((x,y),...)}
-        self.vis_needs_full      = {}   # {id_joueur: bool} — forcer vis_full au 1er tick
+        self.orbes_capacite      = {}
+        self.pancartes_lore      = {}   # NOUVEAU
+        self.vis_delta_buffer    = {}
+        self.vis_needs_full      = {}
         self.cle                 = None
-        self.porte               = None  # NOUVEAU
+        self.porte               = None
         self.echos_en_cours      = []
 
         # ===== CARTE =====
@@ -99,8 +101,9 @@ class Serveur:
         # ===== INIT FINALE =====
         self.creer_ennemis()
         self.creer_ames_libres()
-        self.creer_orbes_capacite()   # NOUVEAU
-        self.creer_porte()             # NOUVEAU
+        self.creer_orbes_capacite()
+        self.creer_porte()
+        self.creer_pancartes_lore()   # NOUVEAU
 
         self.boss_room = BossRoom(
             room_rect       = pygame.Rect(72*32, 13*32, (93-72)*32, (20-13)*32),
@@ -111,7 +114,6 @@ class Serveur:
             rects_collision = self.rects_collision,
         )
 
-        # self.cle              = Cle(x=1011, y=1027)  # Deplace vers boucle_jeu_serveur apres mort boss
         self._ids_pool        = list(range(3))
         self.torche_allumee   = False
         self.torche_x         = 32
@@ -119,7 +121,7 @@ class Serveur:
         self.running          = True
         self._etat_broadcast  = None
         self._broadcast_lock  = threading.Lock()
-        self.code_room        = None       # Room code relay (si activé)
+        self.code_room        = None
         self.relay_host       = relay_host
         self.relay_port       = relay_port
 
@@ -139,18 +141,10 @@ class Serveur:
         return points
 
     def creer_ennemis(self):
-        """
-        Place des ennemis avec des types variés (PV 1-3) cohérents
-        avec leur position/importance dans la map.
-        """
-        # Tuples : (x, y, id, type_ennemi)
         configs = [
-            # Zone de spawn — patrouilleurs légers (1 PV)
             (587,  1251, 0, 'patrouilleur'),
-            # Zone médiane — gardes standard (2 PV)
             (1867, 1123, 1, 'garde'),
             (1191,  707, 2, 'garde'),
-            # Zone avancée — gardiens lourds (3 PV), proches du boss
             (2427,  163, 3, 'gardien'),
             (2851,  259, 4, 'gardien'),
         ]
@@ -158,7 +152,6 @@ class Serveur:
             self.ennemis[eid] = Ennemi(x=x, y=y, id=eid, type_ennemi=type_e)
 
     def creer_ames_libres(self):
-        """Place des âmes libres à divers endroits de la map."""
         positions = [
             (680,  515), (747, 1123), (1021, 1251),
             (1333,  995), (1510, 515), (2427, 163), (2851,  259),
@@ -168,14 +161,9 @@ class Serveur:
             self.ames_libres[ame.id] = ame
 
     def creer_orbes_capacite(self):
-        """
-        Place des orbes de déblocage de capacités.
-        - Double saut : zone accessible tôt, encourage l'exploration verticale.
-        - Dash : zone intermédiaire, récompense la progression.
-        """
         configs = [
-            (419,  1190, 'double_saut'),   # Zone basse-gauche, accessible sans dash
-            (2920, 1126, 'dash'),           # Zone plus haute, nécessite le double saut
+            (419,  1190, 'double_saut'),
+            (2920, 1126, 'dash'),
         ]
         for x, y, capacite in configs:
             orbe = OrbeCapacite(x, y, capacite)
@@ -183,13 +171,22 @@ class Serveur:
         print(f"[SERVEUR] {len(self.orbes_capacite)} orbes de capacité créés")
 
     def creer_porte(self):
-        """
-        Place la porte principale qui nécessite la clé.
-        Positionnée comme point de progression logique (après la clé).
-        """
-        # Porte placée dans un couloir clé de la map
         self.porte = Porte(x=995, y=960)
         print(f"[SERVEUR] Porte créée à ({self.porte.x}, {self.porte.y})")
+
+    def creer_pancartes_lore(self):
+        """
+        Place les pancartes de lore sur la map.
+        Modifie les coordonnées (x, y) selon ta map avec l'outil core/map.py.
+        """
+        configs = [
+            (800,  1200),   # Pancarte 0 — ajuste ces coordonnées pixel
+            (1500,  500),   # Pancarte 1 — ajuste ces coordonnées pixel
+        ]
+        for i, (x, y) in enumerate(configs):
+            p = PancarteLore(x, y)
+            self.pancartes_lore[i] = p
+        print(f"[SERVEUR] {len(self.pancartes_lore)} pancarte(s) lore créées")
 
     # ------------------------------------------------------------------
     #  GESTION CLIENT
@@ -226,7 +223,7 @@ class Serveur:
             self.cartes_visibilite[id_joueur] = self.carte_jeu.creer_carte_visibilite_vierge()
         self.vis_map_dirty[id_joueur] = True
         self.vis_delta_buffer[id_joueur] = set()
-        self.vis_needs_full[id_joueur] = True  # Forcer vis_full au premier tick
+        self.vis_needs_full[id_joueur] = True
 
         print(f"[SERVEUR] Envoi handshake (ID={id_joueur}) au client {connexion_client.getpeername()}...")
         send_complet(connexion_client, id_joueur)
@@ -234,11 +231,9 @@ class Serveur:
         connexion_client.settimeout(10.0)
         connexion_client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
-        # Drapeau partagé pour arrêter les sous-threads quand l'un tombe
         client_actif = [True]
 
         def thread_recv():
-            """Reçoit les commandes du client en continu."""
             try:
                 while self.running and client_actif[0]:
                     try:
@@ -286,7 +281,6 @@ class Serveur:
                         if commandes.get('toggle_torche'):
                             nouvelle_valeur = not self.torche_allumee
                             self.torche_allumee = nouvelle_valeur
-                            # Checkpoint à l'allumage (hôte uniquement)
                             if nouvelle_valeur and id_joueur == 0 and id_joueur in self.joueurs:
                                 joueur_ckpt = self.joueurs[id_joueur]
                                 x_tuile = joueur_ckpt.rect.x // TAILLE_TUILE
@@ -300,7 +294,22 @@ class Serveur:
                                 self.donnees_partie["ameliorations"]["dash"]        = joueur_ckpt.peut_dash
                                 self.donnees_partie["ameliorations"]["echo_dir"]    = joueur_ckpt.peut_echo_dir
                                 gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
-                                print(f"[SERVEUR] Checkpoint torche sauvegardé : {id_ckpt}, argent={joueur_ckpt.argent}")
+
+                        # NOUVEAU — Interaction pancarte lore
+                        if commandes.get('interagir'):
+                            joueur = self.joueurs[id_joueur]
+                            for pancarte in self.pancartes_lore.values():
+                                dx = joueur.rect.centerx - pancarte.rect.centerx
+                                dy = joueur.rect.centery - pancarte.rect.centery
+                                dist = (dx**2 + dy**2) ** 0.5
+                                if dist <= PancarteLore.PORTEE_INTERACTION:
+                                    if not pancarte.est_debloquee:
+                                        resultat = pancarte.tenter_paiement(joueur)
+                                        if resultat == 'debloquee':
+                                            print(f"[SERVEUR] Joueur {id_joueur} débloque une pancarte lore")
+                                        elif resultat == 'pauvre':
+                                            print(f"[SERVEUR] Joueur {id_joueur} pas assez d'âmes pour la pancarte")
+                                    break
 
             except (socket.timeout, socket.error, ValueError):
                 pass
@@ -308,7 +317,6 @@ class Serveur:
                 client_actif[0] = False
 
         def thread_send():
-            """Envoie l'état au client à TICK_RATE_RESEAU Hz."""
             intervalle = 1.0 / TICK_RATE_RESEAU
             try:
                 while self.running and client_actif[0]:
@@ -355,7 +363,6 @@ class Serveur:
         t_recv.start()
         t_send.start()
 
-        # Attendre que l'un des deux threads se termine (= déconnexion)
         t_recv.join()
         t_send.join()
 
@@ -463,11 +470,15 @@ class Serveur:
                             continue
                         if joueur.rect.colliderect(orbe.rect):
                             if orbe.tenter_collecte(joueur):
-                                # Sauvegarder l'amélioration immédiatement
                                 if id_joueur == 0:
                                     self.donnees_partie['ameliorations'][orbe.capacite] = True
                                     gestion_sauvegarde.sauvegarder_partie(
                                         self.id_slot, self.donnees_partie)
+
+                # 2b. NOUVEAU — Pancartes lore : animation uniquement
+                # (l'interaction est gérée dans thread_recv via commande 'interagir')
+                for pancarte in self.pancartes_lore.values():
+                    pancarte.mettre_a_jour(temps_actuel)
 
                 # 3. Clé : animation + collecte
                 if self.cle and not self.cle.est_ramassee:
@@ -488,8 +499,6 @@ class Serveur:
                                                 self.porte.LARGEUR + 16, self.porte.HAUTEUR)):
                                 self.porte.tenter_ouverture(joueur)
 
-                # 5. (Collision porte intégrée dans la section 8)
-
                 # 6. Ennemis — physique + respawn
                 for id_ennemi, ennemi in list(self.ennemis.items()):
                     if ennemi.est_mort:
@@ -507,7 +516,6 @@ class Serveur:
                         self.joueurs)
                     
                     if self.boss_room.boss_defeated:
-                        # Le boss vient de mourir -> Drop la cle au centre du boss
                         bx = self.boss_room.boss.pos.x + self.boss_room.boss.sprite_w // 2
                         by = self.boss_room.boss.pos.y + self.boss_room.boss.sprite_h // 2
                         self.cle = Cle(bx, by)
@@ -533,9 +541,9 @@ class Serveur:
                     if joueur.est_en_attaque and joueur.rect_attaque:
                         for id_ennemi, ennemi in list(self.ennemis.items()):
                             if (not ennemi.est_mort
-                                    and id_ennemi not in joueur.ennemis_touches  # hit registry
+                                    and id_ennemi not in joueur.ennemis_touches
                                     and joueur.rect_attaque.colliderect(ennemi.rect)):
-                                joueur.ennemis_touches.add(id_ennemi)  # enregistre avant d'infliger
+                                joueur.ennemis_touches.add(id_ennemi)
                                 mort = ennemi.prendre_degat(DEGATS_JOUEUR, temps_actuel)
                                 if mort:
                                     cx, cy = ennemi.rect.centerx, ennemi.rect.centery
@@ -599,16 +607,17 @@ class Serveur:
                 self._dernier_broadcast = temps_actuel
                 with self.lock:
                     etat_commun = {
-                        'joueurs':       [j.get_etat() for j in self.joueurs.values()],
-                        'ennemis':       [e.get_etat() for e in self.ennemis.values()],
-                        'ames_perdues':  [a.get_etat() for a in self.ames_perdues.values()],
-                        'ames_libres':   [a.get_etat() for a in self.ames_libres.values()],
-                        'ames_loot':     [a.get_etat() for a in self.ames_loot.values()],
+                        'joueurs':        [j.get_etat() for j in self.joueurs.values()],
+                        'ennemis':        [e.get_etat() for e in self.ennemis.values()],
+                        'ames_perdues':   [a.get_etat() for a in self.ames_perdues.values()],
+                        'ames_libres':    [a.get_etat() for a in self.ames_libres.values()],
+                        'ames_loot':      [a.get_etat() for a in self.ames_loot.values()],
                         'orbes_capacite': [o.get_etat() for o in self.orbes_capacite.values()],
-                        'cle':           self.cle.get_etat() if self.cle else None,
-                        'porte':         self.porte.get_etat() if self.porte else None,
+                        'pancartes_lore': [p.get_etat() for p in self.pancartes_lore.values()],  # NOUVEAU
+                        'cle':            self.cle.get_etat() if self.cle else None,
+                        'porte':          self.porte.get_etat() if self.porte else None,
                         'torche_allumee': self.torche_allumee,
-                        'boss_room':     self.boss_room.get_etat(),
+                        'boss_room':      self.boss_room.get_etat(),
                     }
                 with self._broadcast_lock:
                     self._etat_broadcast = etat_commun
@@ -616,15 +625,10 @@ class Serveur:
             horloge.tick(FPS)
 
     # ------------------------------------------------------------------
-    #  DÉMARRAGE
-    # ------------------------------------------------------------------
-
-    # ------------------------------------------------------------------
     #  ACCEPTATION CLIENT (direct ou relay)
     # ------------------------------------------------------------------
 
     def _accepter_client(self, connexion_client, adresse):
-        """Accepte un client (direct ou relay). Même logique pour les deux."""
         print(f"[SERVEUR] Tentative de connexion depuis {adresse}")
 
         if not self._ids_pool:
@@ -650,11 +654,10 @@ class Serveur:
         print(f"[SERVEUR] Thread client démarré pour joueur {id_joueur} depuis {adresse}")
 
     # ------------------------------------------------------------------
-    #  RELAY : écoute des clients relayés
+    #  RELAY
     # ------------------------------------------------------------------
 
     def _ecouter_relay(self):
-        """Thread relay : crée une room et accepte les clients relayés."""
         from reseau.relay_client import relay_creer_room, relay_attendre_client, relay_ouvrir_canal_data
         try:
             ctrl, self.code_room = relay_creer_room(self.relay_host, self.relay_port)
@@ -688,7 +691,6 @@ class Serveur:
         thread_boucle_jeu.daemon = True
         thread_boucle_jeu.start()
 
-        # Démarrer le thread relay si configuré
         if self.relay_host:
             thread_relay = threading.Thread(target=self._ecouter_relay, daemon=True)
             thread_relay.start()
@@ -702,7 +704,6 @@ class Serveur:
 
 
 def creer_serveur(id_slot, type_lancement, relay_host="", relay_port=7777):
-    """Crée et retourne une instance Serveur (sans la démarrer)."""
     pygame.init()
     ip = obtenir_ip_locale()
     ip_vpn = obtenir_ip_vpn()

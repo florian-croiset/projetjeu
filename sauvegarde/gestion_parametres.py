@@ -31,7 +31,8 @@ def creer_parametres_defaut():
             "echo": "e",
             "attaque": "k",
             "dash": "c",
-            "echo_dir": "y"   # <-- AJOUT écho directionnel
+            "echo_dir": "y",
+            "interagir": "f"   # Touche d'interaction (pancartes, portes, etc.)
         },
         "sons": {
             "volume_sfx": 0.8,
