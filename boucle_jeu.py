@@ -1,6 +1,6 @@
 # boucle_jeu.py
 # Mixin pour la boucle de jeu en réseau (input, rendu monde, connexion).
-# MISE À JOUR : Rendu Porte interactive + Orbes de capacités.
+# MISE À JOUR : Rendu Porte interactive + Orbes de capacités + Pancartes Lore.
 
 from ui.tutoriel import Tutoriel
 from sauvegarde import gestion_parametres
@@ -30,6 +30,7 @@ from core.ame_loot import AmeLoot
 from core.cle import Cle
 from core.porte import Porte
 from core.orbe_capacite import OrbeCapacite
+from core.pancarte_lore import PancarteLore, BulleLore, PopupPaiement   # NOUVEAU
 
 
 class BoucleJeuMixin:
@@ -114,6 +115,7 @@ class BoucleJeuMixin:
             'echo':           False,
             'echo_dir':       False,
             'toggle_torche':  False,
+            'interagir':      False,   # NOUVEAU
         }
 
         key = self._codes_touches.get
@@ -123,6 +125,15 @@ class BoucleJeuMixin:
                 self.running = False
             if MODE_DEV and envoyer_logs.get_bouton().verifier_clic(event):
                 envoyer_logs.envoyer_maintenant()
+
+            # NOUVEAU — Laisser la bulle et la popup consommer les events en priorité
+            if self.bulle_lore and self.bulle_lore.visible:
+                if self.bulle_lore.gerer_event(event):
+                    continue
+            if self.popup_paiement and self.popup_paiement.visible:
+                if self.popup_paiement.gerer_event(event):
+                    continue
+
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     try:
@@ -143,6 +154,35 @@ class BoucleJeuMixin:
                 if event.key == key('echo_dir'):
                     commandes['echo_dir'] = True
                     music.jouer_sfx('echo_dir')
+
+                # NOUVEAU — Touche interaction (F par défaut)
+                if event.key == key('interagir'):
+                    mon_joueur = self.joueurs_locaux.get(self.mon_id)
+                    if mon_joueur and not self.bulle_lore.visible and not self.popup_paiement.visible:
+                        pancarte_proche = None
+                        for i, pancarte in self.pancartes_lore_locales.items():
+                            dx = mon_joueur.rect.centerx - pancarte.rect.centerx
+                            dy = mon_joueur.rect.centery - pancarte.rect.centery
+                            if (dx**2 + dy**2) ** 0.5 <= PancarteLore.PORTEE_INTERACTION:
+                                pancarte_proche = (i, pancarte)
+                                break
+                        if pancarte_proche:
+                            i, pancarte = pancarte_proche
+                            if pancarte.est_debloquee:
+                                # Pancarte déjà payée → ouvrir directement la bulle de lore
+                                self.bulle_lore.ouvrir()
+                            else:
+                                # Pancarte verrouillée → ouvrir la popup de paiement
+                                self._pancarte_active_id = i
+
+                                def _callback_paiement():
+                                    commandes['interagir'] = True
+
+                                self.popup_paiement.ouvrir_confirmation(
+                                    mon_joueur.argent,
+                                    _callback_paiement
+                                )
+
             if event.type == pygame.MOUSEBUTTONDOWN:
                 ms = self._codes_souris.get
                 if ms('attaque') and event.button == ms('attaque'):
@@ -157,20 +197,6 @@ class BoucleJeuMixin:
                 if ms('echo_dir') and event.button == ms('echo_dir'):
                     commandes['echo_dir'] = True
                     music.jouer_sfx('echo_dir')
-                if event.key == key('torche'):
-                    if self.mon_id in self.joueurs_locaux:
-                        joueur = self.joueurs_locaux[self.mon_id]
-                        vient_dallumer = self.torche.toggle()
-                        if vient_dallumer:
-                            music.torche_boucle_start()
-                        else:
-                            music.torche_boucle_stop()
-                        commandes['toggle_torche'] = True
-                        if vient_dallumer:
-                            dx = joueur.rect.centerx - self.torche.x
-                            dy = joueur.rect.centery - self.torche.y
-                            if (dx**2 + dy**2)**0.5 <= DISTANCE_TORCHE_ECHO:
-                                commandes['echo'] = True
 
         touches = pygame.key.get_pressed()
         if key('gauche') and touches[key('gauche')]:
@@ -193,6 +219,7 @@ class BoucleJeuMixin:
             commandes['echo']          = False
             commandes['echo_dir']      = False
             commandes['toggle_torche'] = False
+            commandes['interagir']     = False   # NOUVEAU
 
         return commandes
 
@@ -233,6 +260,11 @@ class BoucleJeuMixin:
         for orbe in self.orbes_capacite_locaux.values():
             if not orbe.est_ramasse and camera_rect.colliderect(orbe.rect):
                 orbe.dessiner(surface_virtuelle, camera_offset, pygame.time.get_ticks())
+
+        # NOUVEAU — Pancartes de lore
+        for pancarte in self.pancartes_lore_locales.values():
+            if camera_rect.colliderect(pancarte.rect):
+                pancarte.dessiner(surface_virtuelle, camera_offset, pygame.time.get_ticks())
 
         # --- Joueurs ---
         for joueur in self.joueurs_locaux.values():
@@ -340,14 +372,13 @@ class BoucleJeuMixin:
                                (tx - rayon_t - 1, ty - rayon_t - 1),
                                special_flags=pygame.BLEND_RGBA_MIN)
             surface_virtuelle.blit(obscurite, (0, 0))
-        
-        # --- Badge torche (après obscurité pour être visible)
+
+        # --- Badge torche ---
         if self.torche.jamais_utilisee and mon_joueur:
             dx = mon_joueur.rect.centerx - self.torche.x
             dy = mon_joueur.rect.centery - self.torche.y
             if (dx**2 + dy**2)**0.5 <= DISTANCE_TORCHE_ECHO * 3:
                 self._dessiner_badge_torche(surface_virtuelle, camera_offset)
-        
 
         if mon_joueur and mon_joueur.pv <= 0:
             if self._mort_depuis is None:
@@ -368,6 +399,9 @@ class BoucleJeuMixin:
 
         self.dessiner_hud()
 
+        # NOUVEAU — Rendu UI pancarte par-dessus tout (sur self.ecran, pas sur surface_virtuelle)
+        # La bulle et la popup sont dessinées dans boucle_jeu_reseau après display.flip
+
     # ==================================================================
     #  BOUCLE JEU RÉSEAU
     # ==================================================================
@@ -383,8 +417,6 @@ class BoucleJeuMixin:
                 donnees = recv_complet(self.client_socket)
 
                 with self._reseau_lock:
-                    # Accumuler les vis_delta pour éviter la perte de tuiles
-                    # quand plusieurs états arrivent entre deux frames
                     if self._dernier_etat_serveur is not None and self._nouvel_etat_disponible:
                         ancien_delta = self._dernier_etat_serveur.get('vis_delta')
                         if ancien_delta and donnees.get('vis_map') is None:
@@ -408,7 +440,7 @@ class BoucleJeuMixin:
 
     def _appliquer_etat_serveur(self, donnees_recues):
         """Applique l'état reçu du serveur aux entités locales."""
-        # --- Vis map (full ou delta) ---
+        # --- Vis map ---
         if donnees_recues.get('vis_map') is not None:
             self.vis_map_locale = donnees_recues['vis_map']
             if self.carte:
@@ -495,6 +527,19 @@ class BoucleJeuMixin:
                     do['x'], do['y'], do['capacite'])
             self.orbes_capacite_locaux[do['id']].set_etat(do)
 
+        # NOUVEAU — Pancartes lore
+        for i, dp in enumerate(donnees_recues.get('pancartes_lore', [])):
+            if i not in self.pancartes_lore_locales:
+                self.pancartes_lore_locales[i] = PancarteLore(dp['x'], dp['y'])
+            pancarte = self.pancartes_lore_locales[i]
+            etait_debloquee = pancarte.est_debloquee
+            pancarte.set_etat(dp)
+            # Si la pancarte vient d'être débloquée par CE joueur → ouvrir la bulle
+            if not etait_debloquee and dp['est_debloquee']:
+                if getattr(self, '_pancarte_active_id', None) == i:
+                    self.bulle_lore.ouvrir()
+                    self._pancarte_active_id = None
+
         # --- Porte ---
         data_porte = donnees_recues.get('porte')
         if data_porte:
@@ -551,6 +596,7 @@ class BoucleJeuMixin:
             'clavier': {'gauche': False, 'droite': False,
                         'saut': False, 'attaque': False, 'dash': False},
             'echo': False,
+            'interagir': False,   # NOUVEAU
         }
         self._dernier_etat_serveur = None
         self._nouvel_etat_disponible = False
@@ -560,7 +606,6 @@ class BoucleJeuMixin:
         thread_reseau.start()
 
         while self.etat_jeu == "EN_JEU" and self.running:
-            # Masquer la souris en jeu (plein écran), la montrer en pause/menus
             en_plein_ecran = self.parametres.get('video', {}).get('plein_ecran', False)
             if en_plein_ecran:
                 pygame.mouse.set_visible(self.etat_jeu_interne in ("PAUSE", "PARAMETRES_JEU", "LUMINOSITE_JEU"))
@@ -570,6 +615,7 @@ class BoucleJeuMixin:
                 'clavier': {'gauche': False, 'droite': False,
                             'saut': False, 'attaque': False, 'dash': False},
                 'echo': False,
+                'interagir': False,   # NOUVEAU
             }
 
             if self.etat_jeu_interne == "JEU":
@@ -590,11 +636,9 @@ class BoucleJeuMixin:
             if self.etat_jeu != "EN_JEU" or not self.running:
                 break
 
-            # Envoyer les commandes au thread réseau
             with self._reseau_lock:
                 self._commandes_a_envoyer = commandes_a_envoyer
 
-            # Vérifier erreur réseau
             with self._reseau_lock:
                 erreur = self._erreur_reseau
 
@@ -605,7 +649,6 @@ class BoucleJeuMixin:
                 self.etat_jeu = "MENU_PRINCIPAL"
                 break
 
-            # Appliquer le dernier état reçu (si disponible)
             with self._reseau_lock:
                 donnees_recues = self._dernier_etat_serveur if self._nouvel_etat_disponible else None
                 self._nouvel_etat_disponible = False
@@ -613,7 +656,7 @@ class BoucleJeuMixin:
             if donnees_recues:
                 self._appliquer_etat_serveur(donnees_recues)
 
-            # Dessiner (toujours, même sans nouvel état serveur)
+            # Dessiner le monde
             self.dessiner_jeu()
             if self.etat_jeu_interne == "PAUSE":
                 self.dessiner_menu_pause()
@@ -622,10 +665,15 @@ class BoucleJeuMixin:
             elif self.etat_jeu_interne == "LUMINOSITE_JEU":
                 self.dessiner_menu_luminosite()
 
+            # NOUVEAU — Rendu UI pancarte sur self.ecran (au-dessus du zoom)
+            if self.bulle_lore and self.bulle_lore.visible:
+                self.bulle_lore.dessiner(self.ecran)
+            if self.popup_paiement and self.popup_paiement.visible:
+                self.popup_paiement.dessiner(self.ecran)
+
             pygame.display.flip()
             self.horloge.tick(FPS)
 
-        # Arrêter le thread réseau proprement
         self._reseau_actif = False
 
     # ==================================================================
@@ -637,7 +685,6 @@ class BoucleJeuMixin:
         self._serveur_instance = None
         self._relay_instance   = None
 
-        # Auto-démarrer le relay server en tant que thread
         try:
             self._relay_instance = demarrer_relay_thread(RELAY_PORT)
             print(f"[CLIENT] Relay auto-démarré sur le port {RELAY_PORT}")
@@ -664,9 +711,8 @@ class BoucleJeuMixin:
                 break
         if connecte:
             self.etat_jeu = "EN_JEU"
-            # Récupérer le code room du serveur (si relay actif)
             if relay_host and self._serveur_instance:
-                for _ in range(40):  # max 2 secondes
+                for _ in range(40):
                     if self._serveur_instance.code_room:
                         self.code_room = self._serveur_instance.code_room
                         print(f"[CLIENT] Code Room : {self.code_room}")
@@ -682,35 +728,36 @@ class BoucleJeuMixin:
         else:
             dossier_script = os.path.dirname(os.path.abspath(__file__))
         chemin_map = os.path.join(dossier_script, "assets/MapS2.tmx")
-        self.carte             = Carte(chemin_map)
-        self.vis_map_locale    = self.carte.creer_carte_visibilite_vierge()
-        self.joueurs_locaux    = {}
-        self.ennemis_locaux    = {}
-        self.ames_perdues_locales  = {}
-        self.ames_libres_locales   = {}
-        self.ames_loot_locales     = {}
-        self.orbes_capacite_locaux = {}
-        self.porte_locale          = None
-        self.cle_locale            = None
+        self.carte                  = Carte(chemin_map)
+        self.vis_map_locale         = self.carte.creer_carte_visibilite_vierge()
+        self.joueurs_locaux         = {}
+        self.ennemis_locaux         = {}
+        self.ames_perdues_locales   = {}
+        self.ames_libres_locales    = {}
+        self.ames_loot_locales      = {}
+        self.orbes_capacite_locaux  = {}
+        self.pancartes_lore_locales = {}   # NOUVEAU
+        self.porte_locale           = None
+        self.cle_locale             = None
+        # NOUVEAU — UI pancarte (taille dépend de l'écran courant)
+        self.bulle_lore         = BulleLore(self.largeur_ecran, self.hauteur_ecran)
+        self.popup_paiement     = PopupPaiement(self.largeur_ecran, self.hauteur_ecran)
+        self._pancarte_active_id = None   # Indice de la pancarte en cours de paiement
 
     def connecter(self, hote):
         try:
             print(f"[CLIENT] Tentative de connexion vers {hote}:{PORT_SERVEUR}...")
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            print(f"[CLIENT] Socket TCP créée (timeout connexion : 5s)")
             self.client_socket.settimeout(5)
-            print(f"[CLIENT] Connexion TCP en cours vers {hote}:{PORT_SERVEUR}...")
             self.client_socket.connect((hote, PORT_SERVEUR))
             print(f"[CLIENT] Connexion TCP établie avec {hote}:{PORT_SERVEUR}")
             self.client_socket.settimeout(10.0)
             self.client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            print(f"[CLIENT] En attente du handshake serveur (timeout : 10s)...")
             reponse = recv_complet(self.client_socket)
             print(f"[CLIENT] Handshake reçu : {reponse}")
 
             if isinstance(reponse, dict) and "erreur" in reponse:
                 if reponse["erreur"] == "SERVEUR_PLEIN":
-                    print(f"[CLIENT] Connexion refusée : serveur plein")
                     self.message_erreur_connexion = "Le serveur est plein !\n(3/3 joueurs)"
                     self.client_socket.close()
                     self.client_socket = None
@@ -723,35 +770,29 @@ class BoucleJeuMixin:
             return True
 
         except socket.timeout:
-            print(f"[CLIENT] Echec connexion: TIMEOUT — {hote}:{PORT_SERVEUR} ne répond pas (firewall ou port non ouvert ?)")
             self.message_erreur_connexion = f"Timeout : {hote}:{PORT_SERVEUR} ne répond pas.\nVérifiez le pare-feu et la redirection de port."
             self.client_socket = None
             return False
         except ConnectionRefusedError:
-            print(f"[CLIENT] Echec connexion: CONNEXION REFUSÉE — aucun serveur sur {hote}:{PORT_SERVEUR}")
             self.message_erreur_connexion = f"Connexion refusée : {hote}:{PORT_SERVEUR}\nLe serveur n'est pas démarré."
             self.client_socket = None
             return False
         except socket.gaierror as e:
-            print(f"[CLIENT] Echec connexion: ADRESSE INVALIDE — impossible de résoudre '{hote}' : {e}")
             self.message_erreur_connexion = f"Adresse invalide : '{hote}'"
             self.client_socket = None
             return False
         except socket.error as e:
-            print(f"[CLIENT] Echec connexion: {type(e).__name__}: {e}")
             self.message_erreur_connexion = f"Impossible de se connecter\nau serveur : {hote}"
             self.client_socket = None
             return False
 
     def connecter_relay(self, code_room, relay_host=None, relay_port=None):
-        """Se connecte au serveur via le relay avec un room code."""
         from reseau.relay_client import relay_rejoindre
         host = relay_host or RELAY_HOST
         port = relay_port or RELAY_PORT
         try:
             print(f"[CLIENT] Connexion relay ({host}:{port}) avec code '{code_room}'...")
             self.client_socket = relay_rejoindre(host, port, code_room)
-            print(f"[CLIENT] Relay bridgé, en attente du handshake serveur...")
             self.client_socket.settimeout(15.0)
             self.client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             reponse = recv_complet(self.client_socket)
@@ -759,30 +800,25 @@ class BoucleJeuMixin:
 
             if isinstance(reponse, dict) and "erreur" in reponse:
                 if reponse["erreur"] == "SERVEUR_PLEIN":
-                    print(f"[CLIENT] Connexion refusée : serveur plein")
                     self.message_erreur_connexion = "Le serveur est plein !\n(3/3 joueurs)"
                     self.client_socket.close()
                     self.client_socket = None
                     return False
 
             self.mon_id = reponse
-            print(f"[CLIENT] Connecté via relay (ID joueur : {self.mon_id})")
             self.message_erreur_connexion = None
             self._finaliser_connexion()
             return True
 
         except ConnectionError as e:
-            print(f"[CLIENT] Echec relay: {e}")
             self.message_erreur_connexion = str(e).replace("Relay: ", "")
             self.client_socket = None
             return False
         except socket.timeout:
-            print(f"[CLIENT] Echec relay: TIMEOUT après connexion au relay")
             self.message_erreur_connexion = "Timeout : le serveur ne répond pas\nvia le relay."
             self.client_socket = None
             return False
         except Exception as e:
-            print(f"[CLIENT] Echec relay: {type(e).__name__}: {e}")
             self.message_erreur_connexion = f"Échec connexion relay :\n{e}"
             self.client_socket = None
             return False
@@ -794,7 +830,6 @@ class BoucleJeuMixin:
                 self.client_socket.close()
             except Exception:
                 pass
-        # Arrêter le serveur embarqué si présent
         srv = getattr(self, '_serveur_instance', None)
         if srv:
             try:
@@ -802,7 +837,6 @@ class BoucleJeuMixin:
                 srv.serveur_socket.close()
             except Exception:
                 pass
-        # Arrêter le relay embarqué si présent
         relay = getattr(self, '_relay_instance', None)
         if relay:
             try:
@@ -813,22 +847,27 @@ class BoucleJeuMixin:
         music.torche_boucle_stop()
         if hasattr(self, 'torche') and self.torche:
             self.torche.allumee = False
-        self.client_socket         = None
-        self.mon_id                = -1
-        self.code_room             = None
-        self._serveur_instance     = None
-        self._relay_instance       = None
-        self.joueurs_locaux        = {}
-        self.ennemis_locaux        = {}
-        self.ames_perdues_locales  = {}
-        self.ames_libres_locales   = {}
-        self.ames_loot_locales     = {}
-        self.orbes_capacite_locaux = {}
-        self.porte_locale          = None
-        self.cle_locale            = None
-        self.carte                 = None
-        self.vis_map_locale        = None
-        self.boss_local            = None
-        self._porte_etait_en_ouverture = False
-        self._boss_etat_precedent  = None
-        self.etat_jeu_interne      = "JEU"
+        self.client_socket          = None
+        self.mon_id                 = -1
+        self.code_room              = None
+        self._serveur_instance      = None
+        self._relay_instance        = None
+        self.joueurs_locaux         = {}
+        self.ennemis_locaux         = {}
+        self.ames_perdues_locales   = {}
+        self.ames_libres_locales    = {}
+        self.ames_loot_locales      = {}
+        self.orbes_capacite_locaux  = {}
+        self.pancartes_lore_locales = {}   # NOUVEAU
+        self.porte_locale           = None
+        self.cle_locale             = None
+        self.carte                  = None
+        self.vis_map_locale         = None
+        self.boss_local             = None
+        self._porte_etait_en_ouverture  = False
+        self._boss_etat_precedent       = None
+        self.etat_jeu_interne           = "JEU"
+        # NOUVEAU — reset UI pancarte
+        self.bulle_lore          = None
+        self.popup_paiement      = None
+        self._pancarte_active_id = None
