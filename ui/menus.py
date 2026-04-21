@@ -1024,6 +1024,8 @@ class MenusMixin:
             if self.btn_pause_parametres.verifier_clic(event):
                 self.etat_jeu_precedent = "EN_JEU"
                 self.parametres_temp = copy.deepcopy(self.parametres)
+                self._ip_locale_cache = obtenir_ip_locale()
+                self._ip_vpn_cache    = obtenir_ip_vpn()
                 self.etat_jeu_interne = "PARAMETRES_JEU"
             if self.btn_pause_quitter.verifier_clic(event):
                 self.etat_jeu = "MENU_PRINCIPAL"
