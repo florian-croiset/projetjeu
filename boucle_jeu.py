@@ -154,6 +154,12 @@ class BoucleJeuMixin:
                 if event.key == key('echo_dir'):
                     commandes['echo_dir'] = True
                     music.jouer_sfx('echo_dir')
+                if event.key == key('torche'):
+                    commandes['toggle_torche'] = True
+                    if not self.torche.allumee:
+                        music.torche_boucle_start()
+                    else:
+                        music.torche_boucle_stop()
 
                 # NOUVEAU — Touche interaction (F par défaut)
                 if event.key == key('interagir'):
