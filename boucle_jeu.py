@@ -19,6 +19,9 @@ from utils import envoyer_logs, music
 from reseau import serveur
 from reseau.relay_server import demarrer_relay_thread
 from reseau.protocole import recv_complet, send_complet, obtenir_ip_locale
+from reseau import udp_protocole as UDP_P
+from reseau.udp_endpoint import UdpEndpoint
+from reseau.udp_connexion import ConnexionUDP
 from ui.camera import calculer_camera, creer_masque_halo
 from core.carte import Carte
 from core.joueur import Joueur
@@ -31,6 +34,14 @@ from core.cle import Cle
 from core.porte import Porte
 from core.orbe_capacite import OrbeCapacite
 from core.pancarte_lore import PancarteLore, BulleLore, PopupPaiement   # NOUVEAU
+
+
+def _extraire_id_handshake(reponse):
+    """Le serveur répond soit un int (mode legacy), soit un dict
+    {'id', 'udp_token', 'udp_port'}. On renvoie juste l'ID joueur."""
+    if isinstance(reponse, dict):
+        return reponse.get('id')
+    return reponse
 
 
 class BoucleJeuMixin:
@@ -618,8 +629,16 @@ class BoucleJeuMixin:
         self._nouvel_etat_disponible = False
         self._erreur_reseau = None
 
-        thread_reseau = threading.Thread(target=self._thread_reseau, daemon=True)
-        thread_reseau.start()
+        udp_actif = getattr(self, 'udp_actif', False)
+        self._dernier_keepalive_tcp = time.monotonic()
+
+        # En mode UDP on ne lance PAS le thread TCP bloquant : le client tournera
+        # tout en non-bloquant dans la boucle Pygame. Le TCP reste ouvert
+        # uniquement pour un keepalive rare (évite le timeout côté serveur).
+        thread_reseau = None
+        if not udp_actif:
+            thread_reseau = threading.Thread(target=self._thread_reseau, daemon=True)
+            thread_reseau.start()
 
         while self.etat_jeu == "EN_JEU" and self.running:
             en_plein_ecran = self.parametres.get('video', {}).get('plein_ecran', False)
@@ -652,8 +671,27 @@ class BoucleJeuMixin:
             if self.etat_jeu != "EN_JEU" or not self.running:
                 break
 
-            with self._reseau_lock:
-                self._commandes_a_envoyer = commandes_a_envoyer
+            if udp_actif:
+                # 1. Envoi inputs via UDP.
+                one_shot = {
+                    'echo':           commandes_a_envoyer.get('echo', False),
+                    'echo_dir':       commandes_a_envoyer.get('echo_dir', False),
+                    'toggle_torche':  commandes_a_envoyer.get('toggle_torche', False),
+                    'interagir':      commandes_a_envoyer.get('interagir', False),
+                }
+                self._udp_envoyer_inputs(commandes_a_envoyer, one_shot)
+                # 2. Keepalive TCP toutes les 5 s pour que le serveur n'invalide pas le socket.
+                if time.monotonic() - self._dernier_keepalive_tcp > 5.0:
+                    try:
+                        send_complet(self.client_socket, {})
+                    except Exception as e:
+                        self._erreur_reseau = f"TCP keepalive: {e}"
+                    self._dernier_keepalive_tcp = time.monotonic()
+                # 3. Pomper les paquets UDP entrants et appliquer.
+                self._udp_pomper_et_appliquer()
+            else:
+                with self._reseau_lock:
+                    self._commandes_a_envoyer = commandes_a_envoyer
 
             with self._reseau_lock:
                 erreur = self._erreur_reseau
@@ -665,12 +703,17 @@ class BoucleJeuMixin:
                 self.etat_jeu = "MENU_PRINCIPAL"
                 break
 
-            with self._reseau_lock:
-                donnees_recues = self._dernier_etat_serveur if self._nouvel_etat_disponible else None
-                self._nouvel_etat_disponible = False
+            if not udp_actif:
+                with self._reseau_lock:
+                    donnees_recues = self._dernier_etat_serveur if self._nouvel_etat_disponible else None
+                    self._nouvel_etat_disponible = False
 
-            if donnees_recues:
-                self._appliquer_etat_serveur(donnees_recues)
+                if donnees_recues:
+                    self._appliquer_etat_serveur(donnees_recues)
+
+            # Interpolation joueurs distants + ennemis
+            if udp_actif:
+                self._mettre_a_jour_interpolations(int(time.monotonic() * 1000))
 
             # Dessiner le monde
             self.dessiner_jeu()
@@ -737,6 +780,134 @@ class BoucleJeuMixin:
         else:
             self.etat_jeu = "MENU_PRINCIPAL"
 
+    def _initier_udp_si_dispo(self, reponse_handshake, hote_tcp: str) -> bool:
+        """Tente un handshake UDP. Retourne True si l'UDP est actif, False si fallback TCP."""
+        self.udp_actif      = False
+        self.udp_endpoint   = None
+        self.udp_conn       = None
+        self.udp_offset_serveur_ms = None
+
+        if not USE_UDP or not isinstance(reponse_handshake, dict):
+            return False
+        token = reponse_handshake.get('udp_token')
+        port_udp = reponse_handshake.get('udp_port')
+        if not token or not port_udp:
+            return False
+
+        try:
+            self.udp_endpoint = UdpEndpoint(bind_host="0.0.0.0", bind_port=0)
+        except OSError as exc:
+            print(f"[CLIENT] Impossible d'ouvrir un socket UDP: {exc}")
+            return False
+
+        addr_serveur = (hote_tcp, port_udp)
+        self.udp_conn = ConnexionUDP(self.udp_endpoint, addr_serveur,
+                                     heartbeat_ms=UDP_HEARTBEAT_INTERVAL_MS,
+                                     timeout_ms=UDP_CONNECTION_TIMEOUT_MS)
+
+        # Envoie le token au serveur UDP et attend HANDSHAKE_ACK.
+        self.udp_conn.envoyer_control(UDP_P.TYPE_HANDSHAKE_UDP, {'token': token})
+
+        deadline = time.monotonic() + UDP_HANDSHAKE_TIMEOUT_MS / 1000.0
+        intervalle_rtx = 0.2
+        prochain_renvoi = time.monotonic() + intervalle_rtx
+        while time.monotonic() < deadline:
+            for data, addr in self.udp_endpoint.pomper():
+                if addr != addr_serveur:
+                    continue
+                self.udp_conn.traiter_paquet_brut(data)
+            for canal, type_, payload in self.udp_conn.drainer_recus():
+                if canal == UDP_P.CANAL_CONTROL and type_ == UDP_P.TYPE_HANDSHAKE_ACK:
+                    self.udp_actif = True
+                    print(f"[CLIENT] UDP handshake validé (port local {self.udp_endpoint.bind_port})")
+                    return True
+            if time.monotonic() >= prochain_renvoi:
+                self.udp_conn.envoyer_control(UDP_P.TYPE_HANDSHAKE_UDP, {'token': token})
+                prochain_renvoi = time.monotonic() + intervalle_rtx
+            time.sleep(0.02)
+
+        # Échec → on abandonne le socket UDP, fallback TCP.
+        print(f"[CLIENT] UDP handshake échoué après {UDP_HANDSHAKE_TIMEOUT_MS} ms, bascule TCP")
+        try:
+            self.udp_endpoint.fermer()
+        except Exception:
+            pass
+        self.udp_endpoint = None
+        self.udp_conn     = None
+        self.udp_actif    = False
+        return False
+
+    def _udp_envoyer_inputs(self, commandes: dict, one_shot_commandes: dict):
+        if not self.udp_actif or self.udp_conn is None:
+            return
+        # Continus : unreliable 60 Hz (même cadence que la frame)
+        self.udp_conn.envoyer_unreliable(UDP_P.TYPE_INPUTS_CONTINUS, pickle.dumps(commandes.get('clavier', {})))
+        # One-shot : reliable (echo, echo_dir, torche, interagir)
+        if any(one_shot_commandes.values()):
+            self.udp_conn.envoyer_reliable(UDP_P.TYPE_INPUT_ONESHOT, one_shot_commandes)
+
+    def _udp_pomper_et_appliquer(self):
+        """Drain l'UDP, applique snapshots (positions) + état discret (pickle)."""
+        if not self.udp_actif or self.udp_conn is None or self.udp_endpoint is None:
+            return
+        for data, addr in self.udp_endpoint.pomper():
+            if addr != self.udp_conn.addr_pair:
+                continue
+            self.udp_conn.traiter_paquet_brut(data)
+
+        now_ms = int(time.monotonic() * 1000)
+        self.udp_conn.tick(now_ms)
+        if not self.udp_conn.actif:
+            with self._reseau_lock:
+                self._erreur_reseau = "Connexion UDP perdue (timeout)"
+            return
+
+        for canal, type_, payload in self.udp_conn.drainer_recus():
+            if canal == UDP_P.CANAL_UNRELIABLE and type_ == UDP_P.TYPE_SNAPSHOT:
+                self._appliquer_snapshot_udp(payload, now_ms)
+            elif canal == UDP_P.CANAL_RELIABLE and type_ == UDP_P.TYPE_ETAT_DISCRET:
+                if isinstance(payload, dict):
+                    self._appliquer_etat_serveur(payload)
+
+    def _appliquer_snapshot_udp(self, snap: dict, now_ms: int):
+        """Applique positions struct : local → direct ; distants → buffer d'interp."""
+        t_serveur = snap.get('t', 0)
+        # Offset d'horloge : on ramène le temps serveur à la monotonic client.
+        self.udp_offset_serveur_ms = t_serveur - now_ms
+
+        for jd in snap.get('joueurs', []):
+            jid = jd['id']
+            joueur = self.joueurs_locaux.get(jid)
+            if joueur is None:
+                continue
+            if jid == self.mon_id:
+                # Joueur local : snapping direct (pas d'interp pour éviter le lag).
+                joueur.rect.x = int(jd['x'])
+                joueur.rect.y = int(jd['y'])
+            else:
+                if hasattr(joueur, 'pousser_snapshot_interp'):
+                    joueur.pousser_snapshot_interp(t_serveur, jd['x'], jd['y'])
+
+        for ed in snap.get('ennemis', []):
+            ennemi = self.ennemis_locaux.get(ed['id'])
+            if ennemi is None:
+                continue
+            if hasattr(ennemi, 'pousser_snapshot_interp'):
+                ennemi.pousser_snapshot_interp(t_serveur, ed['x'], ed['y'])
+
+    def _mettre_a_jour_interpolations(self, now_ms: int):
+        if self.udp_offset_serveur_ms is None:
+            return
+        t_render = now_ms + self.udp_offset_serveur_ms - INTERP_DELAY_MS
+        for jid, joueur in self.joueurs_locaux.items():
+            if jid == self.mon_id:
+                continue
+            if hasattr(joueur, 'mettre_a_jour_interp'):
+                joueur.mettre_a_jour_interp(t_render)
+        for ennemi in self.ennemis_locaux.values():
+            if hasattr(ennemi, 'mettre_a_jour_interp'):
+                ennemi.mettre_a_jour_interp(t_render)
+
     def _finaliser_connexion(self):
         """Initialise les données locales après un handshake réussi."""
         if getattr(sys, 'frozen', False):
@@ -779,10 +950,11 @@ class BoucleJeuMixin:
                     self.client_socket = None
                     return False
 
-            self.mon_id = reponse
+            self.mon_id = _extraire_id_handshake(reponse)
             print(f"[CLIENT] Connecté avec succès (ID joueur : {self.mon_id})")
             self.message_erreur_connexion = None
             self._finaliser_connexion()
+            self._initier_udp_si_dispo(reponse, hote)
             return True
 
         except socket.timeout:
@@ -821,9 +993,13 @@ class BoucleJeuMixin:
                     self.client_socket = None
                     return False
 
-            self.mon_id = reponse
+            self.mon_id = _extraire_id_handshake(reponse)
             self.message_erreur_connexion = None
             self._finaliser_connexion()
+            # Le relay TCP ne transportera PAS l'UDP : on ne tente l'UDP
+            # que sur une connexion directe (host param fourni côté ConnexionUDP).
+            # Via relay, on reste en mode TCP.
+            self.udp_actif = False
             return True
 
         except ConnectionError as e:
@@ -841,6 +1017,17 @@ class BoucleJeuMixin:
 
     def nettoyer_connexion(self):
         pygame.mouse.set_visible(True)
+        # UDP
+        endpoint_udp = getattr(self, 'udp_endpoint', None)
+        if endpoint_udp is not None:
+            try:
+                endpoint_udp.fermer()
+            except Exception:
+                pass
+        self.udp_endpoint = None
+        self.udp_conn     = None
+        self.udp_actif    = False
+        self.udp_offset_serveur_ms = None
         if self.client_socket:
             try:
                 self.client_socket.close()
