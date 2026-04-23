@@ -4,6 +4,8 @@
 import pygame
 import sys
 import os
+
+from pygame import surface
 from parametres import *
 
 # Charger le sprite du joueur
@@ -248,7 +250,8 @@ class Joueur:
             self.rect.height
         )
         if self.sprite:
-            surface.blit(self.sprite, rect_visuel.topleft)
+            sprite_a_dessiner = pygame.transform.flip(self.sprite, self.direction == -1, False)
+            surface.blit(sprite_a_dessiner, rect_visuel.topleft)
         else:
             pygame.draw.rect(surface, self.couleur, rect_visuel)
 
@@ -276,6 +279,7 @@ class Joueur:
             'id': self.id,
             'x': self.rect.x,
             'y': self.rect.y,
+            'direction': self.direction,
             'couleur': self.couleur,
             'pv': self.pv,
             'pv_max': self.pv_max,
@@ -294,6 +298,7 @@ class Joueur:
         """Mise à jour depuis le réseau."""
         self.rect.x = data['x']
         self.rect.y = data['y']
+        self.direction = data.get('direction', 1)
         self.couleur = data['couleur']
         self.pv = data['pv']
         self.pv_max = data['pv_max']
