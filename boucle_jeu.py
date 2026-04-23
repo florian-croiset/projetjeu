@@ -264,8 +264,18 @@ class BoucleJeuMixin:
         off_x, off_y = camera_offset
         camera_rect = pygame.Rect(off_x, off_y, lv, hv)
         for orbe in self.orbes_capacite_locaux.values():
-            if not orbe.est_ramasse and camera_rect.colliderect(orbe.rect):
-                orbe.dessiner(surface_virtuelle, camera_offset, pygame.time.get_ticks())
+            if orbe.est_ramasse:
+                continue
+            if not camera_rect.colliderect(orbe.rect):
+                continue
+            # Ne pas afficher si le joueur a déjà cette capacité
+            if orbe.capacite == 'double_saut' and getattr(mon_joueur, 'peut_double_saut', False):
+                continue
+            if orbe.capacite == 'dash' and getattr(mon_joueur, 'peut_dash', False):
+                continue
+            if orbe.capacite == 'echo_dir' and getattr(mon_joueur, 'peut_echo_dir', False):
+                continue
+            orbe.dessiner(surface_virtuelle, camera_offset, pygame.time.get_ticks())
 
         # NOUVEAU — Pancartes de lore
         for pancarte in self.pancartes_lore_locales.values():
@@ -296,7 +306,7 @@ class BoucleJeuMixin:
 
             if proche:
                 ennemi.dessiner(surface_virtuelle, camera_offset)
-            elif flash_actif:
+            elif flash_actif and not ennemi.est_mort:
                 ratio = 1.0 - (temps_depuis_flash / DUREE_FLASH_ECHO_ENNEMI)
                 off_x, off_y = camera_offset
                 cx = ennemi.rect.centerx - off_x
