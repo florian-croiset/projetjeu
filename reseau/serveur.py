@@ -881,6 +881,7 @@ class Serveur:
                 self._dernier_broadcast = temps_actuel
                 with self.lock:
                     etat_commun = {
+                        't':              temps_actuel,
                         'joueurs':        [j.get_etat() for j in self.joueurs.values()],
                         'ennemis':        [e.get_etat() for e in self.ennemis.values()],
                         'ames_perdues':   [a.get_etat() for a in self.ames_perdues.values()],

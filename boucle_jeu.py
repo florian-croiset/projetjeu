@@ -467,6 +467,12 @@ class BoucleJeuMixin:
 
     def _appliquer_etat_serveur(self, donnees_recues):
         """Applique l'état reçu du serveur aux entités locales."""
+        # --- Horloge serveur (pour interpolation en TCP ou fallback UDP) ---
+        t_serveur = donnees_recues.get('t')
+        if t_serveur is not None:
+            now_ms = int(time.monotonic() * 1000)
+            self.udp_offset_serveur_ms = t_serveur - now_ms
+
         # --- Vis map ---
         if donnees_recues.get('vis_map') is not None:
             self.vis_map_locale = donnees_recues['vis_map']
@@ -486,7 +492,16 @@ class BoucleJeuMixin:
         for dj in donnees_recues['joueurs']:
             if dj['id'] not in self.joueurs_locaux:
                 self.joueurs_locaux[dj['id']] = Joueur(dj['x'], dj['y'], dj['id'])
-            self.joueurs_locaux[dj['id']].set_etat(dj)
+            joueur = self.joueurs_locaux[dj['id']]
+            joueur.set_etat(dj)
+            # En mode TCP uniquement : alimenter le buffer d'interpolation des
+            # joueurs distants. En UDP, les snapshots 30 Hz s'en chargent et
+            # un double push ici casserait la monotonie du buffer.
+            if (not self.udp_actif
+                    and dj['id'] != self.mon_id
+                    and t_serveur is not None
+                    and hasattr(joueur, 'pousser_snapshot_interp')):
+                joueur.pousser_snapshot_interp(t_serveur, dj['x'], dj['y'])
 
         mon_joueur_local = self.joueurs_locaux.get(self.mon_id)
         if mon_joueur_local:
@@ -504,7 +519,12 @@ class BoucleJeuMixin:
                 self.ennemis_locaux[de['id']] = Ennemi(
                     de['x'], de['y'], de['id'],
                     de.get('type_ennemi', 'garde'))
-            self.ennemis_locaux[de['id']].set_etat(de)
+            ennemi = self.ennemis_locaux[de['id']]
+            ennemi.set_etat(de)
+            if (not self.udp_actif
+                    and t_serveur is not None
+                    and hasattr(ennemi, 'pousser_snapshot_interp')):
+                ennemi.pousser_snapshot_interp(t_serveur, de['x'], de['y'])
 
         for ennemi_local in self.ennemis_locaux.values():
             for nom_son in ennemi_local.sons_a_jouer:
@@ -711,9 +731,8 @@ class BoucleJeuMixin:
                 if donnees_recues:
                     self._appliquer_etat_serveur(donnees_recues)
 
-            # Interpolation joueurs distants + ennemis
-            if udp_actif:
-                self._mettre_a_jour_interpolations(int(time.monotonic() * 1000))
+            # Interpolation joueurs distants + ennemis (TCP comme UDP)
+            self._mettre_a_jour_interpolations(int(time.monotonic() * 1000))
 
             # Dessiner le monde
             self.dessiner_jeu()
