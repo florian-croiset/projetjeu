@@ -3,6 +3,7 @@
 # Types : 'patrouilleur' (1 PV), 'garde' (2 PV), 'gardien' (3 PV)
 # Barre de vie sous forme de cœurs discrets, toujours visible pour les ennemis multi-PV.
 
+import math
 import pygame
 from parametres import *
 
@@ -34,6 +35,14 @@ _CONFIG_ENNEMIS = {
         'hauteur': TAILLE_TUILE + 8,
         'couleur': (140, 25, 25),    # rouge sombre / foncé
         'argent':  15,
+    },
+    'traqueur': {
+        'pv':      2,
+        'vitesse': 2.0,
+        'largeur': TAILLE_TUILE - 8,
+        'hauteur': TAILLE_TUILE - 4,
+        'couleur': (140, 60, 200),   # violet — IA à l'écoute des échos
+        'argent':  12,
     },
 }
 
@@ -261,3 +270,103 @@ class Ennemi:
         self.clignotement     = data.get('clignotement', False)
         self.flash_echo_temps = data.get('flash_echo_temps', 0)
         self.sons_a_jouer     = data.get('sons', [])
+
+
+# -----------------------------------------------------------------------
+#  Ennemi Traqueur — IA événementielle basée sur le bruit
+# -----------------------------------------------------------------------
+
+ETAT_PATROUILLE = 'patrouille'
+ETAT_CHASSE     = 'chasse'
+
+
+class EnemyTraqueur(Ennemi):
+    """
+    Ennemi aveugle. Patrouille jusqu'à entendre un écho à portée,
+    puis chasse la source pendant un temps limité.
+    """
+
+    def __init__(self, x, y, id,
+                 rayon_audition=RAYON_AUDITION_TRAQUEUR,
+                 duree_alerte=DUREE_ALERTE_TRAQUEUR,
+                 vitesse_chasse=VITESSE_CHASSE_TRAQUEUR):
+        super().__init__(x, y, id, type_ennemi='traqueur')
+        self.rayon_audition = rayon_audition
+        self.duree_alerte   = duree_alerte
+        self.vitesse_chasse = vitesse_chasse
+        self.etat           = ETAT_PATROUILLE
+        self.cible_x        = 0
+        self.cible_y        = 0
+        self.fin_alerte     = 0
+
+    def alerter(self, position_joueur, temps_actuel):
+        """
+        Déclenchée par le serveur à l'émission d'un écho joueur.
+        Passe en CHASSE si la source est dans le rayon d'audition.
+        """
+        px, py = position_joueur
+        if math.dist((self.rect.centerx, self.rect.centery), (px, py)) <= self.rayon_audition:
+            self.etat       = ETAT_CHASSE
+            self.cible_x    = px
+            self.cible_y    = py
+            self.fin_alerte = temps_actuel + self.duree_alerte
+            return True
+        return False
+
+    def appliquer_logique(self, rects_collision, carte):
+        if self.etat == ETAT_CHASSE and pygame.time.get_ticks() >= self.fin_alerte:
+            self.etat = ETAT_PATROUILLE
+            self.vitesse_patrouille = (
+                self.vitesse_de_base if self.vitesse_patrouille >= 0
+                else -self.vitesse_de_base
+            )
+
+        if self.etat == ETAT_PATROUILLE:
+            super().appliquer_logique(rects_collision, carte)
+            return
+
+        # En CHASSE : direction dictée par la cible, sans détection du vide
+        # (évite l'oscillation au bord d'un trou pendant la poursuite).
+        dir_x = self.cible_x - self.rect.centerx
+        if abs(dir_x) > 4:
+            dx = self.vitesse_chasse if dir_x > 0 else -self.vitesse_chasse
+        else:
+            dx = 0
+        if dx != 0:
+            self.vitesse_patrouille = dx
+
+        # Sauvegarder l'état au sol avant la remise à zéro par la physique
+        etait_au_sol = self.sur_le_sol
+
+        self.vel_y += GRAVITE
+        if self.vel_y > 10:
+            self.vel_y = 10
+        dy = self.vel_y
+        self.sur_le_sol = False
+
+        # Collisions X — détection d'un obstacle frontal
+        self.rect.x += dx
+        mur_bloque = False
+        for mur in rects_collision:
+            if self.rect.colliderect(mur):
+                mur_bloque = True
+                if dx > 0:
+                    self.rect.right = mur.left
+                elif dx < 0:
+                    self.rect.left = mur.right
+
+        # Saut réflexe : obstacle frontal + était au sol + pas déjà en l'air
+        if mur_bloque and etait_au_sol and self.vel_y >= 0:
+            self.vel_y = -FORCE_SAUT_TRAQUEUR
+            dy = self.vel_y
+
+        self.rect.y += dy
+        for mur in rects_collision:
+            if self.rect.colliderect(mur):
+                if dy > 0:
+                    self.rect.bottom = mur.top
+                    self.vel_y      = 0
+                    self.sur_le_sol = True
+                elif dy < 0:
+                    self.rect.top = mur.bottom
+                    self.vel_y    = 0
