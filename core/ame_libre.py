@@ -61,7 +61,7 @@ class AmeLibre:
         global SPRITE_CRISTAL_LIBRE
         if SPRITE_CRISTAL_LIBRE is None:
             SPRITE_CRISTAL_LIBRE = _charger_sprite_cristal()
-        self.sprite = SPRITE_CRISTAL_LIBRE
+        self.sprite = SPRITE_CRISTAL_LIBRE.copy() if SPRITE_CRISTAL_LIBRE else None
 
     # ------------------------------------------------------------------
     #  LOGIQUE (appelée par le serveur chaque frame)
@@ -119,10 +119,9 @@ class AmeLibre:
         if self.sprite:
             # Légère variation d'alpha pour effet de pulsation
             alpha = int(180 + 75 * pulse)
-            spr = self.sprite.copy()
-            spr.set_alpha(alpha)
-            r_spr = spr.get_rect(center=(cx, cy))
-            surface.blit(spr, r_spr)
+            self.sprite.set_alpha(alpha)
+            r_spr = self.sprite.get_rect(center=(cx, cy))
+            surface.blit(self.sprite, r_spr)
         else:
             # Fallback : ellipse colorée — surface réutilisée
             if not hasattr(self, '_corps_surf'):

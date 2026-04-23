@@ -70,7 +70,7 @@ class AmeLoot:
         global SPRITE_LOOT
         if SPRITE_LOOT is None:
             SPRITE_LOOT = _charger_sprite_loot()
-        self.sprite = SPRITE_LOOT
+        self.sprite = SPRITE_LOOT.copy() if SPRITE_LOOT else None
 
     # ------------------------------------------------------------------
     #  LOGIQUE (appelée par le serveur chaque frame)
@@ -173,20 +173,21 @@ class AmeLoot:
         pulse = 0.7 + 0.3 * math.sin(temps_ms / 600 + self.phase_anim)
         r, g, b = self.couleur
 
-        # Halo (plus petit que AmeLibre)
-        halo_surf = pygame.Surface((40, 40), pygame.SRCALPHA)
+        # Halo (plus petit que AmeLibre) — surface réutilisée, zéro allocation par frame
+        if not hasattr(self, '_halo_surf'):
+            self._halo_surf = pygame.Surface((40, 40), pygame.SRCALPHA)
+        self._halo_surf.fill((0, 0, 0, 0))
         for rayon, alpha_base in [(18, 15), (13, 30), (8, 50)]:
             a = int(alpha_base * pulse)
-            pygame.draw.ellipse(halo_surf, (r, g, b, a),
+            pygame.draw.ellipse(self._halo_surf, (r, g, b, a),
                                 pygame.Rect(20 - rayon, 20 - rayon, rayon * 2, rayon * 2))
-        surface.blit(halo_surf, (cx - 20, cy - 20))
+        surface.blit(self._halo_surf, (cx - 20, cy - 20))
 
         if self.sprite:
             alpha = int(180 + 75 * pulse)
-            spr = self.sprite.copy()
-            spr.set_alpha(alpha)
-            r_spr = spr.get_rect(center=(cx, cy))
-            surface.blit(spr, r_spr)
+            self.sprite.set_alpha(alpha)
+            r_spr = self.sprite.get_rect(center=(cx, cy))
+            surface.blit(self.sprite, r_spr)
         else:
             # Fallback : petit cercle
             pygame.draw.circle(surface, self.couleur, (cx, cy), 5)
