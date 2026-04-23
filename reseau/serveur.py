@@ -14,7 +14,7 @@ from core.carte import Carte
 from parametres import *
 from sauvegarde import gestion_sauvegarde
 from sauvegarde import points_sauvegarde
-from core.ennemi import Ennemi
+from core.ennemi import Ennemi, EnemyTraqueur, ETAT_CHASSE
 from core.boss_room import BossRoom
 from core.ame_perdue import AmePerdue
 from core.ame_libre import AmeLibre
@@ -151,6 +151,9 @@ class Serveur:
         for x, y, eid, type_e in configs:
             self.ennemis[eid] = Ennemi(x=x, y=y, id=eid, type_ennemi=type_e)
 
+        # Traqueur — IA événementielle basée sur le bruit des échos
+        self.ennemis[5] = EnemyTraqueur(x=1333, y=995, id=5)
+
     def creer_ames_libres(self):
         positions = [
             (680,  515), (747, 1123), (1021, 1251),
@@ -261,6 +264,11 @@ class Serveur:
                                     'portee_max':      PORTEE_ECHO,
                                 })
 
+                                pos = (joueur.rect.centerx, joueur.rect.centery)
+                                for ennemi in self.ennemis.values():
+                                    if isinstance(ennemi, EnemyTraqueur) and not ennemi.est_mort:
+                                        ennemi.alerter(pos, t_echo)
+
                         if commandes.get('echo_dir'):
                             t_echo_dir = pygame.time.get_ticks()
                             joueur = self.joueurs[id_joueur]
@@ -277,6 +285,11 @@ class Serveur:
                                     'portee_max':      PORTEE_ECHO_DIR,
                                     'direction':       joueur.direction,
                                 })
+
+                                pos = (joueur.rect.centerx, joueur.rect.centery)
+                                for ennemi in self.ennemis.values():
+                                    if isinstance(ennemi, EnemyTraqueur) and not ennemi.est_mort:
+                                        ennemi.alerter(pos, t_echo_dir)
 
                         if commandes.get('toggle_torche'):
                             nouvelle_valeur = not self.torche_allumee
@@ -506,6 +519,19 @@ class Serveur:
                             ennemi.respawn()
                             print(f"[SERVEUR] Ennemi {id_ennemi} ({ennemi.type_ennemi}) respawn !")
                     else:
+                        # Traqueur en chasse : mettre à jour la cible vers le joueur le plus proche
+                        if (isinstance(ennemi, EnemyTraqueur)
+                                and ennemi.etat == ETAT_CHASSE
+                                and self.joueurs):
+                            joueur_proche = min(
+                                self.joueurs.values(),
+                                key=lambda j: (
+                                    (ennemi.rect.centerx - j.rect.centerx) ** 2
+                                    + (ennemi.rect.centery - j.rect.centery) ** 2
+                                ),
+                            )
+                            ennemi.cible_x = joueur_proche.rect.centerx
+                            ennemi.cible_y = joueur_proche.rect.centery
                         rects_proches = self.carte_jeu.get_rects_proches(ennemi.rect)
                         ennemi.appliquer_logique(rects_proches, self.carte_jeu)
 

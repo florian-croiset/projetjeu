@@ -7,8 +7,7 @@ LARGEUR_ECRAN = 1920
 HAUTEUR_ECRAN = 1080
 TITRE_FENETRE = "Écho - Team Nightberry"
 FPS = 60
-seconde=1000
-minute=60*seconde
+
 
 # -- Paramètres de Sauvegarde --
 NB_SLOTS_SAUVEGARDE = 3
@@ -82,11 +81,17 @@ COOLDOWN_ATTAQUE = 600
 PORTEE_ATTAQUE = 40
 DEGATS_JOUEUR = 1
 
+# -- Paramètres du Traqueur (IA à l'écoute des échos) --
+RAYON_AUDITION_TRAQUEUR = 400     # px : portée d'audition (supérieure à PORTEE_ECHO)
+DUREE_ALERTE_TRAQUEUR   = 10000    # ms : durée de la chasse avant retour en patrouille
+VITESSE_CHASSE_TRAQUEUR = 1.0     # px/tick en chasse
+FORCE_SAUT_TRAQUEUR     = 9       # vélocité initiale du saut (≈ 2 blocs de haut)
+
 # -- Paramètres de l'Ennemi --
 VITESSE_ENNEMI = 1.5
 PV_ENNEMI_BASE = 3
 ARGENT_PAR_ENNEMI = 10
-TEMPS_RESPAWN_ENNEMI = minute*3  # 3 minutes en ms
+TEMPS_RESPAWN_ENNEMI = 180000  # 3 minutes en ms
 
 # -- Paramètres des Capacités --
 DISTANCE_DASH = TAILLE_TUILE * 4
@@ -116,7 +121,7 @@ VITESSE_BURST_LOOT = 4.0           # Vélocité max initiale de dispersion
 REBOND_AMORTISSEMENT = 0.2         # Facteur de rebond sur murs/sol
 SEUIL_REPOS_LOOT = 0.5             # Vélocité sous laquelle l'orbe se pose
 DUREE_MAX_DISPERSION = 3000        # ms, force repos après ce délai
-DUREE_VIE_AME_LOOT = 60000         # ms, despawn après repos
+DUREE_VIE_AME_LOOT = 30000         # ms, despawn après repos
 
 # -- Clé --
 HAVE_KEY = False  # Variable globale, mise à True quand le joueur ramasse une clé
