@@ -4,6 +4,7 @@
 
 import socket
 import pickle
+import zlib
 
 
 def obtenir_ip_locale():
@@ -72,7 +73,7 @@ def recvall(sock, n):
 
 
 def recv_complet(sock):
-    """Reçoit un paquet complet : 4 octets taille + payload pickle."""
+    """Reçoit un paquet complet : 4 octets taille + payload pickle compressé zlib."""
     header = recvall(sock, 4)
     taille = int.from_bytes(header, 'big')
     if taille > 10_000_000:  # sécurité : max 10 MB
@@ -82,10 +83,10 @@ def recv_complet(sock):
             f"(bytes bruts: {header.hex()} / ASCII: '{ascii_repr}') "
             f"— probable proxy HTTP ou données corrompues"
         )
-    return pickle.loads(recvall(sock, taille))
+    return pickle.loads(zlib.decompress(recvall(sock, taille)))
 
 
 def send_complet(sock, obj):
-    """Envoie un objet pickle précédé de 4 octets de taille."""
-    data = pickle.dumps(obj)
+    """Envoie un objet pickle compressé zlib précédé de 4 octets de taille."""
+    data = zlib.compress(pickle.dumps(obj), 1)
     sock.sendall(len(data).to_bytes(4, 'big') + data)

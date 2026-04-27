@@ -623,7 +623,14 @@ class Serveur:
                 'id': e.id, 'x': float(e.rect.x), 'y': float(e.rect.y),
                 'flags': flags,
             })
-        return UDP_P.encoder_snapshot(t_serveur_ms, joueurs_struct, ennemis_struct)
+        boss_struct = None
+        if (self.boss_room and not self.boss_room.boss_defeated
+                and getattr(self.boss_room, 'boss', None) is not None):
+            boss_struct = {
+                'x': float(self.boss_room.boss.pos.x),
+                'y': float(self.boss_room.boss.pos.y),
+            }
+        return UDP_P.encoder_snapshot(t_serveur_ms, joueurs_struct, ennemis_struct, boss_struct)
 
     def _udp_diffuser_snapshot(self, t_serveur_ms: int):
         if not self.udp_conns_par_id:
@@ -821,10 +828,10 @@ class Serveur:
                                 mort = ennemi.prendre_degat(DEGATS_JOUEUR, temps_actuel)
                                 if mort:
                                     cx, cy = ennemi.rect.centerx, ennemi.rect.centery
-                                    for _ in range(ennemi.argent_drop):
-                                        ame = AmeLoot(cx, cy, valeur=1)
-                                        ame.temps_creation = temps_actuel
-                                        self.ames_loot[ame.id] = ame
+                                    ame = AmeLoot(cx, cy, valeur=ennemi.argent_drop)
+                                    ame.temps_creation = temps_actuel
+                                    ame.nb_visuels = ennemi.argent_drop
+                                    self.ames_loot[ame.id] = ame
                         for id_ame, ame in list(self.ames_perdues.items()):
                             if ame.id_joueur == id_joueur:
                                 if joueur.rect_attaque.colliderect(ame.rect):

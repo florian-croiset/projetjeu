@@ -131,7 +131,7 @@ RELAY_PORT = 7777
 # -- Couche UDP (netcode temps réel) --
 USE_UDP                    = True   # Flag maître : passe à False pour forcer le mode TCP historique.
 PORT_UDP                   = 5556   # Port UDP du serveur (à côté du 5555 TCP).
-TICK_RATE_SNAPSHOT_UDP     = 30     # Hz : envois de positions/vélocités non-fiables.
+TICK_RATE_SNAPSHOT_UDP     = 60     # Hz : envois de positions/vélocités non-fiables.
 TICK_RATE_ETAT_DISCRET_UDP = 10     # Hz : envois reliable de l'état discret (pickups, boss...).
 INTERP_DELAY_MS            = 100    # Rendu du joueur distant 100 ms dans le passé.
 UDP_HANDSHAKE_TIMEOUT_MS   = 3000   # Si pas de HANDSHAKE_ACK en 3 s → fallback TCP.
