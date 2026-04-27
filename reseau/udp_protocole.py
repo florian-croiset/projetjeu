@@ -90,8 +90,13 @@ _ENNEMI_FMT = '!HffB'
 _ENNEMI_TAILLE = struct.calcsize(_ENNEMI_FMT)
 
 
-def encoder_snapshot(t_serveur_ms: int, joueurs: list, ennemis: list) -> bytes:
-    """joueurs: liste de dict {id, x, y, vx, vy, flags}. ennemis idem sans vx/vy."""
+_BOSS_FMT = '!Bff'  # has_boss (uint8), x (float32), y (float32)
+_BOSS_TAILLE = struct.calcsize(_BOSS_FMT)
+
+
+def encoder_snapshot(t_serveur_ms: int, joueurs: list, ennemis: list, boss=None) -> bytes:
+    """joueurs: liste de dict {id, x, y, vx, vy, flags}. ennemis idem sans vx/vy.
+    boss: dict {x, y} ou None si défait/inexistant."""
     morceaux = [struct.pack('!IB', t_serveur_ms & 0xFFFFFFFF, len(joueurs))]
     for j in joueurs:
         morceaux.append(struct.pack(_JOUEUR_FMT,
@@ -103,6 +108,10 @@ def encoder_snapshot(t_serveur_ms: int, joueurs: list, ennemis: list) -> bytes:
         morceaux.append(struct.pack(_ENNEMI_FMT,
                                     e['id'], e['x'], e['y'],
                                     e.get('flags', 0)))
+    has_boss = 1 if boss else 0
+    bx = float(boss['x']) if boss else 0.0
+    by = float(boss['y']) if boss else 0.0
+    morceaux.append(struct.pack(_BOSS_FMT, has_boss, bx, by))
     return b''.join(morceaux)
 
 
@@ -122,7 +131,12 @@ def decoder_snapshot(payload: bytes) -> dict:
         eid, x, y, flags = struct.unpack_from(_ENNEMI_FMT, payload, off)
         off += _ENNEMI_TAILLE
         ennemis.append({'id': eid, 'x': x, 'y': y, 'flags': flags})
-    return {'t': t_serveur_ms, 'joueurs': joueurs, 'ennemis': ennemis}
+    boss = None
+    if off + _BOSS_TAILLE <= len(payload):
+        has_boss, bx, by = struct.unpack_from(_BOSS_FMT, payload, off)
+        if has_boss:
+            boss = {'x': bx, 'y': by}
+    return {'t': t_serveur_ms, 'joueurs': joueurs, 'ennemis': ennemis, 'boss': boss}
 
 
 # ---------------------------------------------------------------------------

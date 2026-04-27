@@ -299,9 +299,18 @@ class Joueur:
         }
 
     def set_etat(self, data):
-        """Mise à jour depuis le réseau."""
+        """Mise à jour depuis le réseau (joueurs distants : applique tout y compris position)."""
         self.rect.x = data['x']
         self.rect.y = data['y']
+        self._set_etat_attributs(data)
+
+    def set_etat_local(self, data):
+        """Mise à jour depuis le réseau pour le joueur local : ne touche pas à la position
+        (gérée par la simulation client, sinon le serveur — en retard de ~100 ms — la
+        ferait sauter en arrière 10 fois par seconde)."""
+        self._set_etat_attributs(data)
+
+    def _set_etat_attributs(self, data):
         self.direction = data.get('direction', 1)
         self.couleur = data['couleur']
         self.pv = data['pv']
@@ -322,7 +331,7 @@ class Joueur:
         else:
             self.est_en_attaque = False
             self.rect_attaque = None
-        
+
         # Rejouer les sons reçus du serveur (seulement pour MON joueur, géré dans client.py)
         self.sons_a_jouer = data.get('sons', [])
 

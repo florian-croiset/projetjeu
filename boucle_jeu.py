@@ -354,6 +354,7 @@ class BoucleJeuMixin:
             if camera_rect.colliderect(ame.rect):
                 ame.dessiner(surface_virtuelle, camera_offset, temps_ms)
         for ame in self.ames_loot_locales.values():
+            ame.mettre_a_jour_visuels(temps_ms, self.carte)
             if camera_rect.colliderect(ame.rect):
                 ame.dessiner(surface_virtuelle, camera_offset, temps_ms)
 
@@ -493,12 +494,18 @@ class BoucleJeuMixin:
             if dj['id'] not in self.joueurs_locaux:
                 self.joueurs_locaux[dj['id']] = Joueur(dj['x'], dj['y'], dj['id'])
             joueur = self.joueurs_locaux[dj['id']]
-            joueur.set_etat(dj)
-            # En mode TCP uniquement : alimenter le buffer d'interpolation des
-            # joueurs distants. En UDP, les snapshots 30 Hz s'en chargent et
-            # un double push ici casserait la monotonie du buffer.
+            # Pour le joueur local en TCP : ne pas écraser la position 10 Hz
+            # (sinon saccadement). On la passera par le buffer d'interpolation
+            # juste après pour avoir un mouvement fluide à 60 fps.
+            if not self.udp_actif and dj['id'] == self.mon_id:
+                joueur.set_etat_local(dj)
+            else:
+                joueur.set_etat(dj)
+            # En mode TCP : alimenter le buffer d'interpolation pour TOUS les
+            # joueurs (y compris le local) afin de lisser le mouvement entre
+            # deux paquets 10 Hz. En UDP, les snapshots 30 Hz s'en chargent
+            # et un double push ici casserait la monotonie du buffer.
             if (not self.udp_actif
-                    and dj['id'] != self.mon_id
                     and t_serveur is not None
                     and hasattr(joueur, 'pousser_snapshot_interp')):
                 joueur.pousser_snapshot_interp(t_serveur, dj['x'], dj['y'])
@@ -914,12 +921,21 @@ class BoucleJeuMixin:
             if hasattr(ennemi, 'pousser_snapshot_interp'):
                 ennemi.pousser_snapshot_interp(t_serveur, ed['x'], ed['y'])
 
+        # Boss : snap direct à 60 Hz (l'état discret 10 Hz fournit pv/state/flags)
+        boss_data = snap.get('boss')
+        if boss_data and self.boss_local is not None:
+            self.boss_local.pos.x = boss_data['x']
+            self.boss_local.pos.y = boss_data['y']
+
     def _mettre_a_jour_interpolations(self, now_ms: int):
         if self.udp_offset_serveur_ms is None:
             return
         t_render = now_ms + self.udp_offset_serveur_ms - INTERP_DELAY_MS
         for jid, joueur in self.joueurs_locaux.items():
-            if jid == self.mon_id:
+            # En UDP, le joueur local est snappé directement (cf. _appliquer_snapshot_udp)
+            # à 30 Hz : pas besoin d'interp (et son buffer est vide de toute façon).
+            # En TCP, on l'interpole comme les autres pour lisser les ticks 10 Hz.
+            if self.udp_actif and jid == self.mon_id:
                 continue
             if hasattr(joueur, 'mettre_a_jour_interp'):
                 joueur.mettre_a_jour_interp(t_render)
