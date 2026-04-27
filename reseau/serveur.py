@@ -116,8 +116,11 @@ class Serveur:
 
         self._ids_pool        = list(range(3))
         self.torche_allumee   = False
-        self.torche_x         = 32
-        self.torche_y         = 672
+        self.torche_x = 551
+        self.torche_y = 1025
+        self.torche_allumee = False
+        self._torche_vient_detre_allumee = False
+        self._torche_allumee_par = 0
         self.running          = True
         self._etat_broadcast  = None
         self._broadcast_lock  = threading.Lock()
@@ -294,6 +297,9 @@ class Serveur:
                         if commandes.get('toggle_torche'):
                             nouvelle_valeur = not self.torche_allumee
                             self.torche_allumee = nouvelle_valeur
+                            if nouvelle_valeur:
+                                self._torche_vient_detre_allumee = True
+                                self._torche_allumee_par = id_joueur
                             if nouvelle_valeur and id_joueur == 0 and id_joueur in self.joueurs:
                                 joueur_ckpt = self.joueurs[id_joueur]
                                 x_tuile = joueur_ckpt.rect.x // TAILLE_TUILE
@@ -492,6 +498,24 @@ class Serveur:
                 # (l'interaction est gérée dans thread_recv via commande 'interagir')
                 for pancarte in self.pancartes_lore.values():
                     pancarte.mettre_a_jour(temps_actuel)
+
+                # 2c. Révélation torche si elle vient d'être allumée
+                if self._torche_vient_detre_allumee:
+                    self._torche_vient_detre_allumee = False
+                    id_j = self._torche_allumee_par
+                    if id_j in self.cartes_visibilite:
+                        torche_cx = self.torche_x + TAILLE_TUILE // 2
+                        torche_cy = self.torche_y + TAILLE_TUILE
+                        buf = self.vis_delta_buffer.get(id_j, set())
+                        self.vis_delta_buffer[id_j] = buf
+                        self.carte_jeu.reveler_par_echo_partiel(
+                            torche_cx, torche_cy,
+                            RAYON_LUMIERE_TORCHE,
+                            self.cartes_visibilite[id_j],
+                            delta_set=buf
+                        )
+                        self.vis_map_dirty[id_j] = True
+                        print(f"[TORCHE] Zone révélée ({torche_cx}, {torche_cy})")
 
                 # 3. Clé : animation + collecte
                 if self.cle and not self.cle.est_ramassee:
