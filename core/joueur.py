@@ -77,6 +77,10 @@ class Joueur:
         self.dash_distance_restante = 0
         self.dash_debut_temps = 0
         
+        # Interpolation (utilisée côté client pour les joueurs distants en mode UDP)
+        # Buffer de snapshots récents (t_serveur_ms, x, y). Capé à 4.
+        self._interp_buffer = []
+
         # Commandes
         self.commandes = {'gauche': False, 'droite': False, 'saut': False, 'attaque': False, 'dash': False}
         self.saut_precedent = False
@@ -295,9 +299,18 @@ class Joueur:
         }
 
     def set_etat(self, data):
-        """Mise à jour depuis le réseau."""
+        """Mise à jour depuis le réseau (joueurs distants : applique tout y compris position)."""
         self.rect.x = data['x']
         self.rect.y = data['y']
+        self._set_etat_attributs(data)
+
+    def set_etat_local(self, data):
+        """Mise à jour depuis le réseau pour le joueur local : ne touche pas à la position
+        (gérée par la simulation client, sinon le serveur — en retard de ~100 ms — la
+        ferait sauter en arrière 10 fois par seconde)."""
+        self._set_etat_attributs(data)
+
+    def _set_etat_attributs(self, data):
         self.direction = data.get('direction', 1)
         self.couleur = data['couleur']
         self.pv = data['pv']
@@ -318,6 +331,49 @@ class Joueur:
         else:
             self.est_en_attaque = False
             self.rect_attaque = None
-        
+
         # Rejouer les sons reçus du serveur (seulement pour MON joueur, géré dans client.py)
         self.sons_a_jouer = data.get('sons', [])
+
+    # ------------------------------------------------------------------
+    #  INTERPOLATION (client UDP, joueurs distants uniquement)
+    # ------------------------------------------------------------------
+
+    def pousser_snapshot_interp(self, t_serveur_ms: int, x: float, y: float):
+        buf = self._interp_buffer
+        buf.append((t_serveur_ms, x, y))
+        if len(buf) > 4:
+            del buf[0]
+
+    def mettre_a_jour_interp(self, t_render_serveur_ms: int):
+        """Applique rect.x/y par interpolation linéaire entre les deux snapshots encadrant t_render."""
+        buf = self._interp_buffer
+        if not buf:
+            return
+        if len(buf) == 1:
+            self.rect.x = int(buf[0][1])
+            self.rect.y = int(buf[0][2])
+            return
+        # Cherche les deux snapshots encadrant t_render.
+        avant = buf[0]
+        apres = buf[-1]
+        for i in range(len(buf) - 1):
+            if buf[i][0] <= t_render_serveur_ms <= buf[i + 1][0]:
+                avant = buf[i]
+                apres = buf[i + 1]
+                break
+        else:
+            # t_render hors plage : on prend le plus proche (snap).
+            if t_render_serveur_ms < buf[0][0]:
+                self.rect.x = int(buf[0][1]); self.rect.y = int(buf[0][2])
+            else:
+                self.rect.x = int(buf[-1][1]); self.rect.y = int(buf[-1][2])
+            return
+        dt = apres[0] - avant[0]
+        if dt <= 0:
+            self.rect.x = int(apres[1]); self.rect.y = int(apres[2])
+            return
+        alpha = (t_render_serveur_ms - avant[0]) / dt
+        alpha = max(0.0, min(1.0, alpha))
+        self.rect.x = int(avant[1] + (apres[1] - avant[1]) * alpha)
+        self.rect.y = int(avant[2] + (apres[2] - avant[2]) * alpha)

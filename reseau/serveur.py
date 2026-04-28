@@ -7,6 +7,7 @@ import threading
 import pickle
 import time
 import sys
+import secrets
 import pygame
 
 from core.joueur import Joueur
@@ -24,6 +25,9 @@ from core.porte import Porte
 from core.orbe_capacite import OrbeCapacite
 from core.pancarte_lore import PancarteLore   # NOUVEAU
 from reseau.protocole import obtenir_ip_locale, obtenir_ip_vpn, recvall, recv_complet, send_complet
+from reseau import udp_protocole as UDP_P
+from reseau.udp_endpoint import UdpEndpoint
+from reseau.udp_connexion import ConnexionUDP, _pickle_charger_securise
 
 
 class Serveur:
@@ -128,6 +132,28 @@ class Serveur:
         self.relay_host       = relay_host
         self.relay_port       = relay_port
 
+        # ===== UDP =====
+        self.udp_endpoint        = None
+        self.udp_conns_par_id    = {}    # id_joueur -> ConnexionUDP
+        self.udp_addr_vers_id    = {}    # (ip, port) -> id_joueur
+        self.udp_tokens          = {}    # token -> (id_joueur, deadline_ms) handshakes en attente
+        self.udp_active_par_id   = {}    # id_joueur -> bool
+        self._udp_sons_a_envoyer = []    # liste de (id_joueur_cible, nom_son) pour EVENT_SON
+        self._udp_dernier_snapshot_ms = 0
+        self._udp_dernier_etat_discret_ms = 0
+        # Rate-limit handshake : ip -> [ts, ts, ...] (ms) des tentatives récentes.
+        self._udp_tentatives_par_ip = {}
+        self.UDP_MAX_HANDSHAKE_PAR_IP = 10      # bursts courts autorisés
+        self.UDP_FENETRE_HANDSHAKE_MS = 10_000  # sur une fenêtre glissante de 10 s
+        self.UDP_TOKEN_TTL_MS         = 30_000  # 30 s pour utiliser un token
+        if USE_UDP:
+            try:
+                self.udp_endpoint = UdpEndpoint(bind_host="0.0.0.0", bind_port=PORT_UDP)
+                print(f"[SERVEUR] UDP en écoute sur le port {self.udp_endpoint.bind_port}")
+            except OSError as exc:
+                print(f"[SERVEUR] Impossible d'ouvrir UDP sur {PORT_UDP}: {exc}")
+                self.udp_endpoint = None
+
     # ------------------------------------------------------------------
     #  CREATION DES ENTITES
     # ------------------------------------------------------------------
@@ -231,10 +257,25 @@ class Serveur:
         self.vis_delta_buffer[id_joueur] = set()
         self.vis_needs_full[id_joueur] = True
 
-        print(f"[SERVEUR] Envoi handshake (ID={id_joueur}) au client {connexion_client.getpeername()}...")
-        send_complet(connexion_client, id_joueur)
+        # Handshake : on envoie toujours un dict, même en mode TCP pur, pour simplifier le client.
+        udp_token = None
+        if USE_UDP and self.udp_endpoint is not None:
+            # 32 octets hex = 128 bits d'entropie : effectivement impossible à deviner.
+            udp_token = secrets.token_hex(32)
+            deadline = int(time.monotonic() * 1000) + self.UDP_TOKEN_TTL_MS
+            with self.lock:
+                self.udp_tokens[udp_token] = (id_joueur, deadline)
+
+        handshake = {
+            'id': id_joueur,
+            'udp_token': udp_token,
+            'udp_port': self.udp_endpoint.bind_port if self.udp_endpoint else None,
+        }
+        print(f"[SERVEUR] Envoi handshake (ID={id_joueur}, udp={'oui' if udp_token else 'non'}) au client {connexion_client.getpeername()}...")
+        send_complet(connexion_client, handshake)
         print(f"[SERVEUR] Handshake envoyé, démarrage boucle de jeu pour joueur {id_joueur}")
-        connexion_client.settimeout(10.0)
+        # En mode UDP, le client se contente d'envoyer un keepalive TCP rare : on relâche le timeout.
+        connexion_client.settimeout(60.0 if USE_UDP and self.udp_endpoint else 10.0)
         connexion_client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
         client_actif = [True]
@@ -250,7 +291,12 @@ class Serveur:
                     with self.lock:
                         if id_joueur not in self.joueurs:
                             break
-                        self.joueurs[id_joueur].commandes = commandes['clavier']
+                        # En mode UDP, le client envoie juste un keepalive TCP
+                        # (dict sans 'clavier'). On ignore silencieusement.
+                        if not isinstance(commandes, dict):
+                            continue
+                        if 'clavier' in commandes:
+                            self.joueurs[id_joueur].commandes = commandes['clavier']
 
                         if commandes.get('echo'):
                             t_echo = pygame.time.get_ticks()
@@ -341,6 +387,13 @@ class Serveur:
                 while self.running and client_actif[0]:
                     debut = time.time()
 
+                    # En mode UDP, la diffusion se fait dans la boucle principale.
+                    # On laisse quand même tourner ce thread pour pouvoir basculer
+                    # en fallback si le client ne finalise jamais le handshake UDP.
+                    if self.udp_active_par_id.get(id_joueur):
+                        time.sleep(0.1)
+                        continue
+
                     with self._broadcast_lock:
                         etat_commun = self._etat_broadcast
 
@@ -390,6 +443,13 @@ class Serveur:
             connexion_client.close()
         except Exception:
             pass
+        # Nettoyage UDP associé
+        self._udp_fermer_connexion(id_joueur)
+        self.udp_active_par_id.pop(id_joueur, None)
+        # Purge les tokens éventuellement orphelins
+        for tok, ij in list(self.udp_tokens.items()):
+            if ij == id_joueur:
+                self.udp_tokens.pop(tok, None)
         with self.lock:
             if connexion_client in self.clients:
                 del self.clients[connexion_client]
@@ -408,6 +468,223 @@ class Serveur:
                     self._ids_pool.sort()
 
     # ------------------------------------------------------------------
+    #  UDP — pompage, dispatch, broadcast
+    # ------------------------------------------------------------------
+
+    def _udp_appliquer_event_client(self, id_joueur: int, type_: int, payload):
+        """Applique un événement reçu en UDP (continus ou one-shot)."""
+        if id_joueur not in self.joueurs:
+            return
+        joueur = self.joueurs[id_joueur]
+        if type_ == UDP_P.TYPE_INPUTS_CONTINUS:
+            if isinstance(payload, dict):
+                joueur.commandes = payload
+        elif type_ == UDP_P.TYPE_INPUT_ONESHOT:
+            if not isinstance(payload, dict):
+                return
+            t_now = pygame.time.get_ticks()
+            if payload.get('echo'):
+                if t_now - joueur.dernier_echo_temps > COOLDOWN_ECHO:
+                    joueur.dernier_echo_temps = t_now
+                    self.echos_en_cours.append({
+                        'id_joueur': id_joueur,
+                        'cx': joueur.rect.centerx, 'cy': joueur.rect.centery,
+                        'debut': t_now, 'rayon_precedent': 0,
+                        'type': 'normal', 'portee_max': PORTEE_ECHO,
+                    })
+            if payload.get('echo_dir'):
+                if (joueur.peut_echo_dir and
+                        t_now - joueur.dernier_echo_dir_temps > COOLDOWN_ECHO_DIR):
+                    joueur.dernier_echo_dir_temps = t_now
+                    self.echos_en_cours.append({
+                        'id_joueur': id_joueur,
+                        'cx': joueur.rect.centerx, 'cy': joueur.rect.centery,
+                        'debut': t_now, 'rayon_precedent': 0,
+                        'type': 'dir', 'portee_max': PORTEE_ECHO_DIR,
+                        'direction': joueur.direction,
+                    })
+            if payload.get('toggle_torche'):
+                self.torche_allumee = not self.torche_allumee
+            if payload.get('interagir'):
+                for pancarte in self.pancartes_lore.values():
+                    dx = joueur.rect.centerx - pancarte.rect.centerx
+                    dy = joueur.rect.centery - pancarte.rect.centery
+                    if (dx*dx + dy*dy) ** 0.5 <= PancarteLore.PORTEE_INTERACTION:
+                        if not pancarte.est_debloquee:
+                            pancarte.tenter_paiement(joueur)
+                        break
+
+    def _udp_ip_autorisee(self, ip: str, now_ms: int) -> bool:
+        """Rate-limit des tentatives de handshake par IP (anti-spam / anti-DoS)."""
+        entrees = self._udp_tentatives_par_ip.setdefault(ip, [])
+        horizon = now_ms - self.UDP_FENETRE_HANDSHAKE_MS
+        # Supprime les entrées trop anciennes (amortisseur O(n) bornée)
+        while entrees and entrees[0] < horizon:
+            entrees.pop(0)
+        if len(entrees) >= self.UDP_MAX_HANDSHAKE_PAR_IP:
+            return False
+        entrees.append(now_ms)
+        return True
+
+    def _udp_pomper(self):
+        if self.udp_endpoint is None:
+            return
+        paquets = self.udp_endpoint.pomper()
+        now_ms = int(time.monotonic() * 1000)
+
+        # Expire les tokens périmés.
+        if self.udp_tokens:
+            with self.lock:
+                for tok, (ij, deadline) in list(self.udp_tokens.items()):
+                    if now_ms >= deadline:
+                        del self.udp_tokens[tok]
+
+        for data, addr in paquets:
+            # Refuse trivialement les paquets suspects.
+            if len(data) < UDP_P.HEADER_TAILLE or len(data) > 65535:
+                continue
+            try:
+                seq, ack, ack_bits, canal, type_, payload = UDP_P.decoder_header(data)
+            except ValueError:
+                continue
+
+            id_joueur = self.udp_addr_vers_id.get(addr)
+            if id_joueur is None:
+                # Nouveau pair : on accepte uniquement HANDSHAKE_UDP avec un token valide.
+                if canal != UDP_P.CANAL_CONTROL or type_ != UDP_P.TYPE_HANDSHAKE_UDP:
+                    continue
+                # Rate-limit : coupe court aux floods d'IP inconnues.
+                ip_source = addr[0] if isinstance(addr, tuple) else str(addr)
+                if not self._udp_ip_autorisee(ip_source, now_ms):
+                    continue
+                # Taille de payload très bornée (un dict avec un token hex de 64 chars).
+                if not payload or len(payload) > 512:
+                    continue
+                try:
+                    payload_obj = _pickle_charger_securise(payload)
+                except Exception:
+                    continue
+                if not isinstance(payload_obj, dict):
+                    continue
+                token = payload_obj.get('token')
+                if not isinstance(token, str) or len(token) != 64:
+                    continue
+                with self.lock:
+                    entree = self.udp_tokens.pop(token, None)
+                if entree is None:
+                    continue
+                id_attendu, _deadline = entree
+                conn = ConnexionUDP(self.udp_endpoint, addr,
+                                    heartbeat_ms=UDP_HEARTBEAT_INTERVAL_MS,
+                                    timeout_ms=UDP_CONNECTION_TIMEOUT_MS)
+                conn.id_joueur = id_attendu
+                self.udp_conns_par_id[id_attendu] = conn
+                self.udp_addr_vers_id[addr] = id_attendu
+                self.udp_active_par_id[id_attendu] = True
+                conn.traiter_paquet_brut(data)   # applique ACK mutuel
+                conn.envoyer_control(UDP_P.TYPE_HANDSHAKE_ACK, {'id': id_attendu})
+                print(f"[SERVEUR] UDP handshake validé pour joueur {id_attendu} depuis {addr}")
+                continue
+
+            conn = self.udp_conns_par_id.get(id_joueur)
+            if conn is None:
+                continue
+            conn.traiter_paquet_brut(data)
+
+        # Drain et applique les événements par connexion
+        for id_joueur, conn in list(self.udp_conns_par_id.items()):
+            for canal, type_, payload in conn.drainer_recus():
+                if canal == UDP_P.CANAL_UNRELIABLE or canal == UDP_P.CANAL_RELIABLE:
+                    self._udp_appliquer_event_client(id_joueur, type_, payload)
+                # CONTROL (heartbeat etc.) : rien de plus à faire.
+
+    def _udp_tick(self, now_ms: int):
+        """Retransmissions + heartbeat + détection des connexions mortes."""
+        if self.udp_endpoint is None:
+            return
+        for id_joueur, conn in list(self.udp_conns_par_id.items()):
+            conn.tick(now_ms)
+            if not conn.actif:
+                print(f"[SERVEUR] Connexion UDP joueur {id_joueur} expirée (timeout)")
+                self._udp_fermer_connexion(id_joueur)
+
+    def _udp_fermer_connexion(self, id_joueur: int):
+        conn = self.udp_conns_par_id.pop(id_joueur, None)
+        if conn is not None:
+            addr = conn.addr_pair
+            self.udp_addr_vers_id.pop(addr, None)
+        self.udp_active_par_id[id_joueur] = False
+
+    def _udp_construire_snapshot(self, t_serveur_ms: int) -> bytes:
+        joueurs_struct = []
+        for j in self.joueurs.values():
+            flags = 0
+            if j.est_en_dash:
+                flags |= UDP_P.JFLAG_EN_DASH
+            if j.est_en_attaque:
+                flags |= UDP_P.JFLAG_EN_ATTAQUE
+            if j.pv <= 0:
+                flags |= UDP_P.JFLAG_EST_MORT
+            if j.direction > 0:
+                flags |= UDP_P.JFLAG_DIRECTION_DROITE
+            joueurs_struct.append({
+                'id': j.id, 'x': float(j.rect.x), 'y': float(j.rect.y),
+                'vx': 0.0, 'vy': float(j.vel_y), 'flags': flags,
+            })
+        ennemis_struct = []
+        for e in self.ennemis.values():
+            flags = 0
+            if e.est_mort:
+                flags |= UDP_P.EFLAG_EST_MORT
+            if getattr(e, 'clignotement', False):
+                flags |= UDP_P.EFLAG_CLIGNOTE
+            ennemis_struct.append({
+                'id': e.id, 'x': float(e.rect.x), 'y': float(e.rect.y),
+                'flags': flags,
+            })
+        boss_struct = None
+        if (self.boss_room and not self.boss_room.boss_defeated
+                and getattr(self.boss_room, 'boss', None) is not None):
+            boss_struct = {
+                'x': float(self.boss_room.boss.pos.x),
+                'y': float(self.boss_room.boss.pos.y),
+            }
+        return UDP_P.encoder_snapshot(t_serveur_ms, joueurs_struct, ennemis_struct, boss_struct)
+
+    def _udp_diffuser_snapshot(self, t_serveur_ms: int):
+        if not self.udp_conns_par_id:
+            return
+        body = self._udp_construire_snapshot(t_serveur_ms)
+        for conn in self.udp_conns_par_id.values():
+            conn.envoyer_unreliable(UDP_P.TYPE_SNAPSHOT, body)
+
+    def _udp_diffuser_etat_discret(self, etat_commun: dict):
+        """Envoie l'état complet (hors positions) en reliable. Un seul paquet en vol
+        par client grâce à la clé 'etat_discret'."""
+        if not self.udp_conns_par_id:
+            return
+        for id_joueur, conn in self.udp_conns_par_id.items():
+            # Ajouter les vis_map / vis_delta dédiés à ce joueur (comme dans thread_send).
+            with self.lock:
+                vis_delta = None
+                vis_full = None
+                needs_full = self.vis_needs_full.get(id_joueur, False)
+                if needs_full:
+                    vis_actuelle = self.cartes_visibilite.get(id_joueur)
+                    if vis_actuelle is not None:
+                        vis_full = [row[:] for row in vis_actuelle]
+                    self.vis_needs_full[id_joueur] = False
+                    self.vis_delta_buffer[id_joueur].clear()
+                    self.vis_map_dirty[id_joueur] = False
+                elif self.vis_map_dirty.get(id_joueur):
+                    buf = self.vis_delta_buffer.get(id_joueur)
+                    vis_delta = list(buf)
+                    buf.clear()
+                    self.vis_map_dirty[id_joueur] = False
+            payload = {**etat_commun, 'vis_map': vis_full, 'vis_delta': vis_delta}
+            conn.envoyer_reliable(UDP_P.TYPE_ETAT_DISCRET, payload, cle_latest='etat_discret')
+
+    # ------------------------------------------------------------------
     #  BOUCLE JEU SERVEUR
     # ------------------------------------------------------------------
 
@@ -415,6 +692,10 @@ class Serveur:
         horloge = pygame.time.Clock()
         while self.running:
             temps_actuel = pygame.time.get_ticks()
+            now_monotonic_ms = int(time.monotonic() * 1000)
+
+            # --- UDP : pompage des entrées + application ---
+            self._udp_pomper()
 
             with self.lock:
                 # 0. Révélation progressive des échos
@@ -597,10 +878,10 @@ class Serveur:
                                 mort = ennemi.prendre_degat(DEGATS_JOUEUR, temps_actuel)
                                 if mort:
                                     cx, cy = ennemi.rect.centerx, ennemi.rect.centery
-                                    for _ in range(ennemi.argent_drop):
-                                        ame = AmeLoot(cx, cy, valeur=1)
-                                        ame.temps_creation = temps_actuel
-                                        self.ames_loot[ame.id] = ame
+                                    ame = AmeLoot(cx, cy, valeur=ennemi.argent_drop)
+                                    ame.temps_creation = temps_actuel
+                                    ame.nb_visuels = ennemi.argent_drop
+                                    self.ames_loot[ame.id] = ame
                         for id_ame, ame in list(self.ames_perdues.items()):
                             if ame.id_joueur == id_joueur:
                                 if joueur.rect_attaque.colliderect(ame.rect):
@@ -657,6 +938,7 @@ class Serveur:
                 self._dernier_broadcast = temps_actuel
                 with self.lock:
                     etat_commun = {
+                        't':              temps_actuel,
                         'joueurs':        [j.get_etat() for j in self.joueurs.values()],
                         'ennemis':        [e.get_etat() for e in self.ennemis.values()],
                         'ames_perdues':   [a.get_etat() for a in self.ames_perdues.values()],
@@ -671,6 +953,22 @@ class Serveur:
                     }
                 with self._broadcast_lock:
                     self._etat_broadcast = etat_commun
+
+                # --- UDP : diffusion état discret (reliable, 10 Hz) ---
+                if self.udp_endpoint is not None and self.udp_conns_par_id:
+                    if temps_actuel - self._udp_dernier_etat_discret_ms >= 1000 / TICK_RATE_ETAT_DISCRET_UDP:
+                        self._udp_dernier_etat_discret_ms = temps_actuel
+                        self._udp_diffuser_etat_discret(etat_commun)
+
+            # --- UDP : diffusion snapshot positions (unreliable, 30 Hz) ---
+            if self.udp_endpoint is not None and self.udp_conns_par_id:
+                if temps_actuel - self._udp_dernier_snapshot_ms >= 1000 / TICK_RATE_SNAPSHOT_UDP:
+                    self._udp_dernier_snapshot_ms = temps_actuel
+                    with self.lock:
+                        self._udp_diffuser_snapshot(temps_actuel)
+
+            # --- UDP : retransmissions + heartbeat ---
+            self._udp_tick(now_monotonic_ms)
 
             horloge.tick(FPS)
 

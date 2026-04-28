@@ -385,6 +385,8 @@ class Carte:
         La marge (par défaut TAILLE_TUILE*2) compense le déplacement entre la
         requête et les vérifications de collision après mouvement.
         """
+        if not hasattr(self, '_grille_collision'):
+            self.construire_grille_collision()
         if marge is None:
             marge = TAILLE_TUILE * 2
         cs = self._CELL_SIZE

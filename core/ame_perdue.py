@@ -48,7 +48,7 @@ class AmePerdue:
         global SPRITE_CRISTAL_PERDU
         if SPRITE_CRISTAL_PERDU is None:
             SPRITE_CRISTAL_PERDU = _charger_sprite_cristal_perdu()
-        self.sprite = SPRITE_CRISTAL_PERDU
+        self.sprite = SPRITE_CRISTAL_PERDU.copy() if SPRITE_CRISTAL_PERDU else None
 
     def get_etat(self):
         """Pour l'envoi réseau."""
@@ -88,10 +88,9 @@ class AmePerdue:
 
         if self.sprite:
             alpha = int(160 + 95 * pulse)
-            spr = self.sprite.copy()
-            spr.set_alpha(alpha)
-            r_spr = spr.get_rect(center=(cx, cy))
-            surface.blit(spr, r_spr)
+            self.sprite.set_alpha(alpha)
+            r_spr = self.sprite.get_rect(center=(cx, cy))
+            surface.blit(self.sprite, r_spr)
         else:
             rect_visuel = pygame.Rect(cx - 8, cy - 12, 16, 24)
             pygame.draw.ellipse(surface, self.couleur, rect_visuel)

@@ -133,6 +133,16 @@ PORT_SERVEUR = 5555
 RELAY_HOST = ""         # Vide = relay désactivé. Ex: "relay.example.com" ou "1.2.3.4"
 RELAY_PORT = 7777
 
+# -- Couche UDP (netcode temps réel) --
+USE_UDP                    = True   # Flag maître : passe à False pour forcer le mode TCP historique.
+PORT_UDP                   = 5556   # Port UDP du serveur (à côté du 5555 TCP).
+TICK_RATE_SNAPSHOT_UDP     = 60     # Hz : envois de positions/vélocités non-fiables.
+TICK_RATE_ETAT_DISCRET_UDP = 10     # Hz : envois reliable de l'état discret (pickups, boss...).
+INTERP_DELAY_MS            = 100    # Rendu du joueur distant 100 ms dans le passé.
+UDP_HANDSHAKE_TIMEOUT_MS   = 3000   # Si pas de HANDSHAKE_ACK en 3 s → fallback TCP.
+UDP_HEARTBEAT_INTERVAL_MS  = 1000
+UDP_CONNECTION_TIMEOUT_MS  = 5000
+
 # -- Paramètres de la Caméra --
 ZOOM_CAMERA = 2.5
 
@@ -189,5 +199,5 @@ HALOS_MENU = False  # Passer à False pour désactiver les halos animés des men
 FOND_MENU = False  # Passer à False pour un fond noir uni
 REVELATION = False
 ASSOMBRISSEMENT = True  # False = tout illuminé sans halo | True = obscurité avec halo autour du joueur
-TICK_RATE_RESEAU = 60  # envois réseau par seconde (vs 60 pour la physique)
+TICK_RATE_RESEAU = 30  # envois réseau par seconde (vs 60 pour la physique)
 

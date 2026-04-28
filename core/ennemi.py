@@ -90,6 +90,9 @@ class Ennemi:
         self.est_mort   = False
         self.temps_mort = None
 
+        # Interpolation (client UDP)
+        self._interp_buffer = []
+
     # ------------------------------------------------------------------
     #  LOGIQUE SERVEUR
     # ------------------------------------------------------------------
@@ -270,6 +273,40 @@ class Ennemi:
         self.clignotement     = data.get('clignotement', False)
         self.flash_echo_temps = data.get('flash_echo_temps', 0)
         self.sons_a_jouer     = data.get('sons', [])
+
+    # ------------------------------------------------------------------
+    #  INTERPOLATION (client UDP)
+    # ------------------------------------------------------------------
+
+    def pousser_snapshot_interp(self, t_serveur_ms: int, x: float, y: float):
+        buf = self._interp_buffer
+        buf.append((t_serveur_ms, x, y))
+        if len(buf) > 4:
+            del buf[0]
+
+    def mettre_a_jour_interp(self, t_render_serveur_ms: int):
+        buf = self._interp_buffer
+        if not buf:
+            return
+        if len(buf) == 1:
+            self.rect.x = int(buf[0][1]); self.rect.y = int(buf[0][2])
+            return
+        avant = buf[0]; apres = buf[-1]
+        for i in range(len(buf) - 1):
+            if buf[i][0] <= t_render_serveur_ms <= buf[i + 1][0]:
+                avant = buf[i]; apres = buf[i + 1]
+                break
+        else:
+            cible = buf[0] if t_render_serveur_ms < buf[0][0] else buf[-1]
+            self.rect.x = int(cible[1]); self.rect.y = int(cible[2])
+            return
+        dt = apres[0] - avant[0]
+        if dt <= 0:
+            self.rect.x = int(apres[1]); self.rect.y = int(apres[2])
+            return
+        alpha = max(0.0, min(1.0, (t_render_serveur_ms - avant[0]) / dt))
+        self.rect.x = int(avant[1] + (apres[1] - avant[1]) * alpha)
+        self.rect.y = int(avant[2] + (apres[2] - avant[2]) * alpha)
 
 
 # -----------------------------------------------------------------------

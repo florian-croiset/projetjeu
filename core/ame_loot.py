@@ -70,7 +70,13 @@ class AmeLoot:
         global SPRITE_LOOT
         if SPRITE_LOOT is None:
             SPRITE_LOOT = _charger_sprite_loot()
-        self.sprite = SPRITE_LOOT
+        self.sprite = SPRITE_LOOT.copy() if SPRITE_LOOT else None
+
+        # Mode visuel groupé (côté client uniquement) : N sous-âmes décoratives
+        # générées avec une RNG seedée par l'id réseau (cohérence multi-clients).
+        self.nb_visuels = 0
+        self.visuels = []
+        self._id_reseau = None
 
     # ------------------------------------------------------------------
     #  LOGIQUE (appelée par le serveur chaque frame)
@@ -146,11 +152,12 @@ class AmeLoot:
     def get_etat(self):
         """Sérialisation pour envoi au(x) client(s)."""
         return {
-            'id':     self.id,
-            'x':      self.rect.centerx,
-            'y':      self.rect.centery,
-            'valeur': self.valeur,
-            'phase':  self.phase,
+            'id':         self.id,
+            'x':          self.rect.centerx,
+            'y':          self.rect.centery,
+            'valeur':     self.valeur,
+            'phase':      self.phase,
+            'nb_visuels': getattr(self, 'nb_visuels', 0),
         }
 
     def set_etat(self, data):
@@ -159,34 +166,136 @@ class AmeLoot:
         self.rect.centery = data['y']
         self.valeur = data.get('valeur', 1)
         self.phase = data.get('phase', 'repos')
+        nb_visuels = data.get('nb_visuels', 0)
+        if nb_visuels > 1 and not self.visuels:
+            self._creer_visuels(data['id'], nb_visuels)
+
+    def _creer_visuels(self, id_reseau, nb_visuels):
+        """Génère N sous-âmes visuelles avec une RNG seedée par id_reseau,
+        afin que tous les clients voient la même gerbe."""
+        self.nb_visuels = nb_visuels
+        self._id_reseau = id_reseau
+        rng = random.Random(id_reseau)
+        cx = float(self.rect.centerx)
+        cy = float(self.rect.centery)
+        for _ in range(nb_visuels):
+            self.visuels.append({
+                'x':          cx,
+                'y':          cy,
+                'vx':         rng.uniform(-VITESSE_BURST_LOOT, VITESSE_BURST_LOOT),
+                'vy':         rng.uniform(-VITESSE_BURST_LOOT, -VITESSE_BURST_LOOT * 0.3),
+                'phase':      'dispersion',
+                't_repos':    None,
+                'phase_anim': rng.uniform(0, 2 * math.pi),
+                'x_base':     cx,
+                'y_base':     cy,
+            })
+
+    def mettre_a_jour_visuels(self, temps_ms, carte=None):
+        """Côté client : physique des sous-âmes décoratives avec collisions
+        de la carte locale (sinon elles tombent dans le vide)."""
+        if not self.visuels:
+            return
+        if not self.temps_creation:
+            self.temps_creation = temps_ms
+
+        # Hitbox temporaire réutilisée pour les tests de collision
+        if not hasattr(self, '_v_rect'):
+            self._v_rect = pygame.Rect(0, 0, 6, 6)
+        hb = self._v_rect
+
+        for v in self.visuels:
+            if v['phase'] == 'dispersion':
+                v['vy'] += GRAVITE
+                if v['vy'] > 10:
+                    v['vy'] = 10
+
+                rects = []
+                if carte is not None:
+                    hb.center = (int(v['x']), int(v['y']))
+                    rects = carte.get_rects_proches(hb)
+
+                # Mouvement X + collision
+                v['x'] += v['vx']
+                hb.center = (int(v['x']), int(v['y']))
+                for mur in rects:
+                    if hb.colliderect(mur):
+                        if v['vx'] > 0:
+                            v['x'] = mur.left - hb.width / 2
+                        elif v['vx'] < 0:
+                            v['x'] = mur.right + hb.width / 2
+                        v['vx'] *= -REBOND_AMORTISSEMENT
+                        hb.center = (int(v['x']), int(v['y']))
+
+                # Mouvement Y + collision
+                sur_le_sol = False
+                v['y'] += v['vy']
+                hb.center = (int(v['x']), int(v['y']))
+                for mur in rects:
+                    if hb.colliderect(mur):
+                        if v['vy'] > 0:
+                            v['y'] = mur.top - hb.height / 2
+                            sur_le_sol = True
+                            v['vx'] *= 0.5
+                        elif v['vy'] < 0:
+                            v['y'] = mur.bottom + hb.height / 2
+                        v['vy'] *= -REBOND_AMORTISSEMENT
+                        hb.center = (int(v['x']), int(v['y']))
+
+                v['vx'] *= 0.99
+                vitesse = abs(v['vx']) + abs(v['vy'])
+                t_ecoule = temps_ms - self.temps_creation
+                if (vitesse < SEUIL_REPOS_LOOT and sur_le_sol) or t_ecoule > DUREE_MAX_DISPERSION:
+                    v['phase'] = 'repos'
+                    v['t_repos'] = temps_ms
+                    v['x_base'] = v['x']
+                    v['y_base'] = v['y']
+                    v['vx'] = 0
+                    v['vy'] = 0
+            else:
+                offset_y = math.sin(temps_ms / 900 + v['phase_anim']) * 3.0
+                v['y'] = v['y_base'] + offset_y
 
     # ------------------------------------------------------------------
     #  RENDU (appelé par le client)
     # ------------------------------------------------------------------
 
     def dessiner(self, surface, camera_offset=(0, 0), temps_ms=0):
-        """Dessine l'orbe avec halo pulsant + sprite."""
+        """Dessine l'orbe avec halo pulsant + sprite. En mode groupé,
+        dessine les N sous-âmes au lieu de l'âme principale."""
         off_x, off_y = camera_offset
-        cx = self.rect.centerx - off_x
-        cy = self.rect.centery - off_y
-
-        pulse = 0.7 + 0.3 * math.sin(temps_ms / 600 + self.phase_anim)
         r, g, b = self.couleur
 
-        # Halo (plus petit que AmeLibre)
-        halo_surf = pygame.Surface((40, 40), pygame.SRCALPHA)
+        if not hasattr(self, '_halo_surf'):
+            self._halo_surf = pygame.Surface((40, 40), pygame.SRCALPHA)
+
+        if self.visuels:
+            for v in self.visuels:
+                self._dessiner_un(surface, off_x, off_y,
+                                  int(v['x']), int(v['y']),
+                                  v['phase_anim'], temps_ms, r, g, b)
+        else:
+            self._dessiner_un(surface, off_x, off_y,
+                              self.rect.centerx, self.rect.centery,
+                              self.phase_anim, temps_ms, r, g, b)
+
+    def _dessiner_un(self, surface, off_x, off_y, x_world, y_world,
+                     phase_anim, temps_ms, r, g, b):
+        cx = x_world - off_x
+        cy = y_world - off_y
+        pulse = 0.7 + 0.3 * math.sin(temps_ms / 600 + phase_anim)
+
+        self._halo_surf.fill((0, 0, 0, 0))
         for rayon, alpha_base in [(18, 15), (13, 30), (8, 50)]:
             a = int(alpha_base * pulse)
-            pygame.draw.ellipse(halo_surf, (r, g, b, a),
+            pygame.draw.ellipse(self._halo_surf, (r, g, b, a),
                                 pygame.Rect(20 - rayon, 20 - rayon, rayon * 2, rayon * 2))
-        surface.blit(halo_surf, (cx - 20, cy - 20))
+        surface.blit(self._halo_surf, (cx - 20, cy - 20))
 
         if self.sprite:
             alpha = int(180 + 75 * pulse)
-            spr = self.sprite.copy()
-            spr.set_alpha(alpha)
-            r_spr = spr.get_rect(center=(cx, cy))
-            surface.blit(spr, r_spr)
+            self.sprite.set_alpha(alpha)
+            r_spr = self.sprite.get_rect(center=(cx, cy))
+            surface.blit(self.sprite, r_spr)
         else:
-            # Fallback : petit cercle
             pygame.draw.circle(surface, self.couleur, (cx, cy), 5)
