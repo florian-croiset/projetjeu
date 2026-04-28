@@ -125,7 +125,7 @@ class HudMixin:
 
         dernier_echo = getattr(joueur, 'dernier_echo_temps', 0)
         elapsed      = temps_actuel - dernier_echo
-        ratio        = min(1.0, elapsed / COOLDOWN_ECHO)  # 0=juste utilisé, 1=prêt
+        ratio        = max(0.0, min(1.0, elapsed / COOLDOWN_ECHO))  # 0=juste utilisé, 1=prêt
         pret         = ratio >= 1.0
 
         # ---- Fond du widget (panneau semi-transparent) ----
@@ -190,7 +190,7 @@ class HudMixin:
             etat_surf = self._font_label_medium.render("PRÊT", True, COULEUR_CYAN)
         else:
             # Décompte en secondes avec couleur progressive
-            restant   = (COOLDOWN_ECHO - elapsed) / 1000
+            restant   = max(0.0, (COOLDOWN_ECHO - elapsed) / 1000)
             t_ratio   = 1.0 - ratio           # 1 = vient d'être utilisé, 0 = presque prêt
             r_c = int(220 * t_ratio + 0   * (1 - t_ratio))
             g_c = int(60  * t_ratio + 200 * (1 - t_ratio))
