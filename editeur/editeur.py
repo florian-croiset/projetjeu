@@ -31,7 +31,13 @@ class Editeur:
     def __init__(self, chemin_tmx):
         pygame.init()
         pygame.display.set_caption(f"Éditeur Écho — {chemin_tmx}")
-        self.ecran = pygame.display.set_mode((LARGEUR_ECRAN, HAUTEUR_ECRAN))
+        info = pygame.display.Info()
+        self.ecran = pygame.display.set_mode(
+            (info.current_w, info.current_h),
+            pygame.RESIZABLE
+        )
+        self.largeur = self.ecran.get_width()
+        self.hauteur = self.ecran.get_height()
         self.horloge = pygame.time.Clock()
 
         self.donnees = tmx_io.charger_tmx(chemin_tmx)
@@ -59,12 +65,12 @@ class Editeur:
         self.police_petite = pygame.font.SysFont("Arial", 14)
 
         # Viewport (zone à gauche de la palette)
-        self.viewport = pygame.Rect(0, 0, LARGEUR_ECRAN - LARGEUR_PALETTE, HAUTEUR_ECRAN)
+        self.viewport = pygame.Rect(0, 0, self.largeur - LARGEUR_PALETTE, self.hauteur)
 
         # Palette latérale
         rect_palette = pygame.Rect(
-            LARGEUR_ECRAN - LARGEUR_PALETTE, 0,
-            LARGEUR_PALETTE, HAUTEUR_ECRAN - 80,
+            self.largeur - LARGEUR_PALETTE, 0,
+            LARGEUR_PALETTE, self.hauteur - 80,
         )
         self.palette = Palette(self.cache_tuiles, self.donnees, rect_palette, self.police_ui)
 
@@ -76,8 +82,8 @@ class Editeur:
 
     # ------------------------------------------------------------------
     def _init_boutons(self):
-        x_panel = LARGEUR_ECRAN - LARGEUR_PALETTE
-        y = HAUTEUR_ECRAN - 70
+        x_panel = self.largeur - LARGEUR_PALETTE
+        y = self.hauteur - 70
         largeur = (LARGEUR_PALETTE - 30) // 2
         self.bouton_couche = Bouton(
             x_panel + 10, y, largeur, 50,
@@ -341,7 +347,7 @@ class Editeur:
         # Aide en bas
         aide = "ZQSD : déplacer  •  Molette : zoom  •  TAB : couche  •  A (maintenu) : surbrillance  •  Ctrl+S : sauver  •  Échap : quitter"
         s = self.police_petite.render(aide, True, COULEUR_TEXTE_SOMBRE)
-        self.ecran.blit(s, (10, HAUTEUR_ECRAN - 22))
+        self.ecran.blit(s, (10, self.hauteur - 22))
 
         # Message temporaire (sauvegardé / erreur)
         if self.message_temp and pygame.time.get_ticks() < self.message_temp_fin:
