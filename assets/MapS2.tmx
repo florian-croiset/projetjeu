@@ -1,20 +1,20 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <map version="1.10" tiledversion="1.12.1" orientation="orthogonal" renderorder="right-down" width="100" height="70" tilewidth="32" tileheight="32" infinite="0" nextlayerid="18" nextobjectid="17">
  <editorsettings>
-  <export format="tmx"/>
+  <export target="MapS2.tmx" format="tmx" />
  </editorsettings>
  <tileset firstgid="1" name="tiles" tilewidth="32" tileheight="32" spacing="6" margin="6" tilecount="176" columns="11">
-  <image source="../Documents/Epita/OneDrive/Documents/Projet/projetjeu/assets/tileset.png" width="446" height="628"/>
+  <image source="tileset.png" width="446" height="628" />
  </tileset>
  <imagelayer id="14" name="Calque d'Images 2" visible="0" offsetx="0.6361" offsety="-0.9693">
-  <image source="../Documents/Epita/OneDrive/Documents/Projet/projetjeu/assets/Back2.png"/>
+  <image source="Back2.png" />
  </imagelayer>
- <imagelayer id="16" name="Calque d'Images 4"/>
+ <imagelayer id="16" name="Calque d'Images 4" />
  <imagelayer id="15" name="Calque d'Images 2" visible="0" opacity="0.9" offsetx="5.36339" offsety="-5.81779">
-  <image source="../Documents/Epita/OneDrive/Documents/Projet/projetjeu/assets/Back3.png"/>
+  <image source="Back3.png" />
  </imagelayer>
  <imagelayer id="12" name="Calque d'Images 1" opacity="0.85" offsetx="0.276061" offsety="0.0905758">
-  <image source="../Documents/Epita/OneDrive/Documents/Projet/projetjeu/assets/Back1.png"/>
+  <image source="Back1.png" />
  </imagelayer>
  <layer id="4" name="Wall.1" width="100" height="70">
   <data encoding="csv">
@@ -388,7 +388,7 @@
  </layer>
  <objectgroup id="8" name="Spawn" visible="0">
   <object id="12" x="1354.67" y="719.333">
-   <point/>
+   <point />
   </object>
  </objectgroup>
 </map>

@@ -1046,9 +1046,14 @@ class Serveur:
         self.serveur_socket.listen()
         print("[SERVEUR] En attente de connexions...")
 
-        while True:
-            connexion_client, adresse = self.serveur_socket.accept()
+        while self.running:
+            try:
+                connexion_client, adresse = self.serveur_socket.accept()
+            except OSError:
+                # Socket fermé pendant l'arrêt du serveur (ex. retour au menu)
+                break
             self._accepter_client(connexion_client, adresse)
+        print("[SERVEUR] Boucle d'acceptation arrêtée")
 
 
 def creer_serveur(id_slot, type_lancement, relay_host="", relay_port=7777):
