@@ -32,9 +32,10 @@ class Editeur:
         pygame.init()
         pygame.display.set_caption(f"Éditeur Écho — {chemin_tmx}")
         info = pygame.display.Info()
+        self._plein_ecran = True
         self.ecran = pygame.display.set_mode(
             (info.current_w, info.current_h),
-            pygame.RESIZABLE
+            pygame.FULLSCREEN,
         )
         self.largeur = self.ecran.get_width()
         self.hauteur = self.ecran.get_height()
@@ -98,6 +99,31 @@ class Editeur:
         nom = self.donnees['layers'][self.layer_actif]['nom']
         return f"Couche : {nom}"
 
+    def _redimensionner(self, largeur, hauteur):
+        self.largeur = largeur
+        self.hauteur = hauteur
+        self.viewport = pygame.Rect(0, 0, self.largeur - LARGEUR_PALETTE, self.hauteur)
+        self.palette.rect = pygame.Rect(
+            self.largeur - LARGEUR_PALETTE, 0,
+            LARGEUR_PALETTE, self.hauteur - 80,
+        )
+        self._init_boutons()
+
+    def _basculer_plein_ecran(self):
+        self._plein_ecran = not self._plein_ecran
+        if self._plein_ecran:
+            info = pygame.display.Info()
+            self.ecran = pygame.display.set_mode(
+                (info.current_w, info.current_h),
+                pygame.FULLSCREEN,
+            )
+        else:
+            self.ecran = pygame.display.set_mode(
+                (1280, 720),
+                pygame.RESIZABLE,
+            )
+        self._redimensionner(self.ecran.get_width(), self.ecran.get_height())
+
     def _centrer_camera(self):
         largeur_monde = self.donnees['largeur'] * TAILLE_TUILE
         hauteur_monde = self.donnees['hauteur'] * TAILLE_TUILE
@@ -125,7 +151,14 @@ class Editeur:
 
     # ------------------------------------------------------------------
     def _gerer_evenement(self, event):
+        if event.type == pygame.VIDEORESIZE:
+            self._redimensionner(event.w, event.h)
+            return
+
         if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_F11:
+                self._basculer_plein_ecran()
+                return
             if event.key == pygame.K_z:
                 self.touches_cam['z'] = True
             elif event.key == pygame.K_q:
@@ -323,11 +356,30 @@ class Editeur:
         self._dessiner_hud()
 
     def _dessiner_hud(self):
+        pos = pygame.mouse.get_pos()
+        if self.viewport.collidepoint(pos):
+            tx, ty = rendu.ecran_vers_case(
+                pos[0] - self.viewport.x, pos[1] - self.viewport.y,
+                self.cam_x, self.cam_y, self.zoom, TAILLE_TUILE,
+            )
+            if 0 <= tx < self.donnees['largeur'] and 0 <= ty < self.donnees['hauteur']:
+                couches_ici = [
+                    layer['nom']
+                    for layer in self.donnees['layers']
+                    if layer['gids'][ty][tx] != 0
+                ]
+                tuile_info = ", ".join(couches_ici) if couches_ici else "aucune tuile"
+            else:
+                tuile_info = "aucune tuile"
+        else:
+            tuile_info = "aucune tuile"
+
         lignes = [
             f"Map : {self.donnees['largeur']}x{self.donnees['hauteur']} tuiles",
             f"Zoom : {int(self.zoom * 100)}%",
             f"Couche active : {self.donnees['layers'][self.layer_actif]['nom']}",
             f"Tuile sélectionnée : gid {self.gid_actif}",
+            f"Tuile survolée : {tuile_info}",
         ]
         if self.modifie:
             lignes.append("● MODIFIÉ (non sauvegardé)")
@@ -345,7 +397,7 @@ class Editeur:
             self.ecran.blit(surf, (20, 16 + i * 22))
 
         # Aide en bas
-        aide = "ZQSD : déplacer  •  Molette : zoom  •  TAB : couche  •  A (maintenu) : surbrillance  •  Ctrl+S : sauver  •  Échap : quitter"
+        aide = "ZQSD : déplacer  •  Molette : zoom  •  TAB : couche  •  A (maintenu) : surbrillance  •  Ctrl+S : sauver  •  F11 : plein écran  •  Échap : quitter"
         s = self.police_petite.render(aide, True, COULEUR_TEXTE_SOMBRE)
         self.ecran.blit(s, (10, self.hauteur - 22))
 
