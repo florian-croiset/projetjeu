@@ -492,6 +492,10 @@ class Serveur:
                         'debut': t_now, 'rayon_precedent': 0,
                         'type': 'normal', 'portee_max': PORTEE_ECHO,
                     })
+                    pos = (joueur.rect.centerx, joueur.rect.centery)
+                    for ennemi in self.ennemis.values():
+                        if isinstance(ennemi, EnemyTraqueur) and not ennemi.est_mort:
+                            ennemi.alerter(pos, t_now)
             if payload.get('echo_dir'):
                 if (joueur.peut_echo_dir and
                         t_now - joueur.dernier_echo_dir_temps > COOLDOWN_ECHO_DIR):
@@ -503,6 +507,10 @@ class Serveur:
                         'type': 'dir', 'portee_max': PORTEE_ECHO_DIR,
                         'direction': joueur.direction,
                     })
+                    pos = (joueur.rect.centerx, joueur.rect.centery)
+                    for ennemi in self.ennemis.values():
+                        if isinstance(ennemi, EnemyTraqueur) and not ennemi.est_mort:
+                            ennemi.alerter(pos, t_now)
             if payload.get('toggle_torche'):
                 self.torche_allumee = not self.torche_allumee
             if payload.get('interagir'):
