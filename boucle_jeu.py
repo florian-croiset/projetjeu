@@ -13,6 +13,7 @@ import os
 import threading
 import time
 import copy
+import random
 
 from parametres import *
 from utils import envoyer_logs, music
@@ -119,6 +120,17 @@ class BoucleJeuMixin:
     #  GESTION DES ÉVÉNEMENTS EN JEU
     # ==================================================================
 
+    def _son_attaque(self, joueur):
+        """Slash2/Slash3 si un ennemi est dans la portée d'attaque, sinon Slash1."""
+        if joueur.direction == 1:
+            rect_a = pygame.Rect(joueur.rect.right, joueur.rect.y, PORTEE_ATTAQUE, joueur.rect.height)
+        else:
+            rect_a = pygame.Rect(joueur.rect.left - PORTEE_ATTAQUE, joueur.rect.y, PORTEE_ATTAQUE, joueur.rect.height)
+        for ennemi in self.ennemis_locaux.values():
+            if not ennemi.est_mort and rect_a.colliderect(ennemi.rect):
+                return random.choice(['slash2', 'slash3'])
+        return 'attaque'
+
     def gerer_evenements_jeu(self):
         commandes = {
             'clavier':        {'gauche': False, 'droite': False,
@@ -155,7 +167,12 @@ class BoucleJeuMixin:
                     music.pause()
                 if event.key == key('attaque'):
                     commandes['clavier']['attaque'] = True
-                    music.jouer_sfx_slash_joueur()
+                    _j = self.joueurs_locaux.get(self.mon_id)
+                    now = pygame.time.get_ticks()
+                    if _j is None or now - _j._attaque_local_debut_ms >= COOLDOWN_ATTAQUE:
+                        music.jouer_sfx(self._son_attaque(_j) if _j else 'attaque')
+                        if _j:
+                            _j._attaque_local_debut_ms = now
                 if event.key == key('echo'):
                     commandes['echo'] = True
                     music.jouer_sfx('echo')
@@ -204,7 +221,12 @@ class BoucleJeuMixin:
                 ms = self._codes_souris.get
                 if ms('attaque') and event.button == ms('attaque'):
                     commandes['clavier']['attaque'] = True
-                    music.jouer_sfx_slash_joueur()
+                    _j = self.joueurs_locaux.get(self.mon_id)
+                    now = pygame.time.get_ticks()
+                    if _j is None or now - _j._attaque_local_debut_ms >= COOLDOWN_ATTAQUE:
+                        music.jouer_sfx(self._son_attaque(_j) if _j else 'attaque')
+                        if _j:
+                            _j._attaque_local_debut_ms = now
                 if ms('echo') and event.button == ms('echo'):
                     commandes['echo'] = True
                     music.jouer_sfx('echo')
@@ -768,6 +790,12 @@ class BoucleJeuMixin:
     def lancer_partie_locale(self, id_slot, est_nouvelle_partie=False):
         type_lancement  = "nouvelle" if est_nouvelle_partie else "charger"
         self._serveur_instance = None
+        relay_precedent = getattr(self, '_relay_instance', None)
+        if relay_precedent:
+            try:
+                relay_precedent.arreter()
+            except Exception:
+                pass
         self._relay_instance   = None
 
         try:
