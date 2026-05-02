@@ -34,7 +34,7 @@ from core.ame_loot import AmeLoot
 from core.cle import Cle
 from core.porte import Porte
 from core.orbe_capacite import OrbeCapacite
-from core.pancarte_lore import PancarteLore, BulleLore, PopupPaiement   # NOUVEAU
+from core.pancarte_lore import PancarteLore, BulleLore, PopupPaiement, COUT_AMES, COUT_DASH   # NOUVEAU
 
 
 def _extraire_id_handshake(reponse):
@@ -210,8 +210,16 @@ class BoucleJeuMixin:
                                 self._pancarte_active_id = i
 
                                 def _callback_paiement():
-                                    commandes['interagir'] = True
+                                    self._achat_en_attente = self._pancarte_active_id
 
+
+                                type_p = getattr(pancarte, 'type_pancarte', 'lore')
+                                if type_p == 'shop_dash':
+                                    self.popup_paiement._titre_popup = "Marchand de capacités"
+                                    self.popup_paiement._message_popup = f"Acheter le Dash — {COUT_DASH} âmes ?"
+                                else:
+                                    self.popup_paiement._titre_popup = "Pancarte mystérieuse"
+                                    self.popup_paiement._message_popup = f"Payer {COUT_AMES} âmes pour révéler ce secret ?"
                                 self.popup_paiement.ouvrir_confirmation(
                                     mon_joueur.argent,
                                     _callback_paiement
@@ -259,6 +267,10 @@ class BoucleJeuMixin:
             commandes['echo_dir']      = False
             commandes['toggle_torche'] = False
             commandes['interagir']     = False   # NOUVEAU
+
+        if getattr(self, '_achat_en_attente', None) is not None:
+            commandes['interagir'] = True
+            self._achat_en_attente = None
 
         return commandes
 
