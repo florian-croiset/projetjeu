@@ -195,7 +195,7 @@ class Serveur:
     def creer_orbes_capacite(self):
         configs = [
             (419,  1190, 'double_saut'),
-            (2920, 1126, 'dash'),
+            #(2920, 1126, 'dash'),
         ]
         for x, y, capacite in configs:
             orbe = OrbeCapacite(x, y, capacite)
@@ -207,16 +207,13 @@ class Serveur:
         print(f"[SERVEUR] Porte créée à ({self.porte.x}, {self.porte.y})")
 
     def creer_pancartes_lore(self):
-        """
-        Place les pancartes de lore sur la map.
-        Modifie les coordonnées (x, y) selon ta map avec l'outil core/map.py.
-        """
         configs = [
-            (800,  1200),   # Pancarte 0 — ajuste ces coordonnées pixel
-            (1500,  500),   # Pancarte 1 — ajuste ces coordonnées pixel
+            (800,  1200, 'lore'),
+            (1500,  500, 'shop_dash'),
         ]
-        for i, (x, y) in enumerate(configs):
+        for i, (x, y, type_p) in enumerate(configs):
             p = PancarteLore(x, y)
+            p.type_pancarte = type_p
             self.pancartes_lore[i] = p
         print(f"[SERVEUR] {len(self.pancartes_lore)} pancarte(s) lore créées")
 
@@ -238,8 +235,6 @@ class Serveur:
         nouveau_joueur.peut_echo_dir    = ameliorations.get("echo_dir", False)
 
         if MODE_DEV:
-            nouveau_joueur.peut_double_saut = True
-            nouveau_joueur.peut_dash        = False
             nouveau_joueur.peut_echo_dir    = True
 
         self.joueurs[id_joueur] = nouveau_joueur

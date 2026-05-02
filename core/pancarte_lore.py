@@ -33,6 +33,7 @@ TEXTE_LORE = [
 ]
 
 COUT_AMES = 30          # Coût en âmes pour déverrouiller
+COUT_DASH = 50          # Coût en âmes pour acheter le dash
 LARGEUR_PANCARTE = 48   # Pixels (1.5 tuile)
 HAUTEUR_PANCARTE = 56
 
@@ -86,17 +87,27 @@ class PancarteLore:
     # ── Logique serveur ─────────────────────────────────────────────────────
 
     def tenter_paiement(self, joueur) -> str:
-        """
-        Tente de déverrouiller la pancarte.
-        Retourne : 'debloquee' | 'deja_debloquee' | 'pauvre'
-        """
         if self.est_debloquee:
             return 'deja_debloquee'
+        
+        # Pancarte shop dash
+        if getattr(self, 'type_pancarte', 'lore') == 'shop_dash':
+            if joueur.argent < COUT_DASH:
+                return 'pauvre'
+            if joueur.peut_dash:
+                return 'deja_debloquee'
+            joueur.argent -= COUT_DASH
+            joueur.peut_dash = True
+            self.est_debloquee = True
+            joueur.sons_a_jouer.append('ame_libre')
+            return 'debloquee'
+        
+        # Pancarte lore normale
         if joueur.argent < COUT_AMES:
             return 'pauvre'
-        joueur.argent    -= COUT_AMES
+        joueur.argent -= COUT_AMES
         self.est_debloquee = True
-        joueur.sons_a_jouer.append('ame_perdue')   # Son mystique au déverrouillage
+        joueur.sons_a_jouer.append('ame_perdue')
         return 'debloquee'
 
     def mettre_a_jour(self, temps_ms: int):
@@ -475,11 +486,12 @@ class PopupPaiement:
 
         if self.mode == 'confirmer':
             # Titre
-            t1 = self._font.render("Pancarte mystérieuse", True, (200, 160, 255))
+            titre = getattr(self, '_titre_popup', "Pancarte mystérieuse")
+            t1 = self._font.render(titre, True, (200, 160, 255))
             surface.blit(t1, t1.get_rect(center=(cx, self.rect.y + 30)))
             # Message
             t2 = self._font.render(
-                f"Payer {COUT_AMES} âmes pour révéler ce secret ?", True, (200, 185, 230))
+                getattr(self, '_message_popup', f"Payer {COUT_AMES} âmes pour révéler ce secret ?"), True, (200, 185, 230))
             surface.blit(t2, t2.get_rect(center=(cx, cy - 10)))
             # Sous-message
             t3 = self._font.render(
