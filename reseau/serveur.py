@@ -512,7 +512,11 @@ class Serveur:
                         if isinstance(ennemi, EnemyTraqueur) and not ennemi.est_mort:
                             ennemi.alerter(pos, t_now)
             if payload.get('toggle_torche'):
-                self.torche_allumee = not self.torche_allumee
+                nouvelle_valeur = not self.torche_allumee
+                self.torche_allumee = nouvelle_valeur
+                if nouvelle_valeur:
+                    self._torche_vient_detre_allumee = True
+                    self._torche_allumee_par = id_joueur
             if payload.get('interagir'):
                 for pancarte in self.pancartes_lore.values():
                     dx = joueur.rect.centerx - pancarte.rect.centerx
@@ -720,6 +724,7 @@ class Serveur:
                             if buf is None:
                                 buf = set()
                                 self.vis_delta_buffer[id_j] = buf
+                            print(f"[ECHO] type={echo.get('type')} portee={echo.get('portee_max')} rayon_max={rayon_max} rayon_prec={rayon_prec}")
                             if echo.get('type') == 'dir':
                                 self.carte_jeu.reveler_par_echo_dir_partiel(
                                     echo['cx'], echo['cy'], rayon_max,
@@ -735,12 +740,12 @@ class Serveur:
                 self.echos_en_cours = echos_restants
 
             # Flash sonar sur les ennemis
-            portee_echo_sq = PORTEE_ECHO * PORTEE_ECHO
             for echo in echos_restants:
+                portee_sq = echo.get('portee_max', PORTEE_ECHO) ** 2
                 for ennemi in self.ennemis.values():
-                    dx   = ennemi.rect.centerx - echo['cx']
-                    dy   = ennemi.rect.centery - echo['cy']
-                    if dx*dx + dy*dy <= portee_echo_sq:
+                    dx = ennemi.rect.centerx - echo['cx']
+                    dy = ennemi.rect.centery - echo['cy']
+                    if dx*dx + dy*dy <= portee_sq:
                         ennemi.flash_echo_temps = temps_actuel
 
             with self.lock:
@@ -788,23 +793,23 @@ class Serveur:
                 for pancarte in self.pancartes_lore.values():
                     pancarte.mettre_a_jour(temps_actuel)
 
-                # 2c. Révélation torche si elle vient d'être allumée
+                 # 2c. Révélation torche si elle vient d'être allumée
                 if self._torche_vient_detre_allumee:
                     self._torche_vient_detre_allumee = False
                     id_j = self._torche_allumee_par
                     if id_j in self.cartes_visibilite:
                         torche_cx = self.torche_x + TAILLE_TUILE // 2
                         torche_cy = self.torche_y + TAILLE_TUILE
-                        buf = self.vis_delta_buffer.get(id_j, set())
-                        self.vis_delta_buffer[id_j] = buf
-                        self.carte_jeu.reveler_par_echo_partiel(
-                            torche_cx, torche_cy,
-                            RAYON_LUMIERE_TORCHE,
-                            self.cartes_visibilite[id_j],
-                            delta_set=buf
-                        )
-                        self.vis_map_dirty[id_j] = True
-                        print(f"[TORCHE] Zone révélée ({torche_cx}, {torche_cy})")
+                        self.echos_en_cours.append({
+                            'id_joueur':       id_j,
+                            'cx':              torche_cx,
+                            'cy':              torche_cy,
+                            'debut':           temps_actuel,
+                            'rayon_precedent': 0,
+                            'type':            'torche',
+                            'portee_max':      PORTEE_ECHO_TORCHE,
+                        })
+                        print(f"[TORCHE] Écho déclenché ({torche_cx}, {torche_cy})")
 
                 # 3. Clé : animation + collecte
                 if self.cle and not self.cle.est_ramassee:
