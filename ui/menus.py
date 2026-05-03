@@ -14,6 +14,7 @@ from ui.slider import Slider
 from ui.effets_visuels import dessiner_fond_echo, dessiner_titre_neon, dessiner_separateur_neon, dessiner_panneau
 from sauvegarde import gestion_parametres, gestion_sauvegarde
 from reseau.protocole import obtenir_ip_locale, obtenir_ip_vpn
+from core.joueur import _NOMS_SKINS, NB_SKINS
 
 
 class MenusMixin:
@@ -122,6 +123,10 @@ class MenusMixin:
                                         langue.get_texte("param_retour"),
                                         self.police_bouton, style="ghost")
 
+        self.btn_changer_skin   = _p()
+        self.input_pseudo_actif = False
+        self.input_pseudo_rect  = pygame.Rect(col_droite, 0, lw_param, bh_param)
+
         self.boutons_menu_params_scrollables = [
             self.btn_changer_langue,
             self.btn_toggle_plein_ecran,
@@ -132,7 +137,8 @@ class MenusMixin:
             self.btn_changer_gauche, self.btn_changer_droite,
             self.btn_changer_saut, self.btn_changer_echo,
             self.btn_changer_attaque, self.btn_changer_dash,
-            self.btn_changer_interagir,   # NOUVEAU
+            self.btn_changer_interagir,
+            self.btn_changer_skin,          # NOUVEAU
             self.btn_copier_ip_locale, self.btn_copier_ip_hamachi,
         ]
         self.boutons_menu_params_fixes = [
@@ -141,6 +147,10 @@ class MenusMixin:
 
         self._ip_locale_cache = None
         self._ip_vpn_cache    = None
+
+        self.btn_changer_skin   = _p()
+        self.input_pseudo_actif = False
+        self.input_pseudo_rect  = pygame.Rect(col_droite, 0, lw_param, bh_param)
 
     def creer_widgets_menu_luminosite(self):
         cx = self.cx
@@ -676,6 +686,9 @@ class MenusMixin:
                 if self.btn_appliquer_params.verifier_clic(event):
                     self.parametres = copy.deepcopy(self.parametres_temp)
                     gestion_parametres.sauvegarder_parametres(self.parametres)
+                    if hasattr(self, '_profil_pseudo'):
+                        self._profil_pseudo = self.parametres.get('profil', {}).get('pseudo', 'Joueur')
+                        self._profil_skin   = self.parametres.get('profil', {}).get('skin', 0)
                     self.appliquer_parametres_video()
                     self._recalculer_codes_touches()
                     music.toggle(self.parametres['video'].get('musique', True))
@@ -736,6 +749,24 @@ class MenusMixin:
                     ip = obtenir_ip_vpn()
                     if ip != "Non connecté":
                         self.copier_dans_presse_papier(ip)
+                # Clic sur la zone pseudo
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    self.input_pseudo_actif = self.input_pseudo_rect.collidepoint(event.pos)
+
+                # Saisie pseudo
+                if self.input_pseudo_actif and event.type == pygame.KEYDOWN:
+                    pseudo_courant = self.parametres_temp.get('profil', {}).get('pseudo', '')
+                    if event.key == pygame.K_BACKSPACE:
+                        self.parametres_temp.setdefault('profil', {})['pseudo'] = pseudo_courant[:-1]
+                    elif event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
+                        self.input_pseudo_actif = False
+                    elif event.unicode.isprintable() and len(pseudo_courant) < 16:
+                        self.parametres_temp.setdefault('profil', {})['pseudo'] = pseudo_courant + event.unicode
+
+                # Cycle de skin
+                if self.btn_changer_skin.verifier_clic(event):
+                    skin_actuel = self.parametres_temp.get('profil', {}).get('skin', 0)
+                    self.parametres_temp.setdefault('profil', {})['skin'] = (skin_actuel + 1) % NB_SKINS
         for btn in self.boutons_menu_params_fixes + self.boutons_menu_params_scrollables:
             btn.verifier_survol(pos_souris)
 
@@ -811,6 +842,35 @@ class MenusMixin:
         self.btn_changer_langue.texte = params['jouabilite']['langue'].upper()
         self.btn_changer_langue.dessiner(self.ecran)
         y += esp_ligne
+
+        section(langue.get_texte("param_section_profil"))
+
+        # Pseudo
+        lbl_ps = self.police_texte.render(langue.get_texte("param_pseudo"), True, COULEUR_TEXTE)
+        self.ecran.blit(lbl_ps, (col_gauche + 20, y + 6))
+        self.input_pseudo_rect.topleft = (col_droite, y)
+        bord_ps = COULEUR_CYAN if self.input_pseudo_actif else COULEUR_CYAN_SOMBRE
+        pygame.draw.rect(self.ecran, COULEUR_INPUT_BOX, self.input_pseudo_rect, border_radius=6)
+        pygame.draw.rect(self.ecran, bord_ps, self.input_pseudo_rect, width=1, border_radius=6)
+        pseudo_val = params.get('profil', {}).get('pseudo', '')
+        txt_ps = self.police_texte.render(pseudo_val, True, COULEUR_TEXTE)
+        self.ecran.blit(txt_ps, (self.input_pseudo_rect.x + 8, self.input_pseudo_rect.y + 6))
+        if self.input_pseudo_actif and int(time.time() * 2) % 2 == 0:
+            cx_cur = self.input_pseudo_rect.x + 10 + txt_ps.get_width()
+            pygame.draw.rect(self.ecran, COULEUR_CYAN,
+                             pygame.Rect(cx_cur, self.input_pseudo_rect.y + 6,
+                                         2, self.police_texte.get_height() - 4))
+        y += esp_ligne
+
+        # Skin
+        skin_val = params.get('profil', {}).get('skin', 0)
+        lbl_sk = self.police_texte.render(langue.get_texte("param_apparence"), True, COULEUR_TEXTE)
+        self.ecran.blit(lbl_sk, (col_gauche + 20, y + 6))
+        self.btn_changer_skin.rect.topleft = (col_droite, y)
+        self.btn_changer_skin.texte = f"{_NOMS_SKINS.get(skin_val, '?')}  ({skin_val + 1}/{NB_SKINS})"
+        self.btn_changer_skin.dessiner(self.ecran)
+        y += esp_ligne
+        # ↑ FIN INSERTION
 
         section(langue.get_texte("param_section_video"))
         ligne_toggle(langue.get_texte("param_plein_ecran"),

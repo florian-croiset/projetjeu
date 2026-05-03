@@ -20,6 +20,11 @@ FR = {
     "slots_lancer": "Lancer",
     "slots_confirmer_ecraser": "Cette sauvegarde existe. Écraser ?",
 
+    # Menu Profil
+    "param_section_profil": "--- Profil ---",
+    "param_pseudo": "Pseudo",
+    "param_apparence": "Apparence",
+
     # Menu Rejoindre
     "rejoindre_titre": "Rejoindre une partie",
     "rejoindre_label_ip": "Entrez l'IP de l'hôte (vide pour 'localhost'):",
@@ -90,6 +95,11 @@ EN = {
     "slots_titre_continuer": "Load a game",
     "slots_lancer": "Launch",
     "slots_confirmer_ecraser": "This save exists. Overwrite?",
+
+    # Profile Menu
+    "param_section_profil": "--- Profile ---",
+    "param_pseudo": "Username",
+    "param_apparence": "Appearance",
 
     # Join Menu
     "rejoindre_titre": "Join a game",
