@@ -42,6 +42,16 @@ def charger_tmx(chemin):
         data_el = layer.find('data')
         if data_el is None or not data_el.text:
             continue
+        # Tiled supporte aussi base64 (avec/sans compression) et XML enfants ;
+        # sauvegarder_tmx ne sait écrire que du CSV, donc on refuse explicitement
+        # tout autre encodage plutôt que de planter sur int() ou de vider la
+        # couche silencieusement.
+        encoding = data_el.attrib.get('encoding', 'xml')
+        if encoding != 'csv':
+            raise ValueError(
+                f"Layer {nom!r} utilise encoding={encoding!r}, non supporté. "
+                f"Réexporter depuis Tiled en CSV (Edit → Preferences → Tile Layer Format)."
+            )
         valeurs = [int(v) for v in data_el.text.replace('\n', '').strip(',').split(',') if v.strip() != '']
         gids = []
         for y in range(hauteur):
@@ -135,7 +145,12 @@ def sauvegarder_tmx(donnees):
         # et après la dernière, avec une virgule séparant les rangées.
         data_el.text = '\n' + ',\n'.join(rangees) + '\n'
 
-    donnees['tree'].write(donnees['chemin'], encoding='UTF-8', xml_declaration=True)
+    # Écriture atomique : un crash mid-write ne doit pas tronquer le fichier
+    # canonique. os.replace est atomique sur POSIX et Win32 depuis Python 3.3.
+    chemin_final = donnees['chemin']
+    chemin_tmp = chemin_final + '.tmp'
+    donnees['tree'].write(chemin_tmp, encoding='UTF-8', xml_declaration=True)
+    os.replace(chemin_tmp, chemin_final)
 
 
 # ----------------------------------------------------------------------

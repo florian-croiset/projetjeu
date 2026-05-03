@@ -8,6 +8,11 @@ from parametres import COULEUR_CYAN
 
 # Cache de tuiles redimensionnées : (id(surface), zoom_quantifié) -> Surface
 _cache_tuiles_zoomees = {}
+# Cache de tuiles redimensionnées + dimmées (pour les couches inactives) :
+# (id(surface), zoom_quantifié, alpha) -> Surface
+_cache_tuiles_dimmees = {}
+# Cache d'image layers redimensionnées : (id(image), zoom_quantifié) -> Surface
+_cache_images_zoomees = {}
 
 
 def _zoom_quantifie(zoom):
@@ -26,9 +31,39 @@ def _surface_zoomee(surface_originale, zoom, taille_tuile):
     return surf
 
 
+def _surface_zoomee_dimmee(surface_originale, zoom, taille_tuile, alpha=110):
+    """Variante de _surface_zoomee dont l'alpha est appliqué une seule fois et
+    mise en cache : évite un copy()+set_alpha par tuile par frame pour les
+    couches inactives."""
+    cle = (id(surface_originale), _zoom_quantifie(zoom), alpha)
+    surf = _cache_tuiles_dimmees.get(cle)
+    if surf is None:
+        base = _surface_zoomee(surface_originale, zoom, taille_tuile)
+        surf = base.copy()
+        surf.set_alpha(alpha)
+        _cache_tuiles_dimmees[cle] = surf
+    return surf
+
+
+def _image_zoomee(image_originale, zoom):
+    """Retourne la version redimensionnée d'une image layer parallax (PNG plein
+    écran), avec cache. Évite de re-scaler à chaque frame quand le zoom est
+    constant."""
+    cle = (id(image_originale), _zoom_quantifie(zoom))
+    img = _cache_images_zoomees.get(cle)
+    if img is None:
+        w = max(1, int(image_originale.get_width() * zoom))
+        h = max(1, int(image_originale.get_height() * zoom))
+        img = pygame.transform.scale(image_originale, (w, h))
+        _cache_images_zoomees[cle] = img
+    return img
+
+
 def vider_cache_zoom():
     """À appeler quand le zoom change beaucoup pour libérer la mémoire."""
     _cache_tuiles_zoomees.clear()
+    _cache_tuiles_dimmees.clear()
+    _cache_images_zoomees.clear()
 
 
 def monde_vers_ecran(x_monde, y_monde, cam_x, cam_y, zoom):
@@ -53,9 +88,7 @@ def dessiner_image_layers(surface, image_layers, cam_x, cam_y, zoom, viewport_re
         x = (il['offset_x'] - cam_x) * zoom + viewport_rect.x
         y = (il['offset_y'] - cam_y) * zoom + viewport_rect.y
         if zoom != 1.0:
-            w = max(1, int(img.get_width() * zoom))
-            h = max(1, int(img.get_height() * zoom))
-            img = pygame.transform.scale(img, (w, h))
+            img = _image_zoomee(img, zoom)
         surface.blit(img, (x, y))
     surface.set_clip(None)
 
@@ -88,10 +121,10 @@ def dessiner_tile_layers(surface, layers, cache_tuiles, cam_x, cam_y, zoom,
                 surf = cache_tuiles.get(gid)
                 if surf is None:
                     continue
-                surf_z = _surface_zoomee(surf, zoom, taille_tuile)
-                if not couche_active:
-                    surf_z = surf_z.copy()
-                    surf_z.set_alpha(110)
+                if couche_active:
+                    surf_z = _surface_zoomee(surf, zoom, taille_tuile)
+                else:
+                    surf_z = _surface_zoomee_dimmee(surf, zoom, taille_tuile)
                 px = (tx * taille_tuile - cam_x) * zoom + viewport_rect.x
                 py = (ty * taille_tuile - cam_y) * zoom + viewport_rect.y
                 surface.blit(surf_z, (px, py))
