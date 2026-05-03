@@ -599,12 +599,16 @@ class Serveur:
                 continue
             conn.traiter_paquet_brut(data)
 
-        # Drain et applique les événements par connexion
-        for id_joueur, conn in list(self.udp_conns_par_id.items()):
-            for canal, type_, payload in conn.drainer_recus():
-                if canal == UDP_P.CANAL_UNRELIABLE or canal == UDP_P.CANAL_RELIABLE:
-                    self._udp_appliquer_event_client(id_joueur, type_, payload)
-                # CONTROL (heartbeat etc.) : rien de plus à faire.
+        # Drain et applique les événements par connexion. Les mutations
+        # effectuées par _udp_appliquer_event_client (echos, alerte EnemyTraqueur,
+        # paiements, torche, etc.) doivent se faire sous self.lock pour rester
+        # cohérentes avec le chemin TCP (gerer_client) et le tick du game loop.
+        with self.lock:
+            for id_joueur, conn in list(self.udp_conns_par_id.items()):
+                for canal, type_, payload in conn.drainer_recus():
+                    if canal == UDP_P.CANAL_UNRELIABLE or canal == UDP_P.CANAL_RELIABLE:
+                        self._udp_appliquer_event_client(id_joueur, type_, payload)
+                    # CONTROL (heartbeat etc.) : rien de plus à faire.
 
     def _udp_tick(self, now_ms: int):
         """Retransmissions + heartbeat + détection des connexions mortes."""

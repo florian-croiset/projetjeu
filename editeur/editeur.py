@@ -31,10 +31,15 @@ class Editeur:
     def __init__(self, chemin_tmx):
         pygame.init()
         pygame.display.set_caption(f"Éditeur Écho — {chemin_tmx}")
+        # Info() ne renvoie la résolution native que tant qu'aucun set_mode
+        # n'a été appelé : on capture la valeur ici une bonne fois pour toutes.
         info = pygame.display.Info()
+        self._native_w = info.current_w
+        self._native_h = info.current_h
+        self._taille_fenetree = (1280, 720)
         self._plein_ecran = True
         self.ecran = pygame.display.set_mode(
-            (info.current_w, info.current_h),
+            (self._native_w, self._native_h),
             pygame.FULLSCREEN,
         )
         self.largeur = self.ecran.get_width()
@@ -57,6 +62,7 @@ class Editeur:
         self.layer_actif = 0
         self.gid_actif = self.donnees['tileset_firstgid']
         self.modifie = False
+        self.en_peinture = False
         self.message_temp = ""
         self.message_temp_fin = 0
 
@@ -102,6 +108,9 @@ class Editeur:
     def _redimensionner(self, largeur, hauteur):
         self.largeur = largeur
         self.hauteur = hauteur
+        # Mémorise la dernière taille fenêtrée pour la restaurer au prochain F11.
+        if not self._plein_ecran:
+            self._taille_fenetree = (largeur, hauteur)
         self.viewport = pygame.Rect(0, 0, self.largeur - LARGEUR_PALETTE, self.hauteur)
         self.palette.rect = pygame.Rect(
             self.largeur - LARGEUR_PALETTE, 0,
@@ -112,14 +121,13 @@ class Editeur:
     def _basculer_plein_ecran(self):
         self._plein_ecran = not self._plein_ecran
         if self._plein_ecran:
-            info = pygame.display.Info()
             self.ecran = pygame.display.set_mode(
-                (info.current_w, info.current_h),
+                (self._native_w, self._native_h),
                 pygame.FULLSCREEN,
             )
         else:
             self.ecran = pygame.display.set_mode(
-                (1280, 720),
+                self._taille_fenetree,
                 pygame.RESIZABLE,
             )
         self._redimensionner(self.ecran.get_width(), self.ecran.get_height())
@@ -196,11 +204,17 @@ class Editeur:
         elif event.type == pygame.MOUSEBUTTONDOWN:
             self._gerer_clic_souris(event)
 
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:
+                self.en_peinture = False
+
         elif event.type == pygame.MOUSEMOTION:
             self.bouton_couche.verifier_survol(event.pos)
             self.bouton_sauver.verifier_survol(event.pos)
-            # Si bouton gauche maintenu sur le viewport, on peint en continu
-            if event.buttons[0] and self.viewport.collidepoint(event.pos):
+            # On ne peint en continu que si le clic a démarré dans le viewport
+            # (sinon un drag depuis un bouton UI/palette écraserait des tuiles).
+            if (self.en_peinture and event.buttons[0]
+                    and self.viewport.collidepoint(event.pos)):
                 self._peindre_a_position(event.pos)
 
     # ------------------------------------------------------------------
@@ -224,6 +238,7 @@ class Editeur:
 
         # Clic sur le viewport : peindre la case
         if self.viewport.collidepoint(event.pos):
+            self.en_peinture = True
             self._peindre_a_position(event.pos)
 
     def _peindre_a_position(self, pos_ecran):
