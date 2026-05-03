@@ -227,13 +227,13 @@ class PancarteLore:
             surface.blit(p_surf, (int(px) - r - 1, int(py) - r - 1))
 
     def _dessiner_indicateur(self, surface, sx, sy, temps_ms):
-        """Badge [E] au-dessus de la pancarte pour signaler l'interaction."""
+        """Badge [F] au-dessus de la pancarte pour signaler l'interaction."""
         f = pygame.font.Font(None, 18)
         if not self.est_debloquee:
-            label = f"[E]  {COUT_AMES} âmes"
+            label = f"[F]  {COUT_AMES} âmes"
             couleur = (160, 100, 255)
         else:
-            label = "[E]  Lire"
+            label = "[F]  Lire"
             couleur = (255, 200, 80)
 
         s = f.render(label, True, couleur)
