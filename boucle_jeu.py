@@ -861,8 +861,20 @@ class BoucleJeuMixin:
         if not token or not port_udp:
             return False
 
+        # Détermine l'IP locale que l'OS utiliserait pour atteindre le serveur,
+        # afin de binder uniquement cette interface (et non 0.0.0.0).
         try:
-            self.udp_endpoint = UdpEndpoint(bind_host="0.0.0.0", bind_port=0)
+            _probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                _probe.connect((hote_tcp, port_udp))
+                bind_local = _probe.getsockname()[0]
+            finally:
+                _probe.close()
+        except OSError:
+            bind_local = "127.0.0.1"
+
+        try:
+            self.udp_endpoint = UdpEndpoint(bind_host=bind_local, bind_port=0)
         except OSError as exc:
             print(f"[CLIENT] Impossible d'ouvrir un socket UDP: {exc}")
             return False
