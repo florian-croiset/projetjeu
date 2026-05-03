@@ -77,12 +77,13 @@ ARGENT_DEPART = 0
 
 # -- Paramètres de Combat --
 DUREE_ATTAQUE = 200
-COOLDOWN_ATTAQUE = 600
+COOLDOWN_ATTAQUE = 800
 PORTEE_ATTAQUE = 40
 DEGATS_JOUEUR = 1
 
 # -- Paramètres du Traqueur (IA à l'écoute des échos) --
 RAYON_AUDITION_TRAQUEUR = 400     # px : portée d'audition (supérieure à PORTEE_ECHO)
+PORTEE_ECHO_TORCHE = 600
 DUREE_ALERTE_TRAQUEUR   = 10000    # ms : durée de la chasse avant retour en patrouille
 VITESSE_CHASSE_TRAQUEUR = 1.0     # px/tick en chasse
 FORCE_SAUT_TRAQUEUR     = 9       # vélocité initiale du saut (≈ 2 blocs de haut)

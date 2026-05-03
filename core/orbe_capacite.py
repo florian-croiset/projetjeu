@@ -72,19 +72,19 @@ class OrbeCapacite:
         self.rect.centerx = int(self.x_base)
 
     def tenter_collecte(self, joueur) -> bool:
-        """
-        Appelé par le serveur au contact d'un joueur.
-        Retourne True si la capacité a été débloquée.
-        """
         if self.est_ramasse:
             return False
-
-        # Ne donner que si le joueur n'a pas déjà la capacité
         if self.capacite == 'double_saut' and joueur.peut_double_saut:
             return False
         if self.capacite == 'dash' and joueur.peut_dash:
             return False
 
+        # Coût en âmes
+        cout = 50 if self.capacite == 'dash' else 30
+        if joueur.argent < cout:
+            return False
+
+        joueur.argent -= cout
         self.est_ramasse = True
 
         if self.capacite == 'double_saut':
@@ -94,7 +94,7 @@ class OrbeCapacite:
             joueur.peut_dash = True
             print(f"[ORBE] Joueur {joueur.id} débloque : Dash")
 
-        joueur.sons_a_jouer.append('ame_libre')   # Son de collecte
+        joueur.sons_a_jouer.append('ame_libre')
         return True
 
     # ------------------------------------------------------------------
@@ -168,3 +168,12 @@ class OrbeCapacite:
         bg.fill((0, 0, 0, 120))
         surface.blit(bg, (nom_rect.x - 4, nom_rect.y - 2))
         surface.blit(nom_surf, nom_rect)
+
+         # Prix en âmes
+        cout = 30 if self.capacite == 'dash' else 20
+        prix_surf = police_nom.render(f"{cout} âmes", True, (200, 160, 255))
+        prix_rect = prix_surf.get_rect(center=(cx, cy - self.RAYON - 22))
+        bg2 = pygame.Surface((prix_rect.width + 8, prix_rect.height + 4), pygame.SRCALPHA)
+        bg2.fill((0, 0, 0, 120))
+        surface.blit(bg2, (prix_rect.x - 4, prix_rect.y - 2))
+        surface.blit(prix_surf, prix_rect)
