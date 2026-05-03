@@ -67,6 +67,13 @@ SPRITES_JOUEURS = [
     charger_sprite('sprite_perso3.png'),
 ]
 
+_SKINS = {
+    0: ('p1', 0),   # animations p1 + sprite_perso1
+    1: ('p2', 1),   # animations p2 + sprite_perso2
+    2: ('p1', 2),   # animations p1 + sprite_perso3
+}
+NB_SKINS = len(_SKINS)
+_NOMS_SKINS = {0: "Éclaireur", 1: "Spectre", 2: "Rôdeur"}
 
 class Joueur:
     def __init__(self, x, y, id, couleur=COULEUR_JOUEUR):
@@ -135,7 +142,9 @@ class Joueur:
 
         # ── Animations ──────────────────────────────────────────────────────
         # Joueurs pairs (0, 2) → p1 ; joueurs impairs (1) → p2
-        self._anim_prefix = 'p1' if (id % 2 == 0) else 'p2'
+        self.skin = 0
+        self.pseudo = ""
+        self._appliquer_skin(0)
 
         # Chargement paresseux : l'animator est None jusqu'au premier dessiner()
         # (évite d'appeler pygame.image.load depuis le thread serveur)
@@ -151,6 +160,16 @@ class Joueur:
         self._attaque_etait_active = False
         # Prédiction côté client : timestamp local du dernier déclenchement d'attaque
         self._attaque_local_debut_ms = -DUREE_ATTAQUE
+
+    def _appliquer_skin(self, skin):
+        prefix, sprite_idx = _SKINS.get(skin, ('p1', 0))
+        self._anim_prefix = prefix
+        self.sprite = SPRITES_JOUEURS[sprite_idx % len(SPRITES_JOUEURS)]
+        self._anim_courante = f'{prefix}_idle'
+        self._anim_charge_tente = False
+        self.animator = None
+        self._anim_frames = []
+        self._attaque_etait_active = False
 
     # ──────────────────────────────────────────────────────────────────────
     #  PHYSIQUE
@@ -461,6 +480,16 @@ class Joueur:
             )
             pygame.draw.rect(surface, self.couleur, rect_visuel)
 
+        if self.pseudo:
+            if not hasattr(Joueur, '_font_pseudo'):
+                Joueur._font_pseudo = pygame.font.Font(None, 14)  # petite taille car la surface sera zoomée
+            pseudo_surf = Joueur._font_pseudo.render(self.pseudo, True, (210, 235, 255))
+            px = self.rect.centerx - off_x - pseudo_surf.get_width() // 2
+            py = self.rect.top - off_y - pseudo_surf.get_height() - 2
+            bg = pygame.Surface((pseudo_surf.get_width() + 6, pseudo_surf.get_height() + 2), pygame.SRCALPHA)
+            bg.fill((0, 0, 10, 160))
+            surface.blit(bg, (px - 3, py - 1))
+            surface.blit(pseudo_surf, (px, py))
 
     # ──────────────────────────────────────────────────────────────────────
     #  RÉSEAU
@@ -504,6 +533,8 @@ class Joueur:
             'sur_le_sol':        self.sur_le_sol,
             'en_mouvement':      self.en_mouvement,
             'est_en_degat':      est_en_degat,
+            'pseudo': self.pseudo,
+            'skin':   self.skin,
         }
 
     def set_etat(self, data):
@@ -548,6 +579,12 @@ class Joueur:
             self.rect_attaque = None
 
         self.sons_a_jouer = data.get('sons', [])
+
+        nouveau_skin = data.get('skin', 0)
+        if nouveau_skin != self.skin:
+            self.skin = nouveau_skin
+            self._appliquer_skin(nouveau_skin)
+        self.pseudo = data.get('pseudo', self.pseudo)
 
     # ──────────────────────────────────────────────────────────────────────
     #  INTERPOLATION (client UDP, joueurs distants uniquement)
