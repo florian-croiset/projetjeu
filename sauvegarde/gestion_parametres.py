@@ -22,7 +22,8 @@ def creer_parametres_defaut():
             "vsync": False,
             "musique": True,
             "resolution": [1920, 1080],
-            "luminosite": 0.3
+            "luminosite": 0.3,
+            "display_index": 0
         },
         "controles": {
             "gauche": "q",

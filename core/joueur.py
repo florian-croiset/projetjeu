@@ -497,7 +497,8 @@ class Joueur:
             'est_en_dash':       self.est_en_dash,
             'have_key':          self.have_key,
             'peut_echo_dir':     self.peut_echo_dir,
-            'dernier_echo_temps': self.dernier_echo_temps,
+            'echo_age_ms':       max(0, pygame.time.get_ticks() - self.dernier_echo_temps),
+            'echo_dir_age_ms':   max(0, pygame.time.get_ticks() - self.dernier_echo_dir_temps),
             'sons':              sons,
             # Champs pour les animations côté client
             'sur_le_sol':        self.sur_le_sol,
@@ -526,7 +527,12 @@ class Joueur:
         self.est_en_dash = data.get('est_en_dash', False)
         self.have_key = data.get('have_key', False)
         self.peut_echo_dir = data.get('peut_echo_dir', False)
-        self.dernier_echo_temps = data.get('dernier_echo_temps', self.dernier_echo_temps)
+        age = data.get('echo_age_ms')
+        if age is not None:
+            self.dernier_echo_temps = pygame.time.get_ticks() - age
+        age_dir = data.get('echo_dir_age_ms')
+        if age_dir is not None:
+            self.dernier_echo_dir_temps = pygame.time.get_ticks() - age_dir
         # Champs animation
         self.sur_le_sol  = data.get('sur_le_sol', self.sur_le_sol)
         self.en_mouvement = data.get('en_mouvement', self.en_mouvement)
