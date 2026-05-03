@@ -2,6 +2,7 @@
 # S'occupe de lire et écrire le fichier parametres.json
 # CORRECTION : Utilise des chemins absolus pour le fichier JSON.
 
+import random
 import json
 import os
 
@@ -12,6 +13,7 @@ def get_chemin_absolu_parametres():
 
 def creer_parametres_defaut():
     """Crée un dictionnaire de paramètres par défaut."""
+    _PSEUDOS_DEFAUT = ["Éclaireur", "Specter", "Nox", "Lumen", "Ombra", "Dusk", "Vex", "Ravn"]
     return {
         "jouabilite": {
             "langue": "fr",
@@ -42,7 +44,11 @@ def creer_parametres_defaut():
         },
         "meta": {
             "tutoriel_vu": False
-        }
+        },
+        "profil": {
+            "pseudo": random.choice(_PSEUDOS_DEFAUT),
+            "skin": 0
+        },
     }
 
 def charger_parametres():

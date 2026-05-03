@@ -131,14 +131,15 @@ class BoucleJeuMixin:
                 return random.choice(['slash2', 'slash3'])
         return 'attaque'
 
+    # APRÈS (corrigé) :
     def gerer_evenements_jeu(self):
         commandes = {
             'clavier':        {'gauche': False, 'droite': False,
-                               'saut': False, 'attaque': False, 'dash': False},
+                            'saut': False, 'attaque': False, 'dash': False},
             'echo':           False,
             'echo_dir':       False,
             'toggle_torche':  False,
-            'interagir':      False,   # NOUVEAU
+            'interagir':      False,
         }
 
         key = self._codes_touches.get
@@ -271,6 +272,9 @@ class BoucleJeuMixin:
         if getattr(self, '_achat_en_attente', None) is not None:
             commandes['interagir'] = True
             self._achat_en_attente = None
+
+        commandes['pseudo'] = getattr(self, '_profil_pseudo', '')
+        commandes['skin']   = getattr(self, '_profil_skin', 0)
 
         return commandes
 
@@ -919,9 +923,11 @@ class BoucleJeuMixin:
     def _udp_envoyer_inputs(self, commandes: dict, one_shot_commandes: dict):
         if not self.udp_actif or self.udp_conn is None:
             return
-        # Continus : unreliable 60 Hz (même cadence que la frame)
-        self.udp_conn.envoyer_unreliable(UDP_P.TYPE_INPUTS_CONTINUS, pickle.dumps(commandes.get('clavier', {})))
-        # One-shot : reliable (echo, echo_dir, torche, interagir)
+        # Inclure pseudo et skin dans les continus
+        payload_continus = dict(commandes.get('clavier', {}))
+        payload_continus['pseudo'] = commandes.get('pseudo', '')
+        payload_continus['skin']   = commandes.get('skin', 0)
+        self.udp_conn.envoyer_unreliable(UDP_P.TYPE_INPUTS_CONTINUS, pickle.dumps(payload_continus))
         if any(one_shot_commandes.values()):
             self.udp_conn.envoyer_reliable(UDP_P.TYPE_INPUT_ONESHOT, one_shot_commandes)
 
@@ -1018,6 +1024,9 @@ class BoucleJeuMixin:
         self.bulle_lore         = BulleLore(self.largeur_ecran, self.hauteur_ecran)
         self.popup_paiement     = PopupPaiement(self.largeur_ecran, self.hauteur_ecran)
         self._pancarte_active_id = None   # Indice de la pancarte en cours de paiement
+        profil = self.parametres.get('profil', {})
+        self._profil_pseudo = profil.get('pseudo', 'Joueur')
+        self._profil_skin   = profil.get('skin', 0)
 
     def connecter(self, hote):
         try:
