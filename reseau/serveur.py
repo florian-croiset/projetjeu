@@ -148,7 +148,7 @@ class Serveur:
         self.UDP_TOKEN_TTL_MS         = 30_000  # 30 s pour utiliser un token
         if USE_UDP:
             try:
-                self.udp_endpoint = UdpEndpoint(bind_host="0.0.0.0", bind_port=PORT_UDP)
+                self.udp_endpoint = UdpEndpoint(bind_host=obtenir_ip_locale(), bind_port=PORT_UDP)
                 print(f"[SERVEUR] UDP en écoute sur le port {self.udp_endpoint.bind_port}")
             except OSError as exc:
                 print(f"[SERVEUR] Impossible d'ouvrir UDP sur {PORT_UDP}: {exc}")
