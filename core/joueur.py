@@ -5,17 +5,56 @@ import pygame
 import sys
 import os
 
-from pygame import surface
 from parametres import *
 
-# Charger le sprite du joueur
+# Import de BossAnimator pour réutiliser le même système d'animation
+try:
+    from core.demon_slime_boss import BossAnimator
+    _ANIMATOR_DISPONIBLE = True
+except ImportError:
+    try:
+        from demon_slime_boss import BossAnimator
+        _ANIMATOR_DISPONIBLE = True
+    except ImportError:
+        _ANIMATOR_DISPONIBLE = False
+        BossAnimator = None
+
+
+def _chemin_asset(nom_fichier):
+    if getattr(sys, 'frozen', False):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, 'assets', nom_fichier)
+
+
+# Cache global (uniquement pour les chargements réussis depuis le thread principal)
+_ANIMATEURS_CACHE = {}
+
+
+def _obtenir_animator(prefix):
+    """Charge et retourne un BossAnimator mis en cache pour p1 ou p2.
+    Ne met en cache qu'en cas de succès pour permettre les retentatives."""
+    if prefix in _ANIMATEURS_CACHE:
+        return _ANIMATEURS_CACHE[prefix]
+    if not _ANIMATOR_DISPONIBLE:
+        return None
+    try:
+        animator = BossAnimator(
+            _chemin_asset(f'{prefix}.json'),
+            _chemin_asset(f'{prefix}.png')
+        )
+        _ANIMATEURS_CACHE[prefix] = animator
+        return animator
+    except Exception as e:
+        print(f"[Joueur] Animation {prefix} non disponible: {e}")
+        return None
+
+
+# Charger le sprite de secours du joueur (utilisé si l'animator échoue)
 def charger_sprite(nom_fichier):
     try:
-        if getattr(sys, 'frozen', False):
-            base_path = sys._MEIPASS
-        else:
-            base_path = os.path.dirname(os.path.dirname(__file__))
-        path = os.path.join(base_path, 'assets', nom_fichier)
+        path = _chemin_asset(nom_fichier)
         sprite = pygame.image.load(path)
         return pygame.transform.scale(sprite, (25, 58))
     except Exception as e:
@@ -28,26 +67,28 @@ SPRITES_JOUEURS = [
     charger_sprite('sprite_perso3.png'),
 ]
 
+
 class Joueur:
     def __init__(self, x, y, id, couleur=COULEUR_JOUEUR):
         self.id = id
         self.rect = pygame.Rect(x, y, 25, 58)
         self.couleur = couleur
         self.sprite = SPRITES_JOUEURS[self.id % 3]
-        
+
         # Mouvement
         self.vel_y = 0
         self.sur_le_sol = False
         self.direction = 1  # 1 = Droite, -1 = Gauche
-        
+        self.en_mouvement = False
+
         # Santé et Argent
         self.pv = PV_JOUEUR_MAX
         self.pv_max = PV_JOUEUR_MAX
         self.argent = ARGENT_DEPART
         self.dernier_degat_temps = 0
+        self.est_en_degat = False
 
         # Sons — liste des événements sonores à envoyer au client ce tick
-        # Le serveur remplit cette liste, le client la lit et joue les sons.
         self.sons_a_jouer = []
 
         # Mécaniques
@@ -57,13 +98,12 @@ class Joueur:
         self.ame_perdue = None
         self.have_key = False
         self.temps_mort = None
-        
+
         # Combat
         self.dernier_attaque_temps = 0
         self.est_en_attaque = False
         self.rect_attaque = None
         # Hit registry : IDs des ennemis déjà touchés lors de l'attaque en cours.
-        # Réinitialisé à chaque nouvelle attaque. Garantit 1 hit max par ennemi par swing.
         self.ennemis_touches: set = set()
 
         # Capacités
@@ -76,9 +116,8 @@ class Joueur:
         self.dash_direction = 0
         self.dash_distance_restante = 0
         self.dash_debut_temps = 0
-        
-        # Interpolation (utilisée côté client pour les joueurs distants en mode UDP)
-        # Buffer de snapshots récents (t_serveur_ms, x, y). Capé à 4.
+
+        # Interpolation (côté client pour les joueurs distants en mode UDP)
         self._interp_buffer = []
 
         # Commandes
@@ -94,13 +133,36 @@ class Joueur:
             'degat':       True,
         }
 
+        # ── Animations ──────────────────────────────────────────────────────
+        # Joueurs pairs (0, 2) → p1 ; joueurs impairs (1) → p2
+        self._anim_prefix = 'p1' if (id % 2 == 0) else 'p2'
+
+        # Chargement paresseux : l'animator est None jusqu'au premier dessiner()
+        # (évite d'appeler pygame.image.load depuis le thread serveur)
+        self.animator = None
+        self._anim_charge_tente = False
+        self._anim_frames = []
+        self._anim_courante = f'{self._anim_prefix}_idle'
+        self._anim_frame_index = 0
+        self._anim_frame_timer_ms = 0.0
+        self._anim_dernier_temps_ms = 0
+        # Alternance attack1 / attack2
+        self._derniere_attaque_num = 1
+        self._attaque_etait_active = False
+        # Prédiction côté client : timestamp local du dernier déclenchement d'attaque
+        self._attaque_local_debut_ms = -DUREE_ATTAQUE
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  PHYSIQUE
+    # ──────────────────────────────────────────────────────────────────────
+
     def appliquer_physique(self, rects_collision):
         """Gère la gravité, le mouvement et les collisions."""
         dx = 0
         dy = 0
 
         temps_actuel = pygame.time.get_ticks()
-        
+
         if self.est_en_dash:
             if temps_actuel - self.dash_debut_temps >= DUREE_DASH or self.dash_distance_restante <= 0:
                 self.est_en_dash = False
@@ -118,7 +180,7 @@ class Joueur:
             # 1. Activation du Dash
             if self.commandes.get('dash', False) and self.peut_dash:
                 peut_dasher = self.sur_le_sol or self.dash_disponibles_en_air > 0
-                
+
                 if peut_dasher and (temps_actuel - self.dernier_dash_temps >= COOLDOWN_DASH):
                     if self.commandes['droite']:
                         self.dash_direction = 1
@@ -136,7 +198,6 @@ class Joueur:
                         self.dash_disponibles_en_air -= 1
 
                     self.commandes['dash'] = False
-                    # Événement son dash → client
                     self.sons_a_jouer.append('dash')
 
             # 2. Mouvement horizontal
@@ -164,7 +225,10 @@ class Joueur:
             if self.vel_y > 10:
                 self.vel_y = 10
             dy = self.vel_y
-        
+
+        # Suivi du mouvement horizontal pour l'animation
+        self.en_mouvement = dx != 0
+
         ancien_sur_le_sol = self.sur_le_sol
         self.sur_le_sol = False
 
@@ -197,7 +261,6 @@ class Joueur:
 
         if self.sur_le_sol and not ancien_sur_le_sol:
             self.dash_disponibles_en_air = DASH_EN_AIR_MAX
-            # Son d'atterrissage
             if self.sons.get('saut'):
                 self.sons_a_jouer.append('saut')
 
@@ -207,14 +270,13 @@ class Joueur:
             self.est_en_attaque = True
             self.dernier_attaque_temps = temps_actuel
             self.commandes['attaque'] = False
-            # Son d'attaque géré côté client (keypress) pour éviter le doublon
             return True
 
         if self.est_en_attaque:
             if temps_actuel - self.dernier_attaque_temps > DUREE_ATTAQUE:
                 self.est_en_attaque = False
                 self.rect_attaque = None
-                self.ennemis_touches.clear()  # Libère le registry pour la prochaine attaque
+                self.ennemis_touches.clear()
 
         if self.est_en_attaque:
             if self.direction == 1:
@@ -229,7 +291,6 @@ class Joueur:
         if temps_actuel - self.dernier_degat_temps > TEMPS_INVINCIBILITE:
             self.pv -= montant
             self.dernier_degat_temps = temps_actuel
-            # Événement son dégât → client
             if self.pv <= 0:
                 self.sons_a_jouer.append('mort')
             else:
@@ -243,30 +304,167 @@ class Joueur:
         self.rect.topleft = coords_spawn
         self.vel_y = 0
         self.sur_le_sol = False
+        # Réinitialise l'animation pour sortir de l'état mort
+        self._anim_courante = f'{self._anim_prefix}_idle'
+        self._anim_frame_index = 0
+        self._anim_frame_timer_ms = 0.0
+        self._attaque_etait_active = False
+        if self.animator:
+            try:
+                self._anim_frames = self.animator.get_animation(self._anim_courante)
+            except KeyError:
+                pass
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  ANIMATION
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _init_animator(self):
+        """Chargement paresseux de l'animator (à appeler depuis le thread principal)."""
+        if self._anim_charge_tente:
+            return
+        self._anim_charge_tente = True
+        self.animator = _obtenir_animator(self._anim_prefix)
+        if self.animator:
+            try:
+                self._anim_frames = self.animator.get_animation(self._anim_courante)
+            except KeyError:
+                self.animator = None
+                self._anim_frames = []
+
+    def _determiner_animation(self):
+        """Retourne le nom de l'animation à jouer selon l'état courant du joueur."""
+        p = self._anim_prefix
+
+        if self.pv <= 0:
+            return f'{p}_death'
+
+        if self.est_en_degat:
+            return f'{p}_hurt'
+
+        # Prédiction locale : l'attaque est active si le serveur le confirme OU
+        # si le joueur a appuyé sur la touche il y a moins de DUREE_ATTAQUE ms.
+        est_en_attaque = (self.est_en_attaque or
+                          pygame.time.get_ticks() - self._attaque_local_debut_ms < DUREE_ATTAQUE)
+
+        # Détection début d'attaque pour alterner attack1 / attack2
+        if est_en_attaque and not self._attaque_etait_active:
+            self._derniere_attaque_num = 2 if self._derniere_attaque_num == 1 else 1
+        self._attaque_etait_active = est_en_attaque
+
+        if est_en_attaque:
+            return f'{p}_attack{self._derniere_attaque_num}'
+
+        if not self.sur_le_sol:
+            return f'{p}_jump'
+
+        if self.en_mouvement or self.est_en_dash:
+            return f'{p}_run'
+
+        return f'{p}_idle'
+
+    def _mettre_a_jour_animation(self):
+        """Avance l'animation d'une frame selon le temps écoulé."""
+        temps = pygame.time.get_ticks()
+        if self._anim_dernier_temps_ms == 0:
+            self._anim_dernier_temps_ms = temps
+            return
+        dt_ms = min(temps - self._anim_dernier_temps_ms, 100)
+        self._anim_dernier_temps_ms = temps
+
+        anim_voulue = self._determiner_animation()
+
+        if anim_voulue != self._anim_courante:
+            # Ne pas interrompre une animation d'attaque avant sa dernière frame,
+            # sauf pour mort ou blessure qui ont la priorité absolue.
+            est_attaque_en_cours = '_attack' in self._anim_courante
+            haute_priorite = anim_voulue.endswith('_death') or anim_voulue.endswith('_hurt')
+            attaque_pas_finie = (est_attaque_en_cours and self._anim_frames and
+                                 self._anim_frame_index < len(self._anim_frames) - 1)
+
+            if attaque_pas_finie and not haute_priorite:
+                pass  # on laisse l'animation d'attaque se terminer
+            else:
+                self._anim_courante = anim_voulue
+                self._anim_frame_index = 0
+                self._anim_frame_timer_ms = 0.0
+                try:
+                    self._anim_frames = self.animator.get_animation(anim_voulue)
+                except (KeyError, AttributeError):
+                    # Animation inconnue : repli sur idle
+                    fallback = f'{self._anim_prefix}_idle'
+                    try:
+                        self._anim_frames = self.animator.get_animation(fallback)
+                        self._anim_courante = fallback
+                    except Exception:
+                        self._anim_frames = []
+                        return
+
+        if not self._anim_frames:
+            return
+
+        # Geler sur la dernière frame de mort
+        is_death = (self._anim_courante == f'{self._anim_prefix}_death')
+        if is_death and self._anim_frame_index >= len(self._anim_frames) - 1:
+            return
+
+        _, frame_duration = self._anim_frames[self._anim_frame_index]
+        self._anim_frame_timer_ms += dt_ms
+
+        if self._anim_frame_timer_ms >= frame_duration:
+            self._anim_frame_timer_ms -= frame_duration
+            next_idx = self._anim_frame_index + 1
+            if next_idx >= len(self._anim_frames):
+                self._anim_frame_index = 0  # boucle (sauf mort, géré ci-dessus)
+            else:
+                self._anim_frame_index = next_idx
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  RENDU
+    # ──────────────────────────────────────────────────────────────────────
 
     def dessiner(self, surface, camera_offset=(0, 0)):
-        """Dessine le joueur et son attaque par rapport à la caméra."""
+        """Dessine le joueur animé (ou un rectangle de secours) et sa hitbox d'attaque."""
         off_x, off_y = camera_offset
-        rect_visuel = pygame.Rect(
-            self.rect.x - off_x,
-            self.rect.y - off_y,
-            self.rect.width,
-            self.rect.height
-        )
-        if self.sprite:
+
+        # Chargement paresseux de l'animator (sûr car appelé depuis le thread principal)
+        if not self._anim_charge_tente:
+            self._init_animator()
+
+        if self.animator and self._anim_frames:
+            self._mettre_a_jour_animation()
+
+            frame_surf, _ = self._anim_frames[self._anim_frame_index]
+
+            # Miroir horizontal quand le joueur regarde à gauche
+            if self.direction == -1:
+                frame_surf = pygame.transform.flip(frame_surf, True, False)
+
+            sprite_w = frame_surf.get_width()
+            sprite_h = frame_surf.get_height()
+
+            # Centré horizontalement sur la hitbox, aligné en bas
+            draw_x = self.rect.x - off_x + (self.rect.w - sprite_w) // 2
+            draw_y = self.rect.y - off_y + self.rect.h - sprite_h
+
+            surface.blit(frame_surf, (draw_x, draw_y))
+
+        elif self.sprite:
+            # Fallback : sprite statique mis à l'échelle
             sprite_a_dessiner = pygame.transform.flip(self.sprite, self.direction == -1, False)
-            surface.blit(sprite_a_dessiner, rect_visuel.topleft)
+            surface.blit(sprite_a_dessiner, (self.rect.x - off_x, self.rect.y - off_y))
         else:
+            # Dernier recours : rectangle coloré
+            rect_visuel = pygame.Rect(
+                self.rect.x - off_x, self.rect.y - off_y,
+                self.rect.width, self.rect.height
+            )
             pygame.draw.rect(surface, self.couleur, rect_visuel)
 
-        if self.est_en_attaque and self.rect_attaque:
-            rect_attaque_visuel = pygame.Rect(
-                self.rect_attaque.x - off_x,
-                self.rect_attaque.y - off_y,
-                self.rect_attaque.width,
-                self.rect_attaque.height
-            )
-            pygame.draw.rect(surface, COULEUR_ATTAQUE, rect_attaque_visuel)
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  RÉSEAU
+    # ──────────────────────────────────────────────────────────────────────
 
     def get_etat(self):
         """Données pour le réseau."""
@@ -275,27 +473,36 @@ class Joueur:
             'rect': (self.rect_attaque.x, self.rect_attaque.y,
                      self.rect_attaque.w, self.rect_attaque.h) if self.rect_attaque else None
         }
-        # On vide la liste après envoi pour ne pas rejouer les sons en boucle
         sons = list(self.sons_a_jouer)
         self.sons_a_jouer.clear()
 
+        temps_actuel = pygame.time.get_ticks()
+        est_en_degat = bool(
+            self.dernier_degat_temps > 0 and
+            temps_actuel - self.dernier_degat_temps < TEMPS_INVINCIBILITE
+        )
+
         return {
-            'id': self.id,
-            'x': self.rect.x,
-            'y': self.rect.y,
-            'direction': self.direction,
-            'couleur': self.couleur,
-            'pv': self.pv,
-            'pv_max': self.pv_max,
-            'argent': self.argent,
-            'attaque': etat_attaque,
-            'peut_double_saut': self.peut_double_saut,
-            'peut_dash': self.peut_dash,
-            'est_en_dash': self.est_en_dash,
-            'have_key': self.have_key,
-            'peut_echo_dir': self.peut_echo_dir,
+            'id':                self.id,
+            'x':                 self.rect.x,
+            'y':                 self.rect.y,
+            'direction':         self.direction,
+            'couleur':           self.couleur,
+            'pv':                self.pv,
+            'pv_max':            self.pv_max,
+            'argent':            self.argent,
+            'attaque':           etat_attaque,
+            'peut_double_saut':  self.peut_double_saut,
+            'peut_dash':         self.peut_dash,
+            'est_en_dash':       self.est_en_dash,
+            'have_key':          self.have_key,
+            'peut_echo_dir':     self.peut_echo_dir,
             'dernier_echo_temps': self.dernier_echo_temps,
-            'sons': sons,  # ← liste des sons à jouer ce tick
+            'sons':              sons,
+            # Champs pour les animations côté client
+            'sur_le_sol':        self.sur_le_sol,
+            'en_mouvement':      self.en_mouvement,
+            'est_en_degat':      est_en_degat,
         }
 
     def set_etat(self, data):
@@ -305,9 +512,7 @@ class Joueur:
         self._set_etat_attributs(data)
 
     def set_etat_local(self, data):
-        """Mise à jour depuis le réseau pour le joueur local : ne touche pas à la position
-        (gérée par la simulation client, sinon le serveur — en retard de ~100 ms — la
-        ferait sauter en arrière 10 fois par seconde)."""
+        """Mise à jour depuis le réseau pour le joueur local : ne touche pas à la position."""
         self._set_etat_attributs(data)
 
     def _set_etat_attributs(self, data):
@@ -322,6 +527,10 @@ class Joueur:
         self.have_key = data.get('have_key', False)
         self.peut_echo_dir = data.get('peut_echo_dir', False)
         self.dernier_echo_temps = data.get('dernier_echo_temps', self.dernier_echo_temps)
+        # Champs animation
+        self.sur_le_sol  = data.get('sur_le_sol', self.sur_le_sol)
+        self.en_mouvement = data.get('en_mouvement', self.en_mouvement)
+        self.est_en_degat = data.get('est_en_degat', False)
 
         etat_attaque = data.get('attaque')
         if etat_attaque and etat_attaque['actif'] and etat_attaque['rect']:
@@ -332,12 +541,11 @@ class Joueur:
             self.est_en_attaque = False
             self.rect_attaque = None
 
-        # Rejouer les sons reçus du serveur (seulement pour MON joueur, géré dans client.py)
         self.sons_a_jouer = data.get('sons', [])
 
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────────────────────────────
     #  INTERPOLATION (client UDP, joueurs distants uniquement)
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────────────────────────────
 
     def pousser_snapshot_interp(self, t_serveur_ms: int, x: float, y: float):
         buf = self._interp_buffer
@@ -354,7 +562,6 @@ class Joueur:
             self.rect.x = int(buf[0][1])
             self.rect.y = int(buf[0][2])
             return
-        # Cherche les deux snapshots encadrant t_render.
         avant = buf[0]
         apres = buf[-1]
         for i in range(len(buf) - 1):
@@ -363,7 +570,6 @@ class Joueur:
                 apres = buf[i + 1]
                 break
         else:
-            # t_render hors plage : on prend le plus proche (snap).
             if t_render_serveur_ms < buf[0][0]:
                 self.rect.x = int(buf[0][1]); self.rect.y = int(buf[0][2])
             else:

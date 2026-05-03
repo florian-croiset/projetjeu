@@ -8,10 +8,10 @@
         "vsync": false,
         "musique": false,
         "resolution": [
-            1600,
-            900
+            1280,
+            960
         ],
-        "luminosite": 0.7545871559633027
+        "luminosite": 0.1559633027522936
     },
     "controles": {
         "gauche": "q",
