@@ -293,6 +293,12 @@ class Serveur:
                         if 'clavier' in commandes:
                             self.joueurs[id_joueur].commandes = commandes['clavier']
 
+                        if 'pseudo' in commandes:
+                            self.joueurs[id_joueur].pseudo = str(commandes['pseudo'])[:20]
+                        if 'skin' in commandes:
+                            skin = int(commandes.get('skin', 0))
+                            self.joueurs[id_joueur].skin = max(0, min(skin, 2))
+
                         if commandes.get('echo'):
                             t_echo = pygame.time.get_ticks()
                             joueur = self.joueurs[id_joueur]
@@ -467,13 +473,16 @@ class Serveur:
     # ------------------------------------------------------------------
 
     def _udp_appliquer_event_client(self, id_joueur: int, type_: int, payload):
-        """Applique un événement reçu en UDP (continus ou one-shot)."""
         if id_joueur not in self.joueurs:
             return
         joueur = self.joueurs[id_joueur]
         if type_ == UDP_P.TYPE_INPUTS_CONTINUS:
             if isinstance(payload, dict):
                 joueur.commandes = payload
+                if 'pseudo' in payload:
+                    joueur.pseudo = str(payload['pseudo'])[:20]
+                if 'skin' in payload:
+                    joueur.skin = max(0, min(int(payload.get('skin', 0)), 2))
         elif type_ == UDP_P.TYPE_INPUT_ONESHOT:
             if not isinstance(payload, dict):
                 return
