@@ -124,7 +124,8 @@ class PancarteLore:
         self._font_ui    = pygame.font.Font(None, 20)
         self._font_runic = pygame.font.Font(None, 24)
 
-    def dessiner(self, surface: pygame.Surface, camera_offset=(0, 0), temps_ms: int = 0):
+    def dessiner(self, surface: pygame.Surface, camera_offset=(0, 0), temps_ms: int = 0,
+                 touche_interagir: str = 'F'):
         self._init_fonts()
         off_x, off_y = camera_offset
         sx = self.x - off_x
@@ -159,7 +160,7 @@ class PancarteLore:
         self._dessiner_particules(surface, sx, sy, temps_ms)
 
         # ── Indicateur d'interaction (si non déverrouillée) ─────────────
-        self._dessiner_indicateur(surface, sx, sy, temps_ms)
+        self._dessiner_indicateur(surface, sx, sy, temps_ms, touche_interagir)
 
     def _construire_surface_pancarte(self, etat: str) -> pygame.Surface:
         """Construit et retourne la surface de la pancarte (cachée)."""
@@ -226,14 +227,15 @@ class PancarteLore:
             pygame.draw.circle(p_surf, couleur, (r + 1, r + 1), r)
             surface.blit(p_surf, (int(px) - r - 1, int(py) - r - 1))
 
-    def _dessiner_indicateur(self, surface, sx, sy, temps_ms):
-        """Badge [F] au-dessus de la pancarte pour signaler l'interaction."""
+    def _dessiner_indicateur(self, surface, sx, sy, temps_ms, touche: str = 'F'):
+        """Badge [<touche>] au-dessus de la pancarte pour signaler l'interaction."""
         f = pygame.font.Font(None, 18)
+        tk = (touche or 'F').upper()
         if not self.est_debloquee:
-            label = f"[F]  {COUT_AMES} âmes"
+            label = f"[{tk}]  {COUT_AMES} âmes"
             couleur = (160, 100, 255)
         else:
-            label = "[F]  Lire"
+            label = f"[{tk}]  Lire"
             couleur = (255, 200, 80)
 
         s = f.render(label, True, couleur)

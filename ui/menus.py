@@ -60,10 +60,12 @@ class MenusMixin:
         self.input_box_ip   = pygame.Rect(cx - lw // 2, cy - 30, lw, 46)
         self.input_ip_texte = ""
         self.input_ip_actif = False
+        self.input_ip_curseur_pos = 0
 
         self.input_box_code   = pygame.Rect(cx - lw // 2, cy - 30, lw, 46)
         self.input_code_texte = ""
         self.input_code_actif = False
+        self.input_code_curseur_pos = 0
 
         self.btn_mode_connexion = Bouton(
             cx - lw // 2, cy - 30 - bh - 16, lw, bh,
@@ -96,8 +98,10 @@ class MenusMixin:
 
         self.btn_copier_ip_locale    = _p()
         self.btn_copier_ip_hamachi   = _p()
+        self.btn_copier_code_room    = _p()
         self.btn_changer_langue      = _p()
         self.btn_toggle_plein_ecran  = _p()
+        self.btn_changer_ecran       = _p()
         self.btn_changer_resolution  = _p()
         self.btn_toggle_musique      = _p()
         self.btn_toggle_sfx          = _p()
@@ -125,6 +129,7 @@ class MenusMixin:
         self.boutons_menu_params_scrollables = [
             self.btn_changer_langue,
             self.btn_toggle_plein_ecran,
+            self.btn_changer_ecran,
             self.btn_changer_resolution,
             self.btn_toggle_musique,
             self.btn_toggle_sfx,
@@ -134,6 +139,7 @@ class MenusMixin:
             self.btn_changer_attaque, self.btn_changer_dash,
             self.btn_changer_interagir,   # NOUVEAU
             self.btn_copier_ip_locale, self.btn_copier_ip_hamachi,
+            self.btn_copier_code_room,
         ]
         self.boutons_menu_params_fixes = [
             self.btn_appliquer_params, self.btn_retour_params
@@ -141,6 +147,8 @@ class MenusMixin:
 
         self._ip_locale_cache = None
         self._ip_vpn_cache    = None
+        if not hasattr(self, '_feedback_copie'):
+            self._feedback_copie = {}
 
     def creer_widgets_menu_luminosite(self):
         cx = self.cx
@@ -396,9 +404,11 @@ class MenusMixin:
                 if texte_colle:
                     if self.mode_rejoindre == "code" and self.input_code_actif:
                         self.input_code_texte = texte_colle.upper()[:6]
+                        self.input_code_curseur_pos = len(self.input_code_texte)
                     else:
                         self.input_ip_texte = texte_colle
                         self.input_ip_actif = True
+                        self.input_ip_curseur_pos = len(self.input_ip_texte)
 
             if event.type == pygame.KEYDOWN:
                 if self.mode_rejoindre == "code" and event.key == pygame.K_TAB:
@@ -409,23 +419,51 @@ class MenusMixin:
                         self.input_ip_actif = True
                         self.input_code_actif = False
                 elif self.input_ip_actif:
+                    pos = self.input_ip_curseur_pos
+                    txt = self.input_ip_texte
                     if event.key == pygame.K_RETURN:
                         if self.mode_rejoindre == "code":
                             self.input_ip_actif = False
                             self.input_code_actif = True
                         else:
                             self._tenter_connexion_rejoindre()
-                    elif event.key == pygame.K_BACKSPACE:
-                        self.input_ip_texte = self.input_ip_texte[:-1]
+                    elif event.key == pygame.K_LEFT:
+                        self.input_ip_curseur_pos = max(0, pos - 1)
+                    elif event.key == pygame.K_RIGHT:
+                        self.input_ip_curseur_pos = min(len(txt), pos + 1)
+                    elif event.key == pygame.K_HOME:
+                        self.input_ip_curseur_pos = 0
+                    elif event.key == pygame.K_END:
+                        self.input_ip_curseur_pos = len(txt)
+                    elif event.key == pygame.K_BACKSPACE and pos > 0:
+                        self.input_ip_texte = txt[:pos - 1] + txt[pos:]
+                        self.input_ip_curseur_pos = pos - 1
+                    elif event.key == pygame.K_DELETE and pos < len(txt):
+                        self.input_ip_texte = txt[:pos] + txt[pos + 1:]
                     elif event.unicode and event.unicode.isprintable():
-                        self.input_ip_texte += event.unicode
+                        self.input_ip_texte = txt[:pos] + event.unicode + txt[pos:]
+                        self.input_ip_curseur_pos = pos + 1
                 elif self.input_code_actif:
+                    pos = self.input_code_curseur_pos
+                    txt = self.input_code_texte
                     if event.key == pygame.K_RETURN:
                         self._tenter_connexion_rejoindre()
-                    elif event.key == pygame.K_BACKSPACE:
-                        self.input_code_texte = self.input_code_texte[:-1]
-                    elif len(self.input_code_texte) < 6 and event.unicode.isalpha():
-                        self.input_code_texte += event.unicode.upper()
+                    elif event.key == pygame.K_LEFT:
+                        self.input_code_curseur_pos = max(0, pos - 1)
+                    elif event.key == pygame.K_RIGHT:
+                        self.input_code_curseur_pos = min(len(txt), pos + 1)
+                    elif event.key == pygame.K_HOME:
+                        self.input_code_curseur_pos = 0
+                    elif event.key == pygame.K_END:
+                        self.input_code_curseur_pos = len(txt)
+                    elif event.key == pygame.K_BACKSPACE and pos > 0:
+                        self.input_code_texte = txt[:pos - 1] + txt[pos:]
+                        self.input_code_curseur_pos = pos - 1
+                    elif event.key == pygame.K_DELETE and pos < len(txt):
+                        self.input_code_texte = txt[:pos] + txt[pos + 1:]
+                    elif len(txt) < 6 and event.unicode and event.unicode.isalpha():
+                        self.input_code_texte = txt[:pos] + event.unicode.upper() + txt[pos:]
+                        self.input_code_curseur_pos = pos + 1
 
     def dessiner_menu_rejoindre(self):
         dessiner_fond_echo(self.ecran, self.largeur_ecran, self.hauteur_ecran,
@@ -461,7 +499,9 @@ class MenusMixin:
             txt_ip = self.police_texte.render(self.input_ip_texte, True, COULEUR_TEXTE)
             self.ecran.blit(txt_ip, (input_box_ip.x + 12, input_box_ip.y + 10))
             if self.input_ip_actif and int(time.time() * 2) % 2 == 0:
-                cx_cur = input_box_ip.x + 14 + txt_ip.get_width()
+                pos_ip = max(0, min(len(self.input_ip_texte), self.input_ip_curseur_pos))
+                avant_ip = self.police_texte.render(self.input_ip_texte[:pos_ip], True, COULEUR_TEXTE)
+                cx_cur = input_box_ip.x + 14 + avant_ip.get_width()
                 cy_cur = input_box_ip.y + 8
                 pygame.draw.rect(self.ecran, COULEUR_CYAN,
                                 pygame.Rect(cx_cur, cy_cur, 2,
@@ -482,7 +522,13 @@ class MenusMixin:
             txt_code = self.police_texte.render(texte_affiche, True, COULEUR_TEXTE)
             self.ecran.blit(txt_code, (input_box_code.x + 12, input_box_code.y + 10))
             if self.input_code_actif and int(time.time() * 2) % 2 == 0:
-                cx_cur = input_box_code.x + 14 + txt_code.get_width()
+                pos_c = max(0, min(len(self.input_code_texte), self.input_code_curseur_pos))
+                avant_c = "  ".join(self.input_code_texte[:pos_c])
+                avant_c_surf = self.police_texte.render(avant_c, True, COULEUR_TEXTE)
+                largeur_avant = avant_c_surf.get_width()
+                if pos_c > 0 and pos_c < len(self.input_code_texte):
+                    largeur_avant += self.police_texte.size("  ")[0]
+                cx_cur = input_box_code.x + 14 + largeur_avant
                 cy_cur = input_box_code.y + 8
                 pygame.draw.rect(self.ecran, COULEUR_CYAN,
                                 pygame.Rect(cx_cur, cy_cur, 2,
@@ -502,7 +548,9 @@ class MenusMixin:
             txt_surf = self.police_texte.render(self.input_ip_texte, True, COULEUR_TEXTE)
             self.ecran.blit(txt_surf, (input_box.x + 12, input_box.y + 10))
             if self.input_ip_actif and int(time.time() * 2) % 2 == 0:
-                cx_cur = input_box.x + 14 + txt_surf.get_width()
+                pos_ip = max(0, min(len(self.input_ip_texte), self.input_ip_curseur_pos))
+                avant_ip = self.police_texte.render(self.input_ip_texte[:pos_ip], True, COULEUR_TEXTE)
+                cx_cur = input_box.x + 14 + avant_ip.get_width()
                 cy_cur = input_box.y + 8
                 pygame.draw.rect(self.ecran, COULEUR_CYAN,
                                 pygame.Rect(cx_cur, cy_cur, 2,
@@ -594,14 +642,23 @@ class MenusMixin:
             else:
                 btn_slot.style = "normal"
                 btn_slot._definir_style(btn_slot.style)
-            btn_slot.texte = info["nom"]
+            btn_slot.texte = ""
             btn_slot.dessiner(self.ecran)
+            survole = btn_slot.est_survole
+            couleur_nom = btn_slot.couleur_texte_survol if survole else btn_slot.couleur_texte
+            nom_surf = self.police_bouton.render(info["nom"], True, couleur_nom)
             if info["description"]:
+                offset = nom_surf.get_height() // 2 + 4
+                self.ecran.blit(nom_surf, nom_surf.get_rect(
+                    center=(btn_slot.rect.centerx,
+                            btn_slot.rect.centery - offset)))
                 desc_c = COULEUR_TEXTE_SOMBRE if (mode_continuer and est_vide) else COULEUR_TEXTE
                 desc = self.police_petit.render(info["description"], True, desc_c)
                 self.ecran.blit(desc, desc.get_rect(
                     center=(btn_slot.rect.centerx,
-                            btn_slot.rect.centery + 14)))
+                            btn_slot.rect.centery + offset)))
+            else:
+                self.ecran.blit(nom_surf, nom_surf.get_rect(center=btn_slot.rect.center))
         self.btn_retour_slots.dessiner(self.ecran)
 
     # ==================================================================
@@ -687,9 +744,22 @@ class MenusMixin:
                 if self.btn_toggle_plein_ecran.verifier_clic(event):
                     self.parametres_temp['video']['plein_ecran'] = \
                         not self.parametres_temp['video']['plein_ecran']
+                if self.btn_changer_ecran.verifier_clic(event):
+                    nb = len(getattr(self, '_desktop_sizes', [(0, 0)]))
+                    if nb > 1:
+                        cur = self.parametres_temp['video'].get('display_index', 0)
+                        nouvelle_idx = (cur + 1) % nb
+                        self.parametres_temp['video']['display_index'] = nouvelle_idx
+                        if self.parametres_temp['video']['plein_ecran']:
+                            w_e, h_e = self._desktop_sizes[nouvelle_idx]
+                            self.parametres_temp['video']['resolution'] = [w_e, h_e]
                 if self.btn_changer_resolution.verifier_clic(event):
                     if not self.parametres_temp['video']['plein_ecran']:
-                        resolutions = get_resolutions_compatibles(self.resolution_native)
+                        idx_screen = self.parametres_temp['video'].get('display_index', 0)
+                        sizes = getattr(self, '_desktop_sizes', [self.resolution_native])
+                        if idx_screen < 0 or idx_screen >= len(sizes):
+                            idx_screen = 0
+                        resolutions = get_resolutions_compatibles(sizes[idx_screen])
                         current = tuple(self.parametres_temp['video'].get(
                             'resolution', [LARGEUR_ECRAN, HAUTEUR_ECRAN]))
                         try:
@@ -731,11 +801,17 @@ class MenusMixin:
                     self.touche_a_modifier = 'interagir'
                 if self.btn_copier_ip_locale.verifier_clic(event):
                     ip = obtenir_ip_locale()
-                    self.copier_dans_presse_papier(ip)
+                    if self.copier_dans_presse_papier(ip):
+                        self._feedback_copie['ip_locale'] = pygame.time.get_ticks()
                 if self.btn_copier_ip_hamachi.verifier_clic(event):
                     ip = obtenir_ip_vpn()
                     if ip != "Non connecté":
-                        self.copier_dans_presse_papier(ip)
+                        if self.copier_dans_presse_papier(ip):
+                            self._feedback_copie['ip_hamachi'] = pygame.time.get_ticks()
+                if self.btn_copier_code_room.verifier_clic(event):
+                    code = getattr(self, 'code_room', None)
+                    if code and self.copier_dans_presse_papier(code):
+                        self._feedback_copie['code_room'] = pygame.time.get_ticks()
         for btn in self.boutons_menu_params_fixes + self.boutons_menu_params_scrollables:
             btn.verifier_survol(pos_souris)
 
@@ -819,6 +895,22 @@ class MenusMixin:
                     langue.get_texte("param_oui"),
                     langue.get_texte("param_non"))
 
+        nb_ecrans = len(getattr(self, '_desktop_sizes', [(0, 0)]))
+        if nb_ecrans > 1:
+            idx_ecran = params['video'].get('display_index', 0)
+            if idx_ecran < 0 or idx_ecran >= nb_ecrans:
+                idx_ecran = 0
+            w_e, h_e = self._desktop_sizes[idx_ecran]
+            lbl_ecran = self.police_texte.render(
+                langue.get_texte("param_ecran"), True, COULEUR_TEXTE)
+            self.ecran.blit(lbl_ecran, (col_gauche + 20, y + 6))
+            self.btn_changer_ecran.rect.y = y
+            self.btn_changer_ecran.texte = f"{idx_ecran + 1}/{nb_ecrans}  ({w_e}x{h_e})"
+            self.btn_changer_ecran.style = "normal"
+            self.btn_changer_ecran._definir_style("normal")
+            self.btn_changer_ecran.dessiner(self.ecran)
+            y += esp_ligne
+
         est_plein_ecran = params['video']['plein_ecran']
         if est_plein_ecran:
             res_txt = f"{self.resolution_native[0]}x{self.resolution_native[1]}"
@@ -869,25 +961,29 @@ class MenusMixin:
         ligne_controle("Interagir (Pancarte)",  'interagir', self.btn_changer_interagir)   # NOUVEAU
 
         section(langue.get_texte("param_section_reseau"))
+
+        def _label_copie(cle, val):
+            suffix = "(Copié)" if pygame.time.get_ticks() - self._feedback_copie.get(cle, 0) < 1500 else "(copier)"
+            return f"{val}   {suffix}"
+
         ligne_ip("IP Locale (LAN) :",
-                f"{self._ip_locale_cache or '...'}   (copier)",
+                _label_copie('ip_locale', self._ip_locale_cache or '...'),
                 self.btn_copier_ip_locale)
         ligne_ip("IP VPN (Tailscale/Hamachi) :",
-                f"{self._ip_vpn_cache or '...'}   (copier)",
+                _label_copie('ip_hamachi', self._ip_vpn_cache or '...'),
                 self.btn_copier_ip_hamachi)
 
         code_val = getattr(self, 'code_room', None)
         if code_val:
-            code_txt = code_val
-            code_color = COULEUR_CYAN
+            self.btn_copier_code_room.style = "normal"
+            self.btn_copier_code_room._definir_style("normal")
+            txt_code_btn = _label_copie('code_room', code_val)
         else:
-            code_txt = langue.get_texte("param_code_room_vide")
-            code_color = COULEUR_TEXTE_SOMBRE
-        lbl_code = self.police_texte.render(langue.get_texte("param_code_room_label"), True, COULEUR_TEXTE)
-        self.ecran.blit(lbl_code, (col_gauche + 20, y + 6))
-        val_code = self.police_texte.render(code_txt, True, code_color)
-        self.ecran.blit(val_code, (col_droite, y + 6))
-        y += esp_ligne
+            self.btn_copier_code_room.style = "disabled"
+            self.btn_copier_code_room._definir_style("disabled")
+            txt_code_btn = langue.get_texte("param_code_room_vide")
+        ligne_ip(langue.get_texte("param_code_room_label"), txt_code_btn,
+                 self.btn_copier_code_room)
 
         aide = self.police_petit.render(
             "Cliquez pour copier dans le presse-papiers", True, COULEUR_TEXTE_SOMBRE)

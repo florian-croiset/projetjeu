@@ -33,9 +33,22 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
     def __init__(self):
         pygame.init()
 
-        # Résolution native de l'écran (avant tout set_mode)
-        _info = pygame.display.Info()
-        self.resolution_native = (_info.current_w, _info.current_h)
+        # Paramètres et langue (chargés tôt pour connaître l'écran cible)
+        self.parametres = gestion_parametres.charger_parametres()
+        langue.set_langue(self.parametres['jouabilite']['langue'])
+        music.init(self.parametres)
+
+        # Résolution native de l'écran cible (selon display_index)
+        try:
+            self._desktop_sizes = pygame.display.get_desktop_sizes()
+        except Exception:
+            _info = pygame.display.Info()
+            self._desktop_sizes = [(_info.current_w, _info.current_h)]
+        idx = self.parametres['video'].get('display_index', 0)
+        if idx < 0 or idx >= len(self._desktop_sizes):
+            idx = 0
+            self.parametres['video']['display_index'] = 0
+        self.resolution_native = self._desktop_sizes[idx]
 
         # Précalcul des masques de halo
         self._masque_halo_joueur = creer_masque_halo(RAYON_HALO_JOUEUR, HALO_DEGRADE_ETENDUE)
@@ -54,11 +67,6 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
             pygame.display.set_icon(icon)
         except Exception as e:
             print(f"Impossible de charger l'icône: {e}")
-
-        # Paramètres et langue
-        self.parametres = gestion_parametres.charger_parametres()
-        langue.set_langue(self.parametres['jouabilite']['langue'])
-        music.init(self.parametres)
 
         # Écran — la résolution et le zoom effectif sont calculés par appliquer_parametres_video
         self.largeur_ecran = LARGEUR_ECRAN
@@ -206,6 +214,12 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
             return False
 
     def appliquer_parametres_video(self, premiere_fois=False):
+        idx = self.parametres['video'].get('display_index', 0)
+        if idx < 0 or idx >= len(getattr(self, '_desktop_sizes', [(0, 0)])):
+            idx = 0
+            self.parametres['video']['display_index'] = 0
+        self.resolution_native = self._desktop_sizes[idx]
+
         if self.parametres['video']['plein_ecran']:
             new_w, new_h = self.resolution_native
             flags = pygame.SCALED | pygame.FULLSCREEN
@@ -222,13 +236,19 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
             if surf:
                 cur_flags = surf.get_flags()
                 cur_size  = surf.get_size()
+                cur_display = getattr(self, '_display_index_actif', 0)
                 needs_mode_change = (
                     (cur_size != (new_w, new_h)) or
-                    (bool(cur_flags & pygame.FULLSCREEN) != bool(flags & pygame.FULLSCREEN))
+                    (bool(cur_flags & pygame.FULLSCREEN) != bool(flags & pygame.FULLSCREEN)) or
+                    (cur_display != idx)
                 )
 
         if needs_mode_change:
-            self.ecran = pygame.display.set_mode((new_w, new_h), flags)
+            try:
+                self.ecran = pygame.display.set_mode((new_w, new_h), flags, display=idx)
+            except TypeError:
+                self.ecran = pygame.display.set_mode((new_w, new_h), flags)
+            self._display_index_actif = idx
 
         self.largeur_ecran = new_w
         self.hauteur_ecran = new_h

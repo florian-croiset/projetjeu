@@ -14,7 +14,9 @@ import errno
 
 
 class UdpEndpoint:
-    def __init__(self, bind_host: str = "0.0.0.0", bind_port: int = 0):
+    def __init__(self, bind_host: str, bind_port: int = 0):
+        # `bind_host` est requis : on évite de binder sur toutes les interfaces
+        # par défaut (cf. CodeQL py/bind-socket-all-network-interfaces).
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
