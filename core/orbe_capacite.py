@@ -154,13 +154,13 @@ class OrbeCapacite:
         surface.blit(corps, (cx - self.RAYON - 2, cy - self.RAYON - 2))
 
         # --- Icône centrale ---
-        police = pygame.font.Font(None, 20)
+        police = pygame.font.Font(None, 30)
         icone_surf = police.render(self.icone, True, (255, 255, 255))
         icone_rect = icone_surf.get_rect(center=(cx, cy))
         surface.blit(icone_surf, icone_rect)
 
         # --- Étiquette au-dessus ---
-        police_nom = pygame.font.Font(None, 16)
+        police_nom = pygame.font.Font(None, 24)
         nom_surf = police_nom.render(self.nom, True, (r2, g2, b2))
         nom_rect = nom_surf.get_rect(center=(cx, cy - self.RAYON - 10))
         # Fond semi-transparent

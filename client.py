@@ -44,6 +44,7 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
         except Exception:
             _info = pygame.display.Info()
             self._desktop_sizes = [(_info.current_w, _info.current_h)]
+
         idx = self.parametres['video'].get('display_index', 0)
         if idx < 0 or idx >= len(self._desktop_sizes):
             idx = 0
@@ -172,14 +173,22 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
     def cy(self):
         return self.hauteur_ecran // 2
 
+    def _ui_scale(self):
+        # Facteur d'échelle UI : 1.0 à 1080p, 2.0 à 2160p (4K), etc.
+        return self.hauteur_ecran / HAUTEUR_ECRAN
+
+    def _scale(self, valeur):
+        # Convertit une valeur en pixels de référence (1080p) vers la résolution actuelle.
+        return max(1, int(round(valeur * self._ui_scale())))
+
     def _largeur_bouton(self):
-        return max(260, min(420, self.largeur_ecran // 4))
+        return max(260, self._scale(420))
 
     def _hauteur_bouton(self):
-        return max(40, min(56, self.hauteur_ecran // 20))
+        return max(40, self._scale(54))
 
     def _espacement_bouton(self):
-        return max(10, min(18, self.hauteur_ecran // 60))
+        return max(10, self._scale(18))
 
     # ------------------------------------------------------------------
     #  UTILITAIRES
@@ -230,25 +239,37 @@ class Client(MenusMixin, HudMixin, BoucleJeuMixin):
 
         self.zoom_effectif = ZOOM_CAMERA * (new_w / LARGEUR_ECRAN)
 
+        # Le changement d'écran (display_index) ne peut PAS être appliqué à chaud :
+        # le renderer SCALED de pygame/SDL2 devient instable et crashe quelques
+        # secondes plus tard. On utilise donc le display_index actif courant pour
+        # le set_mode, et on garde le nouveau choix en mémoire pour le prochain lancement.
+        cur_display_actif = getattr(self, '_display_index_actif', idx)
+        idx_pour_set_mode = idx if premiere_fois else cur_display_actif
+
+        # Re-calcule la résolution si on doit utiliser l'écran actif et non le choisi
+        if not premiere_fois and idx_pour_set_mode != idx:
+            self.resolution_native = self._desktop_sizes[idx_pour_set_mode]
+            if self.parametres['video']['plein_ecran']:
+                new_w, new_h = self.resolution_native
+                self.zoom_effectif = ZOOM_CAMERA * (new_w / LARGEUR_ECRAN)
+
         needs_mode_change = premiere_fois
         if not premiere_fois:
             surf = pygame.display.get_surface()
             if surf:
                 cur_flags = surf.get_flags()
                 cur_size  = surf.get_size()
-                cur_display = getattr(self, '_display_index_actif', 0)
                 needs_mode_change = (
                     (cur_size != (new_w, new_h)) or
-                    (bool(cur_flags & pygame.FULLSCREEN) != bool(flags & pygame.FULLSCREEN)) or
-                    (cur_display != idx)
+                    (bool(cur_flags & pygame.FULLSCREEN) != bool(flags & pygame.FULLSCREEN))
                 )
 
         if needs_mode_change:
             try:
-                self.ecran = pygame.display.set_mode((new_w, new_h), flags, display=idx)
+                self.ecran = pygame.display.set_mode((new_w, new_h), flags, display=idx_pour_set_mode)
             except TypeError:
                 self.ecran = pygame.display.set_mode((new_w, new_h), flags)
-            self._display_index_actif = idx
+            self._display_index_actif = idx_pour_set_mode
 
         self.largeur_ecran = new_w
         self.hauteur_ecran = new_h

@@ -459,6 +459,10 @@ class BoucleJeuMixin:
             surface_virtuelle, (self.largeur_ecran, self.hauteur_ecran))
         self.ecran.blit(surface_zoomee, (0, 0))
 
+        # Pseudos rendus directement sur l'écran final (post-scale) pour rester nets.
+        for joueur in self.joueurs_locaux.values():
+            joueur.dessiner_pseudo_ecran(self.ecran, camera_offset, zoom)
+
         if MODE_DEV:
             btn = envoyer_logs.get_bouton()
             btn.rect.topleft = (self.largeur_ecran - 175, 140)

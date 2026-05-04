@@ -119,10 +119,10 @@ class PancarteLore:
     def _init_fonts(self):
         if self._font_lore is not None:
             return
-        self._font_lore  = pygame.font.Font(None, 18)
-        self._font_titre = pygame.font.Font(None, 22)
-        self._font_ui    = pygame.font.Font(None, 20)
-        self._font_runic = pygame.font.Font(None, 24)
+        self._font_lore  = pygame.font.Font(None, 28)
+        self._font_titre = pygame.font.Font(None, 34)
+        self._font_ui    = pygame.font.Font(None, 30)
+        self._font_runic = pygame.font.Font(None, 36)
 
     def dessiner(self, surface: pygame.Surface, camera_offset=(0, 0), temps_ms: int = 0,
                  touche_interagir: str = 'F'):
@@ -199,15 +199,15 @@ class PancarteLore:
                 pygame.draw.line(surf, (80, 60, 20), (dx, 8), (dx + 3, 14), 1)
                 pygame.draw.line(surf, (80, 60, 20), (w - dx, h - 8), (w - dx - 3, h - 14), 1)
             # Texte "???"
-            f = pygame.font.Font(None, 16)
+            f = pygame.font.Font(None, 24)
             s = f.render("???", True, (160, 120, 60))
             surf.blit(s, s.get_rect(center=(cx, cy + 16)))
         else:
             # Rune lumineuse centrale
-            f = pygame.font.Font(None, 28)
+            f = pygame.font.Font(None, 42)
             s = f.render("✦", True, (255, 200, 80))
             surf.blit(s, s.get_rect(center=(w // 2, h // 2 - 4)))
-            f2 = pygame.font.Font(None, 14)
+            f2 = pygame.font.Font(None, 22)
             s2 = f2.render("LORE", True, (200, 160, 60))
             surf.blit(s2, s2.get_rect(center=(w // 2, h // 2 + 14)))
 
@@ -229,7 +229,7 @@ class PancarteLore:
 
     def _dessiner_indicateur(self, surface, sx, sy, temps_ms, touche: str = 'F'):
         """Badge [<touche>] au-dessus de la pancarte pour signaler l'interaction."""
-        f = pygame.font.Font(None, 18)
+        f = pygame.font.Font(None, 28)
         tk = (touche or 'F').upper()
         if not self.est_debloquee:
             label = f"[{tk}]  {COUT_AMES} âmes"
@@ -277,9 +277,9 @@ class BulleLore:
         self._surf      = None   # Cache de la bulle
         self._temps_ouv = 0
 
-        self._font_texte = pygame.font.Font(None, 19)
-        self._font_titre = pygame.font.Font(None, 24)
-        self._font_fermer = pygame.font.Font(None, 18)
+        self._font_texte = pygame.font.Font(None, 28)
+        self._font_titre = pygame.font.Font(None, 36)
+        self._font_fermer = pygame.font.Font(None, 26)
 
     def ouvrir(self):
         self.visible    = True
@@ -415,8 +415,8 @@ class PopupPaiement:
         self.visible    = False
         self.mode       = 'confirmer'   # 'confirmer' | 'pauvre' | 'debloquee'
         self._callback  = None          # Appelé si confirmation
-        self._font      = pygame.font.Font(None, 20)
-        self._font_btn  = pygame.font.Font(None, 22)
+        self._font      = pygame.font.Font(None, 30)
+        self._font_btn  = pygame.font.Font(None, 34)
         self._temps_msg = 0             # Pour les messages temporaires
 
         # Rects des boutons (calculés dans dessiner)

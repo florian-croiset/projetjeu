@@ -22,10 +22,11 @@ class HudMixin:
         """Initialise les fonts et surfaces cachées du HUD. Appelé une seule fois."""
         if hasattr(self, '_hud_cache_ok'):
             return
-        self._font_echo_icon   = pygame.font.Font(None, max(20, 22))  # rayon=22
-        self._font_label_small = pygame.font.Font(None, 16)
-        self._font_label_medium = pygame.font.Font(None, 22)
-        self._font_capacite    = pygame.font.Font(None, 13)
+        h = self.hauteur_ecran
+        self._font_echo_icon    = pygame.font.Font(None, max(32, h // 28))
+        self._font_label_small  = pygame.font.Font(None, max(22, h // 45))
+        self._font_label_medium = pygame.font.Font(None, max(32, h // 32))
+        self._font_capacite     = pygame.font.Font(None, max(20, h // 50))
         # Surfaces réutilisables pour le widget echo (taille fixe)
         self._widget_surf_cache = pygame.Surface((130, 22 * 2 + 4), pygame.SRCALPHA)
         self._surf_c_cache      = pygame.Surface((22 * 2 + 2, 22 * 2 + 2), pygame.SRCALPHA)
@@ -347,8 +348,9 @@ class HudMixin:
         surface.blit(self._mort_overlay_cache, (0, 0))
         if elapsed > 600:
             if not hasattr(self, '_police_mort'):
-                self._police_mort = pygame.font.Font(None, 48)
-                self._police_sub  = pygame.font.Font(None, 28)
+                # Tailles agrandies : l'écran de mort est dessiné sur surface_virtuelle (1/zoom) puis upscalé.
+                self._police_mort = pygame.font.Font(None, 96)
+                self._police_sub  = pygame.font.Font(None, 56)
             lw, lh = surface.get_size()
             t1 = self._police_mort.render("VOUS ETES MORT", True, (220, 50, 50))
             t2 = self._police_sub.render("Respawn en cours...", True, (160, 100, 100))
@@ -379,7 +381,7 @@ class HudMixin:
         pour indiquer la touche d'interaction, avant la première utilisation.
         """
         if not hasattr(self, '_font_badge_torche'):
-            self._font_badge_torche = pygame.font.Font(None, 18)
+            self._font_badge_torche = pygame.font.Font(None, 32)
 
         off_x, off_y = camera_offset
         temps_ms = pygame.time.get_ticks()
