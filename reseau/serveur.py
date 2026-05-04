@@ -67,6 +67,14 @@ class Serveur:
         self.cle                 = None
         self.porte               = None
         self.echos_en_cours      = []
+        # Optimisation broadcast : flag par-client pour déclencher un envoi
+        # complet des entités statiques (orbes, pancartes, clé, porte, âmes
+        # libres) lors de la première diffusion qui suit la connexion. Après
+        # ça, seuls les diffs (entités dont _dirty est True) sont envoyés.
+        self.statiques_needs_full = {}
+        # IDs d'âmes libres collectées depuis le dernier broadcast (à diffuser
+        # une seule fois pour que les clients suppriment leur copie locale).
+        self._ames_libres_supprimees_buffer = set()
 
         # ===== CARTE =====
         import os
@@ -251,6 +259,9 @@ class Serveur:
         self.vis_map_dirty[id_joueur] = True
         self.vis_delta_buffer[id_joueur] = set()
         self.vis_needs_full[id_joueur] = True
+        # Le client doit recevoir l'état complet des entités statiques au
+        # premier broadcast (les diffusions suivantes seront des diffs).
+        self.statiques_needs_full[id_joueur] = True
 
         # Handshake : on envoie toujours un dict, même en mode TCP pur, pour simplifier le client.
         udp_token = None
@@ -419,7 +430,16 @@ class Serveur:
                             buf.clear()
                             self.vis_map_dirty[id_joueur] = False
 
+                        # Première diffusion pour ce client → joindre l'état
+                        # complet des entités statiques.
+                        statiques_full = None
+                        if self.statiques_needs_full.get(id_joueur, False):
+                            statiques_full = self._composer_statiques_full()
+                            self.statiques_needs_full[id_joueur] = False
+
                     donnees_pour_client = {**etat_commun, 'vis_map': vis_full, 'vis_delta': vis_delta}
+                    if statiques_full:
+                        donnees_pour_client.update(statiques_full)
                     send_complet(connexion_client, donnees_pour_client)
 
                     elapsed = time.time() - debut
@@ -464,6 +484,8 @@ class Serveur:
                     del self.vis_delta_buffer[id_joueur]
                 if hasattr(self, 'vis_needs_full') and id_joueur in self.vis_needs_full:
                     del self.vis_needs_full[id_joueur]
+                if id_joueur in self.statiques_needs_full:
+                    del self.statiques_needs_full[id_joueur]
                 if id_joueur not in self._ids_pool:
                     self._ids_pool.append(id_joueur)
                     self._ids_pool.sort()
@@ -678,6 +700,18 @@ class Serveur:
         for conn in self.udp_conns_par_id.values():
             conn.envoyer_unreliable(UDP_P.TYPE_SNAPSHOT, body)
 
+    def _composer_statiques_full(self) -> dict:
+        """Construit le payload « état complet des entités statiques » à
+        envoyer à un client qui rejoint la partie. À appeler sous self.lock."""
+        return {
+            'orbes_capacite_full': [o.get_etat() for o in self.orbes_capacite.values()],
+            'pancartes_lore_full': [p.get_etat(id_pancarte=i)
+                                    for i, p in self.pancartes_lore.items()],
+            'cle_full':            self.cle.get_etat()   if self.cle   else None,
+            'porte_full':          self.porte.get_etat() if self.porte else None,
+            'ames_libres_full':    [a.get_etat() for a in self.ames_libres.values()],
+        }
+
     def _udp_diffuser_etat_discret(self, etat_commun: dict):
         """Envoie l'état complet (hors positions) en reliable. Un seul paquet en vol
         par client grâce à la clé 'etat_discret'."""
@@ -701,7 +735,15 @@ class Serveur:
                     vis_delta = list(buf)
                     buf.clear()
                     self.vis_map_dirty[id_joueur] = False
+
+                statiques_full = None
+                if self.statiques_needs_full.get(id_joueur, False):
+                    statiques_full = self._composer_statiques_full()
+                    self.statiques_needs_full[id_joueur] = False
+
             payload = {**etat_commun, 'vis_map': vis_full, 'vis_delta': vis_delta}
+            if statiques_full:
+                payload.update(statiques_full)
             conn.envoyer_reliable(UDP_P.TYPE_ETAT_DISCRET, payload, cle_latest='etat_discret')
 
     # ------------------------------------------------------------------
@@ -757,9 +799,8 @@ class Serveur:
                         ennemi.flash_echo_temps = temps_actuel
 
             with self.lock:
-                # 1. Âmes libres : animation + collecte
-                for ame in self.ames_libres.values():
-                    ame.mettre_a_jour(temps_actuel)
+                # 1. Âmes libres : collecte (animation purement cosmétique
+                # déléguée au client → plus de mettre_a_jour() ici).
                 for id_joueur, joueur in list(self.joueurs.items()):
                     for id_ame, ame in list(self.ames_libres.items()):
                         if id_ame not in self.ames_libres:
@@ -767,6 +808,8 @@ class Serveur:
                         if joueur.rect.colliderect(ame.rect):
                             joueur.argent += ame.valeur
                             del self.ames_libres[id_ame]
+                            # Marque la suppression pour le prochain broadcast.
+                            self._ames_libres_supprimees_buffer.add(id_ame)
 
                 # 1b. Âmes loot : physique + collecte + despawn
                 for id_ame, ame in list(self.ames_loot.items()):
@@ -781,10 +824,8 @@ class Serveur:
                                 del self.ames_loot[id_ame]
                             break
 
-                # 2. Orbes de capacité : animation + collecte
-                for orbe in list(self.orbes_capacite.values()):
-                    if not orbe.est_ramasse:
-                        orbe.mettre_a_jour(temps_actuel)
+                # 2. Orbes de capacité : collecte (l'animation de flottement
+                # est purement cosmétique → exécutée côté client).
                 for id_joueur, joueur in list(self.joueurs.items()):
                     for id_orbe, orbe in list(self.orbes_capacite.items()):
                         if orbe.est_ramasse:
@@ -796,10 +837,9 @@ class Serveur:
                                     gestion_sauvegarde.sauvegarder_partie(
                                         self.id_slot, self.donnees_partie)
 
-                # 2b. NOUVEAU — Pancartes lore : animation uniquement
-                # (l'interaction est gérée dans thread_recv via commande 'interagir')
-                for pancarte in self.pancartes_lore.values():
-                    pancarte.mettre_a_jour(temps_actuel)
+                # 2b. NOUVEAU — Pancartes lore : aucune logique côté serveur.
+                # L'animation des particules est purement cosmétique (gérée
+                # côté client). Les interactions arrivent via 'interagir'.
 
                  # 2c. Révélation torche si elle vient d'être allumée
                 if self._torche_vient_detre_allumee:
@@ -819,12 +859,12 @@ class Serveur:
                         })
                         print(f"[TORCHE] Écho déclenché ({torche_cx}, {torche_cy})")
 
-                # 3. Clé : animation + collecte
+                # 3. Clé : collecte (animation de flottement côté client).
                 if self.cle and not self.cle.est_ramassee:
-                    self.cle.mettre_a_jour(temps_actuel)
                     for id_joueur, joueur in list(self.joueurs.items()):
                         if joueur.rect.colliderect(self.cle.rect):
                             self.cle.est_ramassee = True
+                            self.cle._dirty       = True
                             joueur.have_key       = True
                             print(f"[SERVEUR] Joueur {id_joueur} a ramasse la cle !")
 
@@ -958,20 +998,40 @@ class Serveur:
             if temps_actuel - self._dernier_broadcast >= intervalle:
                 self._dernier_broadcast = temps_actuel
                 with self.lock:
+                    # ── Diffs des entités statiques (uniquement si _dirty) ───
+                    orbes_maj = [o.get_etat() for o in self.orbes_capacite.values() if o._dirty]
+                    pancartes_maj = [p.get_etat(id_pancarte=i)
+                                     for i, p in self.pancartes_lore.items()
+                                     if p._dirty]
+                    cle_maj   = self.cle.get_etat()   if (self.cle   and self.cle._dirty)   else None
+                    porte_maj = self.porte.get_etat() if (self.porte and self.porte._dirty) else None
+                    ames_libres_maj = [a.get_etat() for a in self.ames_libres.values() if a._dirty]
+                    ames_libres_supprimees = list(self._ames_libres_supprimees_buffer)
+                    self._ames_libres_supprimees_buffer.clear()
+
+                    # Nettoyer les flags après extraction (avant broadcast)
+                    for o in self.orbes_capacite.values(): o._dirty = False
+                    for p in self.pancartes_lore.values(): p._dirty = False
+                    for a in self.ames_libres.values():    a._dirty = False
+                    if self.cle:   self.cle._dirty   = False
+                    if self.porte: self.porte._dirty = False
+
                     etat_commun = {
                         't':              temps_actuel,
                         'joueurs':        [j.get_etat() for j in self.joueurs.values()],
                         'ennemis':        [e.get_etat() for e in self.ennemis.values()],
                         'ames_perdues':   [a.get_etat() for a in self.ames_perdues.values()],
-                        'ames_libres':    [a.get_etat() for a in self.ames_libres.values()],
                         'ames_loot':      [a.get_etat() for a in self.ames_loot.values()],
-                        'orbes_capacite': [o.get_etat() for o in self.orbes_capacite.values()],
-                        'pancartes_lore': [p.get_etat() for p in self.pancartes_lore.values()],  # NOUVEAU
-                        'cle':            self.cle.get_etat() if self.cle else None,
-                        'porte':          self.porte.get_etat() if self.porte else None,
                         'torche_allumee': self.torche_allumee,
                         'boss_room':      self.boss_room.get_etat(),
+                        # Diffs des entités statiques. Champs absents si vides.
                     }
+                    if orbes_maj:               etat_commun['orbes_capacite_maj'] = orbes_maj
+                    if pancartes_maj:           etat_commun['pancartes_lore_maj'] = pancartes_maj
+                    if cle_maj is not None:     etat_commun['cle_maj']            = cle_maj
+                    if porte_maj is not None:   etat_commun['porte_maj']          = porte_maj
+                    if ames_libres_maj:         etat_commun['ames_libres_maj']    = ames_libres_maj
+                    if ames_libres_supprimees:  etat_commun['ames_libres_supprimees'] = ames_libres_supprimees
                 with self._broadcast_lock:
                     self._etat_broadcast = etat_commun
 

@@ -55,18 +55,23 @@ class OrbeCapacite:
         self.icone    = cfg['icone']
         self.nom      = cfg['nom']
 
-        # Rect de collecte
+        # Rect de collecte (figé sur la position de base : la collision côté
+        # serveur ne dépend pas du flottement cosmétique).
         self.rect = pygame.Rect(x - self.RAYON, y - self.RAYON,
                                 self.RAYON * 2, self.RAYON * 2)
 
         self.est_ramasse = False
+        # Marqueur de modification réseau : True initialement pour que la
+        # première diffusion contienne l'orbe ; remis à False par le serveur
+        # après broadcast, retourne à True dans tenter_collecte().
+        self._dirty = True
 
     # ------------------------------------------------------------------
     #  LOGIQUE SERVEUR
     # ------------------------------------------------------------------
 
     def mettre_a_jour(self, temps_ms: int):
-        """Animation de flottement."""
+        """Animation de flottement (appelée côté client uniquement)."""
         offset_y = math.sin(temps_ms / 700 + self.phase) * 5.0
         self.rect.centery = int(self.y_base + offset_y)
         self.rect.centerx = int(self.x_base)
@@ -86,6 +91,7 @@ class OrbeCapacite:
 
         joueur.argent -= cout
         self.est_ramasse = True
+        self._dirty = True
 
         if self.capacite == 'double_saut':
             joueur.peut_double_saut = True
@@ -102,17 +108,21 @@ class OrbeCapacite:
     # ------------------------------------------------------------------
 
     def get_etat(self) -> dict:
+        # On envoie la position de BASE (figée). L'animation de flottement
+        # est rejouée côté client via mettre_a_jour() à chaque frame.
         return {
             'id':          self.id,
-            'x':           self.rect.centerx,
-            'y':           self.rect.centery,
+            'x':           int(self.x_base),
+            'y':           int(self.y_base),
             'capacite':    self.capacite,
             'est_ramasse': self.est_ramasse,
         }
 
     def set_etat(self, data: dict):
-        self.rect.centerx = data['x']
-        self.rect.centery = data['y']
+        self.x_base       = float(data['x'])
+        self.y_base       = float(data['y'])
+        self.rect.centerx = int(self.x_base)
+        self.rect.centery = int(self.y_base)
         self.capacite     = data['capacite']
         self.est_ramasse  = data['est_ramasse']
 

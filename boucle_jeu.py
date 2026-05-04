@@ -312,9 +312,12 @@ class BoucleJeuMixin:
         # --- Orbes de capacité ---
         off_x, off_y = camera_offset
         camera_rect = pygame.Rect(off_x, off_y, lv, hv)
+        ticks_render = pygame.time.get_ticks()
         for orbe in self.orbes_capacite_locaux.values():
             if orbe.est_ramasse:
                 continue
+            # Animation de flottement déléguée au client (purement cosmétique).
+            orbe.mettre_a_jour(ticks_render)
             if not camera_rect.colliderect(orbe.rect):
                 continue
             # Ne pas afficher si le joueur a déjà cette capacité
@@ -324,13 +327,15 @@ class BoucleJeuMixin:
                 continue
             if orbe.capacite == 'echo_dir' and getattr(mon_joueur, 'peut_echo_dir', False):
                 continue
-            orbe.dessiner(surface_virtuelle, camera_offset, pygame.time.get_ticks())
+            orbe.dessiner(surface_virtuelle, camera_offset, ticks_render)
 
         # NOUVEAU — Pancartes de lore
         touche_interagir = self.parametres.get('controles', {}).get('interagir', 'f')
         for pancarte in self.pancartes_lore_locales.values():
+            # Animation des particules déléguée au client.
+            pancarte.mettre_a_jour(ticks_render)
             if camera_rect.colliderect(pancarte.rect):
-                pancarte.dessiner(surface_virtuelle, camera_offset, pygame.time.get_ticks(),
+                pancarte.dessiner(surface_virtuelle, camera_offset, ticks_render,
                                   touche_interagir=touche_interagir)
 
         # --- Joueurs ---
@@ -391,6 +396,8 @@ class BoucleJeuMixin:
             if camera_rect.colliderect(ame.rect):
                 ame.dessiner(surface_virtuelle, camera_offset, temps_ms)
         for ame in self.ames_libres_locales.values():
+            # Animation de flottement déléguée au client.
+            ame.mettre_a_jour(temps_ms)
             if camera_rect.colliderect(ame.rect):
                 ame.dessiner(surface_virtuelle, camera_offset, temps_ms)
         for ame in self.ames_loot_locales.values():
@@ -400,6 +407,8 @@ class BoucleJeuMixin:
 
         # --- Clé ---
         if self.cle_locale and not self.cle_locale.est_ramassee:
+            # Animation de flottement déléguée au client.
+            self.cle_locale.mettre_a_jour(temps_ms)
             if camera_rect.colliderect(self.cle_locale.rect):
                 self.cle_locale.dessiner(surface_virtuelle, camera_offset, temps_ms)
 
@@ -594,16 +603,23 @@ class BoucleJeuMixin:
                     da['x'], da['y'], da['id_joueur'])
             self.ames_perdues_locales[da['id']].set_etat(da)
 
-        # --- Âmes libres ---
-        ids_al = {a['id'] for a in donnees_recues.get('ames_libres', [])}
-        for id_local in list(self.ames_libres_locales.keys()):
-            if id_local not in ids_al:
-                del self.ames_libres_locales[id_local]
-        for dal in donnees_recues.get('ames_libres', []):
+        # --- Âmes libres (sync différentielle) ---
+        # Sync complète envoyée à la première diffusion d'un client.
+        if 'ames_libres_full' in donnees_recues:
+            self.ames_libres_locales.clear()
+            for dal in donnees_recues['ames_libres_full']:
+                self.ames_libres_locales[dal['id']] = AmeLibre(
+                    dal['x'], dal['y'], dal.get('valeur'))
+                self.ames_libres_locales[dal['id']].set_etat(dal)
+        # Mises à jour incrémentales (rare : ces entités ne mutent pas en jeu).
+        for dal in donnees_recues.get('ames_libres_maj', []):
             if dal['id'] not in self.ames_libres_locales:
                 self.ames_libres_locales[dal['id']] = AmeLibre(
                     dal['x'], dal['y'], dal.get('valeur'))
             self.ames_libres_locales[dal['id']].set_etat(dal)
+        # Suppressions (collecte par un joueur).
+        for id_supp in donnees_recues.get('ames_libres_supprimees', []):
+            self.ames_libres_locales.pop(id_supp, None)
 
         # --- Âmes loot ---
         ids_loot = {a['id'] for a in donnees_recues.get('ames_loot', [])}
@@ -615,32 +631,41 @@ class BoucleJeuMixin:
                 self.ames_loot_locales[dl['id']] = AmeLoot(dl['x'], dl['y'], dl.get('valeur', 1))
             self.ames_loot_locales[dl['id']].set_etat(dl)
 
-        # --- Orbes de capacité ---
-        ids_orbes = {o['id'] for o in donnees_recues.get('orbes_capacite', [])}
-        for id_local in list(self.orbes_capacite_locaux.keys()):
-            if id_local not in ids_orbes:
-                del self.orbes_capacite_locaux[id_local]
-        for do in donnees_recues.get('orbes_capacite', []):
+        # --- Orbes de capacité (sync différentielle) ---
+        if 'orbes_capacite_full' in donnees_recues:
+            self.orbes_capacite_locaux.clear()
+            for do in donnees_recues['orbes_capacite_full']:
+                self.orbes_capacite_locaux[do['id']] = OrbeCapacite(
+                    do['x'], do['y'], do['capacite'])
+                self.orbes_capacite_locaux[do['id']].set_etat(do)
+        for do in donnees_recues.get('orbes_capacite_maj', []):
             if do['id'] not in self.orbes_capacite_locaux:
                 self.orbes_capacite_locaux[do['id']] = OrbeCapacite(
                     do['x'], do['y'], do['capacite'])
             self.orbes_capacite_locaux[do['id']].set_etat(do)
 
-        # NOUVEAU — Pancartes lore
-        for i, dp in enumerate(donnees_recues.get('pancartes_lore', [])):
-            if i not in self.pancartes_lore_locales:
-                self.pancartes_lore_locales[i] = PancarteLore(dp['x'], dp['y'])
-            pancarte = self.pancartes_lore_locales[i]
+        # NOUVEAU — Pancartes lore (sync différentielle)
+        if 'pancartes_lore_full' in donnees_recues:
+            self.pancartes_lore_locales.clear()
+            for dp in donnees_recues['pancartes_lore_full']:
+                idx = dp.get('id', 0)
+                self.pancartes_lore_locales[idx] = PancarteLore(dp['x'], dp['y'])
+                self.pancartes_lore_locales[idx].set_etat(dp)
+        for dp in donnees_recues.get('pancartes_lore_maj', []):
+            idx = dp.get('id', 0)
+            if idx not in self.pancartes_lore_locales:
+                self.pancartes_lore_locales[idx] = PancarteLore(dp['x'], dp['y'])
+            pancarte = self.pancartes_lore_locales[idx]
             etait_debloquee = pancarte.est_debloquee
             pancarte.set_etat(dp)
             # Si la pancarte vient d'être débloquée par CE joueur → ouvrir la bulle
             if not etait_debloquee and dp['est_debloquee']:
-                if getattr(self, '_pancarte_active_id', None) == i:
+                if getattr(self, '_pancarte_active_id', None) == idx:
                     self.bulle_lore.ouvrir()
                     self._pancarte_active_id = None
 
-        # --- Porte ---
-        data_porte = donnees_recues.get('porte')
+        # --- Porte (sync différentielle) ---
+        data_porte = donnees_recues.get('porte_full') or donnees_recues.get('porte_maj')
         if data_porte:
             if self.porte_locale is None:
                 self.porte_locale = Porte(data_porte['x'], data_porte['y'])
@@ -665,8 +690,14 @@ class BoucleJeuMixin:
                 music.jouer_sfx('slash_boss')
             self._boss_etat_precedent = etat_boss_actuel
 
-        # --- Clé ---
-        data_cle = donnees_recues.get('cle')
+        # --- Clé (sync différentielle) ---
+        # cle_full peut être None (pas de clé encore générée). cle_maj absent
+        # par défaut. On ne touche au state local que si on a reçu de la donnée.
+        data_cle = None
+        if 'cle_full' in donnees_recues:
+            data_cle = donnees_recues['cle_full']
+        elif 'cle_maj' in donnees_recues:
+            data_cle = donnees_recues['cle_maj']
         if data_cle:
             if self.cle_locale is None:
                 self.cle_locale = Cle(data_cle['x'], data_cle['y'])

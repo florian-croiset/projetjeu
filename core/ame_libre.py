@@ -57,6 +57,11 @@ class AmeLibre:
 
         self.couleur = COULEUR_AME_LIBRE
         self.est_ramassee = False
+        # Marqueur réseau : True initialement (premier broadcast), False après.
+        # Comme les âmes libres ne mutent pas (elles sont juste supprimées du dict
+        # serveur lors de la collecte), ce flag ne se remet jamais à True après
+        # la première diffusion.
+        self._dirty = True
 
         global SPRITE_CRISTAL_LIBRE
         if SPRITE_CRISTAL_LIBRE is None:
@@ -64,11 +69,11 @@ class AmeLibre:
         self.sprite = SPRITE_CRISTAL_LIBRE.copy() if SPRITE_CRISTAL_LIBRE else None
 
     # ------------------------------------------------------------------
-    #  LOGIQUE (appelée par le serveur chaque frame)
+    #  ANIMATION (appelée côté client uniquement)
     # ------------------------------------------------------------------
 
     def mettre_a_jour(self, temps_ms):
-        """Mise à jour de l'animation de flottement."""
+        """Animation de flottement (purement cosmétique, côté client)."""
         # Flottement vertical : ±4 pixels sur 1.8 s
         offset_y = math.sin(temps_ms / 900 + self.phase) * 4.0
         self.rect.centery = int(self.y_base + offset_y)
@@ -79,18 +84,20 @@ class AmeLibre:
     # ------------------------------------------------------------------
 
     def get_etat(self):
-        """Sérialisation pour envoi au(x) client(s)."""
+        """Sérialisation pour envoi au(x) client(s) — position de base figée."""
         return {
             'id':     self.id,
-            'x':      self.rect.centerx,
-            'y':      self.rect.centery,
+            'x':      int(self.x_base),
+            'y':      int(self.y_base),
             'valeur': self.valeur,
         }
 
     def set_etat(self, data):
         """Mise à jour côté client depuis les données réseau."""
-        self.rect.centerx = data['x']
-        self.rect.centery = data['y']
+        self.x_base       = float(data['x'])
+        self.y_base       = float(data['y'])
+        self.rect.centerx = int(self.x_base)
+        self.rect.centery = int(self.y_base)
         self.valeur       = data.get('valeur', ARGENT_AME_LIBRE)
 
     # ------------------------------------------------------------------
