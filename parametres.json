@@ -8,10 +8,11 @@
         "vsync": false,
         "musique": false,
         "resolution": [
-            1280,
-            960
+            2560,
+            1440
         ],
-        "luminosite": 0.1559633027522936
+        "luminosite": 0.0,
+        "display_index": 0
     },
     "controles": {
         "gauche": "q",
@@ -19,7 +20,7 @@
         "saut": "space",
         "echo": "e",
         "attaque": "k",
-        "dash": "c",
+        "dash": "mouse_1",
         "echo_dir": "y",
         "interagir": "f",
         "torche": "l"
@@ -31,5 +32,9 @@
     },
     "meta": {
         "tutoriel_vu": true
+    },
+    "profil": {
+        "pseudo": "Ombra",
+        "skin": 0
     }
 }

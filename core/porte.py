@@ -198,6 +198,6 @@ class Porte:
                          pygame.Rect(cx - 3, cy + 2, 6, 7), border_radius=1)
 
         # Indicateur "Clé requise"
-        police = pygame.font.Font(None, 16)
+        police = pygame.font.Font(None, 24)
         txt = police.render("🔑", True, (255, 215, 0))
         surface.blit(txt, (cx - txt.get_width() // 2, cy + 12))

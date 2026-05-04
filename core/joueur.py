@@ -480,16 +480,29 @@ class Joueur:
             )
             pygame.draw.rect(surface, self.couleur, rect_visuel)
 
-        if self.pseudo:
-            if not hasattr(Joueur, '_font_pseudo'):
-                Joueur._font_pseudo = pygame.font.Font(None, 14)  # petite taille car la surface sera zoomée
-            pseudo_surf = Joueur._font_pseudo.render(self.pseudo, True, (210, 235, 255))
-            px = self.rect.centerx - off_x - pseudo_surf.get_width() // 2
-            py = self.rect.top - off_y - pseudo_surf.get_height() - 2
-            bg = pygame.Surface((pseudo_surf.get_width() + 6, pseudo_surf.get_height() + 2), pygame.SRCALPHA)
-            bg.fill((0, 0, 10, 160))
-            surface.blit(bg, (px - 3, py - 1))
-            surface.blit(pseudo_surf, (px, py))
+        # Le pseudo est dessiné séparément via dessiner_pseudo_ecran(),
+        # directement sur l'écran final pour éviter le flou de l'upscale.
+
+    def dessiner_pseudo_ecran(self, ecran, camera_offset=(0, 0), zoom=1.0):
+        """Dessine le pseudo directement sur l'écran final (post-scale).
+        Rendu à la taille `taille_base * zoom` pour rester net tout en suivant la caméra."""
+        if not self.pseudo:
+            return
+        off_x, off_y = camera_offset
+        taille_px = max(12, int(round(14 * zoom)))
+        cache = getattr(Joueur, '_font_pseudo_cache', None)
+        if cache is None or cache[0] != taille_px:
+            Joueur._font_pseudo_cache = (taille_px, pygame.font.Font(None, taille_px))
+        font = Joueur._font_pseudo_cache[1]
+        pseudo_surf = font.render(self.pseudo, True, (210, 235, 255))
+        cx_ecran = (self.rect.centerx - off_x) * zoom
+        top_ecran = (self.rect.top - off_y) * zoom
+        px = int(cx_ecran - pseudo_surf.get_width() / 2)
+        py = int(top_ecran - pseudo_surf.get_height() - 2 * zoom)
+        bg = pygame.Surface((pseudo_surf.get_width() + 6, pseudo_surf.get_height() + 2), pygame.SRCALPHA)
+        bg.fill((0, 0, 10, 160))
+        ecran.blit(bg, (px - 3, py - 1))
+        ecran.blit(pseudo_surf, (px, py))
 
     # ──────────────────────────────────────────────────────────────────────
     #  RÉSEAU

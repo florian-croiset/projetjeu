@@ -48,7 +48,7 @@ class MenusMixin:
             self.btn_nouvelle_partie, self.btn_continuer,
             self.btn_rejoindre, self.btn_parametres, self.btn_quitter
         ]
-        self.btn_copier_ip_locale = Bouton(0, 0, 300, 36, "", self.police_petit)
+        self.btn_copier_ip_locale = Bouton(0, 0, self._scale(300), self._scale(36), "", self.police_petit)
 
     def creer_widgets_menu_rejoindre(self):
         cx = self.cx
@@ -58,41 +58,43 @@ class MenusMixin:
 
         self.mode_rejoindre = "ip"
 
-        self.input_box_ip   = pygame.Rect(cx - lw // 2, cy - 30, lw, 46)
+        h_input = self._scale(46)
+
+        self.input_box_ip   = pygame.Rect(cx - lw // 2, cy - 30, lw, h_input)
         self.input_ip_texte = ""
         self.input_ip_actif = False
         self.input_ip_curseur_pos = 0
 
-        self.input_box_code   = pygame.Rect(cx - lw // 2, cy - 30, lw, 46)
+        self.input_box_code   = pygame.Rect(cx - lw // 2, cy - 30, lw, h_input)
         self.input_code_texte = ""
         self.input_code_actif = False
         self.input_code_curseur_pos = 0
 
         self.btn_mode_connexion = Bouton(
-            cx - lw // 2, cy - 30 - bh - 16, lw, bh,
+            cx - lw // 2, cy - 30 - bh - self._scale(16), lw, bh,
             langue.get_texte("rejoindre_mode_ip"),
             self.police_bouton, style="ghost"
         )
 
-        self.btn_connecter       = Bouton(cx - lw // 2, cy + 40, lw, bh,
+        self.btn_connecter       = Bouton(cx - lw // 2, cy + self._scale(40), lw, bh,
                                         langue.get_texte("rejoindre_connecter"),
                                         self.police_bouton)
-        self.btn_retour_rejoindre = Bouton(cx - lw // 2, cy + 40 + bh + 12, lw, bh,
+        self.btn_retour_rejoindre = Bouton(cx - lw // 2, cy + self._scale(40) + bh + self._scale(12), lw, bh,
                                         langue.get_texte("rejoindre_retour"),
                                         self.police_bouton, style="ghost")
-        self.btn_erreur_ok = Bouton(cx - 60, cy + 90, 120, bh, "OK",
+        self.btn_erreur_ok = Bouton(cx - self._scale(60), cy + self._scale(90), self._scale(120), bh, "OK",
                                     self.police_bouton, style="danger")
-        lw_coller = 90
+        lw_coller = self._scale(90)
         self.btn_coller_ip = Bouton(
-            cx + lw // 2 + 10, cy - 30, lw_coller, 46,
+            cx + lw // 2 + self._scale(10), cy - 30, lw_coller, h_input,
             "Coller", self.police_bouton, style="ghost"
         )
 
     def creer_widgets_menu_parametres(self):
         cx = self.cx
-        col_droite = cx + 60
-        lw_param = max(200, min(300, self.largeur_ecran // 6))
-        bh_param = max(34, self.hauteur_ecran // 28)
+        col_droite = cx + self._scale(60)
+        lw_param = max(200, self._scale(300))
+        bh_param = max(34, self._scale(38))
 
         def _p(texte=""):
             return Bouton(col_droite, 0, lw_param, bh_param, texte, self.police_petit)
@@ -104,6 +106,15 @@ class MenusMixin:
         self.btn_toggle_plein_ecran  = _p()
         self.btn_changer_ecran       = _p()
         self.btn_changer_resolution  = _p()
+
+        # Flèches de navigation pour la résolution — intégrées dans la colonne
+        arrow_w_res = bh_param
+        gap_res = max(4, self._scale(4))
+        self.btn_resolution_prev = Bouton(col_droite, 0, arrow_w_res, bh_param,
+                                          "<", self.police_bouton)
+        self.btn_resolution_next = Bouton(col_droite, 0, arrow_w_res, bh_param,
+                                          ">", self.police_bouton)
+        self.btn_changer_resolution.rect.width = lw_param - 2 * (arrow_w_res + gap_res)
         self.btn_toggle_musique      = _p()
         self.btn_toggle_sfx          = _p()
         self.btn_ouvrir_luminosite   = _p()
@@ -136,6 +147,8 @@ class MenusMixin:
             self.btn_toggle_plein_ecran,
             self.btn_changer_ecran,
             self.btn_changer_resolution,
+            self.btn_resolution_prev,
+            self.btn_resolution_next,
             self.btn_toggle_musique,
             self.btn_toggle_sfx,
             self.btn_ouvrir_luminosite,
@@ -193,17 +206,19 @@ class MenusMixin:
     def creer_widgets_menu_confirmation(self):
         cx = self.cx
         cy = self.cy
-        w_popup = max(400, min(520, self.largeur_ecran // 4))
-        h_popup = max(220, min(280, self.hauteur_ecran // 4))
+        w_popup = max(400, self._scale(520))
+        h_popup = max(220, self._scale(280))
         self.rect_popup = pygame.Rect(cx - w_popup // 2, cy - h_popup // 2,
                                     w_popup, h_popup)
         bh = self._hauteur_bouton()
         lw_btn = w_popup // 3
-        self.btn_popup_oui = Bouton(cx - lw_btn - 10, cy + h_popup // 2 - bh - 16,
+        marge = self._scale(10)
+        marge_bas = self._scale(16)
+        self.btn_popup_oui = Bouton(cx - lw_btn - marge, cy + h_popup // 2 - bh - marge_bas,
                                     lw_btn, bh,
                                     langue.get_texte("popup_oui"),
                                     self.police_bouton, style="confirm")
-        self.btn_popup_non = Bouton(cx + 10, cy + h_popup // 2 - bh - 16,
+        self.btn_popup_non = Bouton(cx + marge, cy + h_popup // 2 - bh - marge_bas,
                                     lw_btn, bh,
                                     langue.get_texte("popup_non"),
                                     self.police_bouton, style="danger")
@@ -482,24 +497,24 @@ class MenusMixin:
                             langue.get_texte("rejoindre_titre"),
                             self.cx, self.hauteur_ecran // 7)
 
-        pan_w = self._largeur_bouton() + 80
-        pan_h = 340 if self.mode_rejoindre == "code" else 280
+        pan_w = self._largeur_bouton() + self._scale(80)
+        pan_h = self._scale(340) if self.mode_rejoindre == "code" else self._scale(280)
         pan_rect = pygame.Rect(self.cx - pan_w // 2,
-                            self.cy - pan_h // 2 - 20,
+                            self.cy - pan_h // 2 - self._scale(20),
                             pan_w, pan_h)
         dessiner_panneau(self.ecran, pan_rect)
 
-        y_contenu = pan_rect.y + 36
+        y_contenu = pan_rect.y + self._scale(36)
 
         self.btn_mode_connexion.rect.center = (self.cx, y_contenu)
         self.btn_mode_connexion.dessiner(self.ecran)
-        y_contenu += 46
+        y_contenu += self._scale(46)
 
         if self.mode_rejoindre == "code":
             label_ip = self.police_texte.render(
                 langue.get_texte("rejoindre_label_ip_relay"), True, COULEUR_TEXTE)
             self.ecran.blit(label_ip, label_ip.get_rect(center=(self.cx, y_contenu)))
-            y_contenu += 24
+            y_contenu += self._scale(24)
 
             input_box_ip = self.input_box_ip
             input_box_ip.y = y_contenu
@@ -507,21 +522,21 @@ class MenusMixin:
             pygame.draw.rect(self.ecran, COULEUR_INPUT_BOX, input_box_ip, border_radius=6)
             pygame.draw.rect(self.ecran, bord_ip, input_box_ip, width=1, border_radius=6)
             txt_ip = self.police_texte.render(self.input_ip_texte, True, COULEUR_TEXTE)
-            self.ecran.blit(txt_ip, (input_box_ip.x + 12, input_box_ip.y + 10))
+            self.ecran.blit(txt_ip, (input_box_ip.x + self._scale(12), input_box_ip.y + self._scale(10)))
             if self.input_ip_actif and int(time.time() * 2) % 2 == 0:
                 pos_ip = max(0, min(len(self.input_ip_texte), self.input_ip_curseur_pos))
                 avant_ip = self.police_texte.render(self.input_ip_texte[:pos_ip], True, COULEUR_TEXTE)
-                cx_cur = input_box_ip.x + 14 + avant_ip.get_width()
-                cy_cur = input_box_ip.y + 8
+                cx_cur = input_box_ip.x + self._scale(14) + avant_ip.get_width()
+                cy_cur = input_box_ip.y + self._scale(8)
                 pygame.draw.rect(self.ecran, COULEUR_CYAN,
                                 pygame.Rect(cx_cur, cy_cur, 2,
                                             self.police_texte.get_height() - 6))
-            y_contenu += 54
+            y_contenu += self._scale(54)
 
             label_code = self.police_texte.render(
                 langue.get_texte("rejoindre_label_code"), True, COULEUR_TEXTE)
             self.ecran.blit(label_code, label_code.get_rect(center=(self.cx, y_contenu)))
-            y_contenu += 24
+            y_contenu += self._scale(24)
 
             input_box_code = self.input_box_code
             input_box_code.y = y_contenu
@@ -530,7 +545,7 @@ class MenusMixin:
             pygame.draw.rect(self.ecran, bord_code, input_box_code, width=1, border_radius=6)
             texte_affiche = "  ".join(self.input_code_texte) if self.input_code_texte else ""
             txt_code = self.police_texte.render(texte_affiche, True, COULEUR_TEXTE)
-            self.ecran.blit(txt_code, (input_box_code.x + 12, input_box_code.y + 10))
+            self.ecran.blit(txt_code, (input_box_code.x + self._scale(12), input_box_code.y + self._scale(10)))
             if self.input_code_actif and int(time.time() * 2) % 2 == 0:
                 pos_c = max(0, min(len(self.input_code_texte), self.input_code_curseur_pos))
                 avant_c = "  ".join(self.input_code_texte[:pos_c])
@@ -538,8 +553,8 @@ class MenusMixin:
                 largeur_avant = avant_c_surf.get_width()
                 if pos_c > 0 and pos_c < len(self.input_code_texte):
                     largeur_avant += self.police_texte.size("  ")[0]
-                cx_cur = input_box_code.x + 14 + largeur_avant
-                cy_cur = input_box_code.y + 8
+                cx_cur = input_box_code.x + self._scale(14) + largeur_avant
+                cy_cur = input_box_code.y + self._scale(8)
                 pygame.draw.rect(self.ecran, COULEUR_CYAN,
                                 pygame.Rect(cx_cur, cy_cur, 2,
                                             self.police_texte.get_height() - 6))
@@ -548,7 +563,7 @@ class MenusMixin:
             label_texte = langue.get_texte("rejoindre_label_ip")
             label = self.police_texte.render(label_texte, True, COULEUR_TEXTE)
             self.ecran.blit(label, label.get_rect(center=(self.cx, y_contenu)))
-            y_contenu += 28
+            y_contenu += self._scale(28)
 
             input_box = self.input_box_ip
             input_box.y = y_contenu
@@ -556,12 +571,12 @@ class MenusMixin:
             pygame.draw.rect(self.ecran, COULEUR_INPUT_BOX, input_box, border_radius=6)
             pygame.draw.rect(self.ecran, bord_color, input_box, width=1, border_radius=6)
             txt_surf = self.police_texte.render(self.input_ip_texte, True, COULEUR_TEXTE)
-            self.ecran.blit(txt_surf, (input_box.x + 12, input_box.y + 10))
+            self.ecran.blit(txt_surf, (input_box.x + self._scale(12), input_box.y + self._scale(10)))
             if self.input_ip_actif and int(time.time() * 2) % 2 == 0:
                 pos_ip = max(0, min(len(self.input_ip_texte), self.input_ip_curseur_pos))
                 avant_ip = self.police_texte.render(self.input_ip_texte[:pos_ip], True, COULEUR_TEXTE)
-                cx_cur = input_box.x + 14 + avant_ip.get_width()
-                cy_cur = input_box.y + 8
+                cx_cur = input_box.x + self._scale(14) + avant_ip.get_width()
+                cy_cur = input_box.y + self._scale(8)
                 pygame.draw.rect(self.ecran, COULEUR_CYAN,
                                 pygame.Rect(cx_cur, cy_cur, 2,
                                             self.police_texte.get_height() - 6))
@@ -570,9 +585,9 @@ class MenusMixin:
         self.btn_coller_ip.rect.y = last_input_y
         self.btn_coller_ip.dessiner(self.ecran)
 
-        y_btns = last_input_y + 60
+        y_btns = last_input_y + self._scale(60)
         self.btn_connecter.rect.y = y_btns
-        self.btn_retour_rejoindre.rect.y = y_btns + self._hauteur_bouton() + 12
+        self.btn_retour_rejoindre.rect.y = y_btns + self._hauteur_bouton() + self._scale(12)
         self.btn_connecter.dessiner(self.ecran)
         self.btn_retour_rejoindre.dessiner(self.ecran)
 
@@ -581,8 +596,8 @@ class MenusMixin:
 
     def _dessiner_popup_erreur(self):
         cx, cy = self.cx, self.cy
-        w_popup = max(440, min(600, self.largeur_ecran // 3))
-        h_popup = max(200, min(260, self.hauteur_ecran // 4))
+        w_popup = max(440, self._scale(600))
+        h_popup = max(200, self._scale(260))
         rect_popup = pygame.Rect(cx - w_popup // 2, cy - h_popup // 2,
                                 w_popup, h_popup)
 
@@ -592,18 +607,19 @@ class MenusMixin:
 
         dessiner_panneau(self.ecran, rect_popup, couleur_bordure=(220, 50, 50))
         titre_surf = self.police_texte.render("Erreur de connexion", True, (220, 50, 50))
-        self.ecran.blit(titre_surf, titre_surf.get_rect(center=(cx, rect_popup.y + 36)))
+        self.ecran.blit(titre_surf, titre_surf.get_rect(center=(cx, rect_popup.y + self._scale(36))))
         dessiner_separateur_neon(self.ecran,
-                                rect_popup.x + 20, rect_popup.y + 58,
-                                rect_popup.right - 20, couleur=(220, 50, 50))
+                                rect_popup.x + self._scale(20), rect_popup.y + self._scale(58),
+                                rect_popup.right - self._scale(20), couleur=(220, 50, 50))
 
         police_msg = self.police_petit
         lignes = self.message_erreur_connexion.split('\n')
+        ligne_h = self._scale(26)
         for i, ligne in enumerate(lignes):
             s = police_msg.render(ligne, True, COULEUR_TEXTE)
-            self.ecran.blit(s, s.get_rect(center=(cx, rect_popup.y + 90 + i * 26)))
+            self.ecran.blit(s, s.get_rect(center=(cx, rect_popup.y + self._scale(90) + i * ligne_h)))
 
-        self.btn_erreur_ok.rect.center = (cx, rect_popup.bottom - 36)
+        self.btn_erreur_ok.rect.center = (cx, rect_popup.bottom - self._scale(36))
         self.btn_erreur_ok.dessiner(self.ecran)
 
     # ==================================================================
@@ -699,15 +715,15 @@ class MenusMixin:
         titre = self.police_bouton.render(
             langue.get_texte("popup_titre"), True, COULEUR_VIOLET_CLAIR)
         self.ecran.blit(titre, titre.get_rect(
-            center=(self.rect_popup.centerx, self.rect_popup.y + 50)))
+            center=(self.rect_popup.centerx, self.rect_popup.y + self._scale(50))))
         dessiner_separateur_neon(self.ecran,
-                                self.rect_popup.x + 20, self.rect_popup.y + 76,
-                                self.rect_popup.right - 20,
+                                self.rect_popup.x + self._scale(20), self.rect_popup.y + self._scale(76),
+                                self.rect_popup.right - self._scale(20),
                                 couleur=COULEUR_VIOLET_SOMBRE, alpha=140)
         msg = self.police_texte.render(
             langue.get_texte("popup_message"), True, COULEUR_TEXTE)
         self.ecran.blit(msg, msg.get_rect(
-            center=(self.rect_popup.centerx, self.rect_popup.centery - 10)))
+            center=(self.rect_popup.centerx, self.rect_popup.centery - self._scale(10))))
         self.btn_popup_oui.dessiner(self.ecran)
         self.btn_popup_non.dessiner(self.ecran)
 
@@ -766,21 +782,29 @@ class MenusMixin:
                         if self.parametres_temp['video']['plein_ecran']:
                             w_e, h_e = self._desktop_sizes[nouvelle_idx]
                             self.parametres_temp['video']['resolution'] = [w_e, h_e]
+                def _cycler_resolution(direction):
+                    if self.parametres_temp['video']['plein_ecran']:
+                        return
+                    idx_screen = self.parametres_temp['video'].get('display_index', 0)
+                    sizes = getattr(self, '_desktop_sizes', [self.resolution_native])
+                    if idx_screen < 0 or idx_screen >= len(sizes):
+                        idx_screen = 0
+                    resolutions = get_resolutions_compatibles(sizes[idx_screen])
+                    current = tuple(self.parametres_temp['video'].get(
+                        'resolution', [LARGEUR_ECRAN, HAUTEUR_ECRAN]))
+                    try:
+                        idx = resolutions.index(current)
+                        nouvelle = resolutions[(idx + direction) % len(resolutions)]
+                    except ValueError:
+                        nouvelle = resolutions[0]
+                    self.parametres_temp['video']['resolution'] = list(nouvelle)
+
                 if self.btn_changer_resolution.verifier_clic(event):
-                    if not self.parametres_temp['video']['plein_ecran']:
-                        idx_screen = self.parametres_temp['video'].get('display_index', 0)
-                        sizes = getattr(self, '_desktop_sizes', [self.resolution_native])
-                        if idx_screen < 0 or idx_screen >= len(sizes):
-                            idx_screen = 0
-                        resolutions = get_resolutions_compatibles(sizes[idx_screen])
-                        current = tuple(self.parametres_temp['video'].get(
-                            'resolution', [LARGEUR_ECRAN, HAUTEUR_ECRAN]))
-                        try:
-                            idx = resolutions.index(current)
-                            nouvelle = resolutions[(idx + 1) % len(resolutions)]
-                        except ValueError:
-                            nouvelle = resolutions[0]
-                        self.parametres_temp['video']['resolution'] = list(nouvelle)
+                    _cycler_resolution(1)
+                if self.btn_resolution_prev.verifier_clic(event):
+                    _cycler_resolution(-1)
+                if self.btn_resolution_next.verifier_clic(event):
+                    _cycler_resolution(1)
                 if self.btn_toggle_musique.verifier_clic(event):
                     self.parametres_temp['video']['musique'] = not self.parametres_temp['video'].get('musique', True)
                 if self.btn_toggle_sfx.verifier_clic(event):
@@ -857,7 +881,7 @@ class MenusMixin:
 
         y = int(self.hauteur_ecran * 0.12) + self.scroll_y_params
         params = self.parametres_temp if self.parametres_temp else self.parametres
-        col_droite = self.cx + 60
+        col_droite = self.cx + self._scale(60)
         col_gauche = 100
         esp_ligne = max(44, self.hauteur_ecran // 22)
 
@@ -972,23 +996,45 @@ class MenusMixin:
             self.btn_changer_ecran.dessiner(self.ecran)
             y += esp_ligne
 
+            # Avertissement si l'écran choisi n'est pas celui actuellement actif
+            # (le changement n'est appliqué qu'au prochain lancement)
+            idx_actif = getattr(self, '_display_index_actif', idx_ecran)
+            if idx_ecran != idx_actif:
+                txt_warn = langue.get_texte("param_ecran_redemarrage")
+                lbl_warn = self.police_petit.render(txt_warn, True, (255, 200, 80))
+                self.ecran.blit(lbl_warn, (col_gauche + 20, y))
+                y += int(esp_ligne * 0.6)
+
         est_plein_ecran = params['video']['plein_ecran']
+        style_res = "disabled" if est_plein_ecran else "normal"
         if est_plein_ecran:
             res_txt = f"{self.resolution_native[0]}x{self.resolution_native[1]}"
-            self.btn_changer_resolution.style = "disabled"
-            self.btn_changer_resolution._definir_style("disabled")
         else:
             res = params['video'].get('resolution', [LARGEUR_ECRAN, HAUTEUR_ECRAN])
             res_txt = f"{res[0]}x{res[1]}"
-            self.btn_changer_resolution.style = "normal"
-            self.btn_changer_resolution._definir_style("normal")
+        for _btn in (self.btn_changer_resolution,
+                     self.btn_resolution_prev,
+                     self.btn_resolution_next):
+            _btn.style = style_res
+            _btn._definir_style(style_res)
         lbl_res_color = COULEUR_TEXTE_SOMBRE if est_plein_ecran else COULEUR_TEXTE
         lbl_res = self.police_texte.render(
             langue.get_texte("param_resolution"), True, lbl_res_color)
         self.ecran.blit(lbl_res, (col_gauche + 20, y + 6))
-        self.btn_changer_resolution.rect.y = y
+
+        # Disposition : [<] [résolution] [>] alignés dans la colonne
+        gap_res = max(4, self._scale(4))
+        arrow_w_res = self.btn_resolution_prev.rect.width
+        self.btn_resolution_prev.rect.topleft = (col_droite, y)
+        self.btn_changer_resolution.rect.topleft = (
+            col_droite + arrow_w_res + gap_res, y)
+        self.btn_resolution_next.rect.topleft = (
+            col_droite + arrow_w_res + gap_res
+            + self.btn_changer_resolution.rect.width + gap_res, y)
         self.btn_changer_resolution.texte = res_txt
+        self.btn_resolution_prev.dessiner(self.ecran)
         self.btn_changer_resolution.dessiner(self.ecran)
+        self.btn_resolution_next.dessiner(self.ecran)
         y += esp_ligne
 
         ligne_toggle("Musique",
