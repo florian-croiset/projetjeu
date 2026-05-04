@@ -53,6 +53,8 @@ class PancarteLore:
         self.y = y
         self.rect = pygame.Rect(x, y, LARGEUR_PANCARTE, HAUTEUR_PANCARTE)
         self.est_debloquee = False
+        # Marqueur réseau : True initialement, repassé à True dans tenter_paiement().
+        self._dirty = True
 
         # Phase sinusoïdale pour les particules d'âmes
         self._phase = 0.0
@@ -71,12 +73,15 @@ class PancarteLore:
 
     # ── Réseau ──────────────────────────────────────────────────────────────
 
-    def get_etat(self) -> dict:
-        return {
+    def get_etat(self, id_pancarte: int = None) -> dict:
+        d = {
             'x':             self.x,
             'y':             self.y,
             'est_debloquee': self.est_debloquee,
         }
+        if id_pancarte is not None:
+            d['id'] = id_pancarte
+        return d
 
     def set_etat(self, data: dict):
         self.x             = data['x']
@@ -99,14 +104,16 @@ class PancarteLore:
             joueur.argent -= COUT_DASH
             joueur.peut_dash = True
             self.est_debloquee = True
+            self._dirty = True
             joueur.sons_a_jouer.append('ame_libre')
             return 'debloquee'
-        
+
         # Pancarte lore normale
         if joueur.argent < COUT_AMES:
             return 'pauvre'
         joueur.argent -= COUT_AMES
         self.est_debloquee = True
+        self._dirty = True
         joueur.sons_a_jouer.append('ame_perdue')
         return 'debloquee'
 

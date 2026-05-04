@@ -38,9 +38,14 @@ class Cle:
         self.est_ramassee = False
         self.sprite = _charger_sprite_cle()
         self.couleur = (255, 215, 0)   # Or si pas de sprite
+        # Marqueur de modification réseau : True initialement (premier broadcast),
+        # remis à False par le serveur après diffusion, repassé à True quand
+        # est_ramassee bascule.
+        self._dirty = True
 
     # ------------------------------------------------------------------
     def mettre_a_jour(self, temps_ms):
+        """Animation de flottement (appelée côté client uniquement)."""
         offset_y = math.sin(temps_ms / 800) * 4.0
         self.rect.centery = int(self.y_base + offset_y)
         self.rect.centerx = int(self.x_base)
@@ -48,14 +53,16 @@ class Cle:
     # ------------------------------------------------------------------
     def get_etat(self):
         return {
-            'x': self.rect.centerx,
-            'y': self.rect.centery,
+            'x': int(self.x_base),
+            'y': int(self.y_base),
             'est_ramassee': self.est_ramassee,
         }
 
     def set_etat(self, data):
-        self.rect.centerx = data['x']
-        self.rect.centery = data['y']
+        self.x_base       = float(data['x'])
+        self.y_base       = float(data['y'])
+        self.rect.centerx = int(self.x_base)
+        self.rect.centery = int(self.y_base)
         self.est_ramassee  = data.get('est_ramassee', False)
 
     # ------------------------------------------------------------------
