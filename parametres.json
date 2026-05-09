@@ -8,8 +8,8 @@
         "vsync": false,
         "musique": false,
         "resolution": [
-            2560,
-            1440
+            1536,
+            864
         ],
         "luminosite": 0.0,
         "display_index": 0
