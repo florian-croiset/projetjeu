@@ -352,25 +352,31 @@ class Serveur:
                                     if isinstance(ennemi, EnemyTraqueur) and not ennemi.est_mort:
                                         ennemi.alerter(pos, t_echo_dir)
 
-                        if commandes.get('toggle_torche'):
-                            nouvelle_valeur = not self.torche_allumee
-                            self.torche_allumee = nouvelle_valeur
-                            if nouvelle_valeur:
-                                self._torche_vient_detre_allumee = True
-                                self._torche_allumee_par = id_joueur
-                            if nouvelle_valeur and id_joueur == 0 and id_joueur in self.joueurs:
-                                joueur_ckpt = self.joueurs[id_joueur]
-                                x_tuile = joueur_ckpt.rect.x // TAILLE_TUILE
-                                y_tuile = joueur_ckpt.rect.y // TAILLE_TUILE
-                                id_ckpt = f"{x_tuile}_{y_tuile}"
-                                self.donnees_partie["id_dernier_checkpoint"] = id_ckpt
-                                self.donnees_partie["vis_map"] = [
-                                    row[:] for row in self.cartes_visibilite[id_joueur]]
-                                self.donnees_partie["argent"] = joueur_ckpt.argent
-                                self.donnees_partie["ameliorations"]["double_saut"] = joueur_ckpt.peut_double_saut
-                                self.donnees_partie["ameliorations"]["dash"]        = joueur_ckpt.peut_dash
-                                self.donnees_partie["ameliorations"]["echo_dir"]    = joueur_ckpt.peut_echo_dir
-                                gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
+                        if commandes.get('toggle_torche') and id_joueur in self.joueurs:
+                            joueur_torche = self.joueurs[id_joueur]
+                            torche_cx = self.torche_x + TAILLE_TUILE // 2
+                            torche_cy = self.torche_y + TAILLE_TUILE
+                            dx_t = joueur_torche.rect.centerx - torche_cx
+                            dy_t = joueur_torche.rect.centery - torche_cy
+                            if (dx_t * dx_t + dy_t * dy_t) ** 0.5 <= PORTEE_INTERACTION_TORCHE:
+                                nouvelle_valeur = not self.torche_allumee
+                                self.torche_allumee = nouvelle_valeur
+                                if nouvelle_valeur:
+                                    self._torche_vient_detre_allumee = True
+                                    self._torche_allumee_par = id_joueur
+                                if nouvelle_valeur and id_joueur == 0:
+                                    joueur_ckpt = joueur_torche
+                                    x_tuile = joueur_ckpt.rect.x // TAILLE_TUILE
+                                    y_tuile = joueur_ckpt.rect.y // TAILLE_TUILE
+                                    id_ckpt = f"{x_tuile}_{y_tuile}"
+                                    self.donnees_partie["id_dernier_checkpoint"] = id_ckpt
+                                    self.donnees_partie["vis_map"] = [
+                                        row[:] for row in self.cartes_visibilite[id_joueur]]
+                                    self.donnees_partie["argent"] = joueur_ckpt.argent
+                                    self.donnees_partie["ameliorations"]["double_saut"] = joueur_ckpt.peut_double_saut
+                                    self.donnees_partie["ameliorations"]["dash"]        = joueur_ckpt.peut_dash
+                                    self.donnees_partie["ameliorations"]["echo_dir"]    = joueur_ckpt.peut_echo_dir
+                                    gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
 
                         # NOUVEAU — Interaction pancarte lore
                         if commandes.get('interagir'):
@@ -537,12 +543,31 @@ class Serveur:
                     for ennemi in self.ennemis.values():
                         if isinstance(ennemi, EnemyTraqueur) and not ennemi.est_mort:
                             ennemi.alerter(pos, t_now)
-            if payload.get('toggle_torche'):
-                nouvelle_valeur = not self.torche_allumee
-                self.torche_allumee = nouvelle_valeur
-                if nouvelle_valeur:
-                    self._torche_vient_detre_allumee = True
-                    self._torche_allumee_par = id_joueur
+            if payload.get('toggle_torche') and id_joueur in self.joueurs:
+                joueur_torche = self.joueurs[id_joueur]
+                torche_cx = self.torche_x + TAILLE_TUILE // 2
+                torche_cy = self.torche_y + TAILLE_TUILE
+                dx_t = joueur_torche.rect.centerx - torche_cx
+                dy_t = joueur_torche.rect.centery - torche_cy
+                if (dx_t * dx_t + dy_t * dy_t) ** 0.5 <= PORTEE_INTERACTION_TORCHE:
+                    nouvelle_valeur = not self.torche_allumee
+                    self.torche_allumee = nouvelle_valeur
+                    if nouvelle_valeur:
+                        self._torche_vient_detre_allumee = True
+                        self._torche_allumee_par = id_joueur
+                    if nouvelle_valeur and id_joueur == 0:
+                        joueur_ckpt = joueur_torche
+                        x_tuile = joueur_ckpt.rect.x // TAILLE_TUILE
+                        y_tuile = joueur_ckpt.rect.y // TAILLE_TUILE
+                        id_ckpt = f"{x_tuile}_{y_tuile}"
+                        self.donnees_partie["id_dernier_checkpoint"] = id_ckpt
+                        self.donnees_partie["vis_map"] = [
+                            row[:] for row in self.cartes_visibilite[id_joueur]]
+                        self.donnees_partie["argent"] = joueur_ckpt.argent
+                        self.donnees_partie["ameliorations"]["double_saut"] = joueur_ckpt.peut_double_saut
+                        self.donnees_partie["ameliorations"]["dash"]        = joueur_ckpt.peut_dash
+                        self.donnees_partie["ameliorations"]["echo_dir"]    = joueur_ckpt.peut_echo_dir
+                        gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
             if payload.get('interagir'):
                 for pancarte in self.pancartes_lore.values():
                     dx = joueur.rect.centerx - pancarte.rect.centerx
