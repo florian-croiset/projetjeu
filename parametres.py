@@ -184,6 +184,7 @@ def get_resolutions_compatibles(resolution_native):
 COULEUR_TORCHE = (255, 140, 30)
 RAYON_LUMIERE_TORCHE = 220
 DISTANCE_TORCHE_ECHO = 30
+PORTEE_INTERACTION_TORCHE = 60   # px : distance max joueur ↔ torche pour pouvoir l'allumer/éteindre
 
 # -- Visibilité ennemis --
 DISTANCE_DETECTION_ENNEMI = 120  # pixels, ennemi visible si joueur proche

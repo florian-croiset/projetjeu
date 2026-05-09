@@ -19,17 +19,25 @@ class HudMixin:
     # ------------------------------------------------------------------
 
     def _init_hud_cache(self):
-        """Initialise les fonts et surfaces cachées du HUD. Appelé une seule fois."""
-        if hasattr(self, '_hud_cache_ok'):
-            return
+        """Initialise les fonts et surfaces cachées du HUD. Recrée les caches
+        si la résolution écran a changé depuis le dernier appel."""
         h = self.hauteur_ecran
+        w = self.largeur_ecran
+        if getattr(self, '_hud_cache_res', None) == (w, h):
+            return
         self._font_echo_icon    = pygame.font.Font(None, max(32, h // 28))
         self._font_label_small  = pygame.font.Font(None, max(22, h // 45))
         self._font_label_medium = pygame.font.Font(None, max(32, h // 32))
         self._font_capacite     = pygame.font.Font(None, max(20, h // 50))
-        # Surfaces réutilisables pour le widget echo (taille fixe)
-        self._widget_surf_cache = pygame.Surface((130, 22 * 2 + 4), pygame.SRCALPHA)
-        self._surf_c_cache      = pygame.Surface((22 * 2 + 2, 22 * 2 + 2), pygame.SRCALPHA)
+        # Dimensions adaptatives du widget Echo
+        self._echo_rayon   = max(18, h // 36)
+        self._echo_bar_w   = max(50, h // 12)
+        widget_w = self._echo_rayon * 2 + 12 + self._echo_bar_w + 8
+        widget_h = self._echo_rayon * 2 + 4
+        self._widget_surf_cache = pygame.Surface((widget_w, widget_h), pygame.SRCALPHA)
+        self._surf_c_cache      = pygame.Surface((self._echo_rayon * 2 + 2,
+                                                  self._echo_rayon * 2 + 2),
+                                                 pygame.SRCALPHA)
         # Surface halo flash ennemi (60x60)
         self._flash_halo_surf = pygame.Surface((60, 60), pygame.SRCALPHA)
         # Cache des surfaces tmp flash par taille d'ennemi
@@ -39,7 +47,7 @@ class HudMixin:
         # Surface overlay mort
         self._mort_overlay_cache = None
         self._mort_overlay_size  = None
-        self._hud_cache_ok = True
+        self._hud_cache_res = (w, h)
 
     # ------------------------------------------------------------------
     #  ENTRÉE PRINCIPALE
@@ -91,7 +99,7 @@ class HudMixin:
         # Indicateur Echo (le plus important après les PV)
         y_cur += 4
         self._dessiner_indicateur_echo(x0, y_cur, mon_joueur)
-        y_cur += 68   # hauteur du widget echo
+        y_cur += self._echo_rayon * 2 + 24   # hauteur du widget echo
 
         # Capacités débloquées
         self._dessiner_indicateurs_capacites(x0, y_cur, mon_joueur)
@@ -120,7 +128,7 @@ class HudMixin:
         Une animation de flash pulse brièvement à l'activation.
         """
         temps_actuel = pygame.time.get_ticks()
-        rayon        = 22
+        rayon        = self._echo_rayon
         cx_cercle    = x + rayon
         cy_cercle    = y + rayon
 
@@ -202,8 +210,8 @@ class HudMixin:
         ly += etat_surf.get_height() + 2
 
         # Ligne 3 : barre de progression linéaire fine sous le texte
-        bar_w   = 68
-        bar_h   = 3
+        bar_w   = self._echo_bar_w
+        bar_h   = max(3, self.hauteur_ecran // 360)
         bar_rect = pygame.Rect(lx, ly, bar_w, bar_h)
         pygame.draw.rect(self.ecran, (40, 28, 60), bar_rect, border_radius=2)
         if ratio > 0:
@@ -347,15 +355,22 @@ class HudMixin:
         self._mort_overlay_cache.fill((80, 0, 0, alpha))
         surface.blit(self._mort_overlay_cache, (0, 0))
         if elapsed > 600:
-            if not hasattr(self, '_police_mort'):
-                # Tailles agrandies : l'écran de mort est dessiné sur surface_virtuelle (1/zoom) puis upscalé.
-                self._police_mort = pygame.font.Font(None, 96)
-                self._police_sub  = pygame.font.Font(None, 56)
-            lw, lh = surface.get_size()
+            lw, lh = sz
+            # Tailles proportionnelles à la hauteur de la surface (qui est la
+            # surface virtuelle = hauteur_ecran / zoom). Permet à l'écran de
+            # mort de s'adapter à toutes les résolutions.
+            taille_titre = max(32, lh // 8)
+            taille_sub   = max(20, lh // 14)
+            if (not hasattr(self, '_police_mort')
+                    or getattr(self, '_police_mort_taille', None) != taille_titre):
+                self._police_mort = pygame.font.Font(None, taille_titre)
+                self._police_sub  = pygame.font.Font(None, taille_sub)
+                self._police_mort_taille = taille_titre
             t1 = self._police_mort.render("VOUS ETES MORT", True, (220, 50, 50))
             t2 = self._police_sub.render("Respawn en cours...", True, (160, 100, 100))
-            surface.blit(t1, t1.get_rect(center=(lw // 2, lh // 2 - 20)))
-            surface.blit(t2, t2.get_rect(center=(lw // 2, lh // 2 + 20)))
+            offset = max(10, lh // 40)
+            surface.blit(t1, t1.get_rect(center=(lw // 2, lh // 2 - offset)))
+            surface.blit(t2, t2.get_rect(center=(lw // 2, lh // 2 + offset)))
 
     # ------------------------------------------------------------------
     #  BOSS

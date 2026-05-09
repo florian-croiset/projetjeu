@@ -22,6 +22,11 @@ python3 -m reseau.relay_server [port]   # default port: 7777
 
 No build step, no test suite — this is a pure Python/Pygame project.
 
+## Companion docs
+
+- **`RESEAU.md`** — authoritative reference for the hybrid TCP+UDP netcode. Read it before touching anything in `reseau/` or the snapshot/interp logic in `core/joueur.py` & `core/ennemi.py`. It documents the binary header, ack-bitfield, handshake, security model, and diagnostic checklists.
+- **`README.md`** — player-facing docs (gameplay mechanics, controls, team).
+
 ## Architecture
 
 The client-server architecture splits authority: **the server owns all game logic** (physics, AI, combat, collisions), and **the client owns rendering, input, and display**.
@@ -39,36 +44,47 @@ The client-server architecture splits authority: **the server owns all game logi
 
 `reseau/serveur.py` — runs in a separate thread (started from `BoucleJeuMixin` when hosting). Handles:
 - Player physics (gravity, AABB collisions, movement, dash, jump) at 60 Hz
-- Enemy AI (patrol, void detection, respawn timers)
-- Combat resolution (melee attacks, boss fights)
-- Game objects: `Porte` (interactive doors), `OrbeCapacite` (ability orbs), `Cle` (keys), `AmePerdue`/`AmeLibre`/`AmeLoot` (soul/loot drops)
-- Checkpoint detection and save triggers
-- Broadcasting authoritative world state to all clients at `TICK_RATE_RESEAU` Hz (10 Hz)
+- Enemy AI — four types defined in `core/ennemi.py`: `patrouilleur` (1 PV), `garde` (2 PV), `gardien` (3 PV), `traqueur` (2 PV, listens for echoes via `RAYON_AUDITION_TRAQUEUR`, A* pathfinding via `core/astar.py`)
+- Combat resolution (melee attacks, boss fights via `core/demon_slime_boss.py` + `core/boss_room.py`)
+- Game objects: `Porte` (doors), `OrbeCapacite` (ability orbs), `Cle` (keys), `AmePerdue`/`AmeLibre`/`AmeLoot` (souls), `Torche` (interactive lights — passive halo + echo trigger), `PancarteLore` (lore signs unlocked by spending souls)
+- Checkpoint detection and save triggers (host only)
+- Broadcasting authoritative state — see Network Protocol below
 
 ### Network Module (`reseau/`)
 
+The netcode is **hybrid TCP+UDP**: TCP for handshake & fallback, UDP for real-time gameplay. Full reference in `RESEAU.md`.
+
 | File | Role |
 |------|------|
-| `protocole.py` | Shared TCP helpers — `send_complet` / `recv_complet` (4-byte length prefix + pickle), IP detection (`obtenir_ip_locale`, `obtenir_ip_vpn` for Tailscale/Hamachi) |
-| `serveur.py` | Authoritative game server (TCP, threaded per-client) |
-| `relay_server.py` | Standalone TCP relay server for room-code-based WAN play without port forwarding |
-| `relay_client.py` | Client-side helpers to create/join relay rooms |
+| `protocole.py` | TCP helpers — `send_complet` / `recv_complet` (4-byte length prefix + pickle, 10 MB cap), IP detection (`obtenir_ip_locale`, `obtenir_ip_vpn` for Tailscale/Hamachi) |
+| `serveur.py` | Authoritative server. Binds TCP `:5555` and UDP `:5556`. Threaded per TCP client; UDP routed by `(ip, port)`. Methods of interest: `_udp_pomper`, `_udp_diffuser_snapshot`, `_udp_diffuser_etat_discret`, `_udp_tick` |
+| `udp_protocole.py` | Binary header (`!IIHBB` — seq/ack/ack_bits/channel/type), snapshot struct format, channel & type constants |
+| `udp_endpoint.py` | Non-blocking UDP socket wrapper with `pomper()` (drain loop) |
+| `udp_connexion.py` | Per-peer reliability layer — seq/ack with Glenn-Fiedler bitfield, retransmission, RTT EWMA, heartbeat. Also hosts `_pickle_charger_securise` (restricted unpickler for security) |
+| `relay_server.py` | Standalone TCP relay for room-code WAN play (no UDP support — relay sessions stay TCP-only) |
+| `relay_client.py` | Client helpers for relay rooms |
 
 ### Network Protocol
 
-**TCP** on port `5555` (configurable via `PORT_SERVEUR` in `parametres.py`).
+Two transports run side-by-side, gated by `USE_UDP` in `parametres.py` (set to `False` to force the legacy pure-TCP path).
 
-**Wire format**: 4-byte big-endian length prefix + pickle-serialized Python object. Implemented in `protocole.py` (`send_complet` / `recv_complet`). Max payload: 10 MB safety limit.
+**TCP `:5555`** — handshake, session params (returns `{id, udp_token, udp_port}` to the client), keepalive every 5 s, and full fallback if UDP fails.
 
-**Client → Server**: input dicts (keys pressed, actions)
-**Server → Client**: full authoritative game state (players, enemies, souls, boss, keys, doors, orbs, visibility maps)
+**UDP `:5556`** — all in-game traffic when active:
+- **Channel 0 UNRELIABLE** — snapshots (server→client, 60 Hz, ~180 B for 2 players + 10 enemies) + continuous inputs (client→server, 60 Hz)
+- **Channel 1 RELIABLE** — `etat_discret` (server→client, 10 Hz, pickup/boss/door state) + one-shot inputs (`echo`, `echo_dir`, `torche`, `interagir`)
+- **Channel 2 CONTROL** — handshake / heartbeat / disconnect
+
+**Wire formats**: TCP uses pickle behind a 4-byte length prefix. UDP snapshots use a fixed `struct` layout (positions + flags); reliable-channel payloads still use pickle but go through the restricted unpickler. See `RESEAU.md` §3–4 for the full type table.
+
+**Client interpolation**: remote players & enemies are rendered `INTERP_DELAY_MS` (100 ms) in the past via lerp between buffered snapshots. The local player skips interp to keep input snappy. Logic lives in `pousser_snapshot_interp` / `mettre_a_jour_interp` (`core/joueur.py`, `core/ennemi.py`).
 
 ### WAN Connectivity
 
 Two connection modes available in the "Rejoindre" menu:
 
-1. **Direct IP**: Enter the host's IP address. Requires port `5555/TCP` to be forwarded on the host's router (or both players on the same LAN / VPN like Tailscale).
-2. **Room Code (TCP Relay)**: The host creates a room on a relay server and shares a 6-character code. The client enters the code. The relay server forwards TCP traffic between peers. Requires a relay server running on a public VPS (`python3 -m reseau.relay_server`). Configure `RELAY_HOST`/`RELAY_PORT` in `parametres.py`.
+1. **Direct IP**: Enter the host's IP. Requires `5555/TCP` and `5556/UDP` open on the host (or both players on LAN / Tailscale-style VPN). If UDP is blocked, the client logs `"UDP handshake échoué"` and falls back to pure TCP automatically.
+2. **Room Code (TCP Relay)**: 6-char code via a public relay (`python3 -m reseau.relay_server`). Configure `RELAY_HOST`/`RELAY_PORT` in `parametres.py`. **Relay sessions are TCP-only** — no UDP path through the relay.
 
 ### Echolocation System (`core/carte.py`)
 
@@ -88,15 +104,16 @@ TMX file (`assets/MapS2.tmx`) loaded via `core/carte.py` (XML parsing). Layers n
 
 ### Configuration & i18n
 
-- `parametres.py` — all gameplay constants (gravity, speed, jump force, tile size 32px, screen 1920×1080, network ports, tick rates, colors, debug flags)
+- `parametres.py` — all gameplay constants (gravity, speed, jump force, tile size 32px, screen 1920×1080, colors). Also network: `PORT_SERVEUR=5555`, `PORT_UDP=5556`, `USE_UDP`, `TICK_RATE_RESEAU=30`, `TICK_RATE_SNAPSHOT_UDP=60`, `TICK_RATE_ETAT_DISCRET_UDP=10`, `INTERP_DELAY_MS=100`, `UDP_HANDSHAKE_TIMEOUT_MS=3000`
 - `parametres.json` — user settings (language FR/EN, fullscreen, resolution, keybindings, VSync). Loaded/saved by `sauvegarde/gestion_parametres.py`
 - `utils/langue.py` — bilingual text dictionaries (`FR` / `EN`), used throughout menus and HUD
 
 ### Debug Flags (in `parametres.py`)
 
-- `MODE_DEV = True` — enables FPS counter, debug overlay, and log capture
+- `MODE_DEV = True` — enables FPS counter, debug overlay, log capture, and **auto-unlocks all ability orbs** (disable before exposing the server publicly)
 - `REVELATION = False` — if True, reveals the entire map (skips echolocation)
 - `ASSOMBRISSEMENT = True` — if False, disables darkness/halo (full visibility)
+- `USE_UDP = True` — set to False to force the legacy pure-TCP transport (useful when debugging UDP-related issues)
 - `HALOS_MENU` / `FOND_MENU` — toggle animated menu background effects
 
 ## Default Controls
