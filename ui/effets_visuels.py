@@ -125,3 +125,79 @@ def dessiner_panneau(surface, rect, couleur_bordure=None, alpha_fond=220):
         a = int(50 * (1 - dist ** 2))
         reflet.set_at((px, 0), (200, 230, 255, a))
     surface.blit(reflet, (rect.x + 10, rect.y + 8))
+
+
+def appliquer_distortion_echo(surface, ondes, t_now):
+    """
+    Effet local de distortion radiale type "goutte d'eau" sur la surface.
+    Mute `surface` in-place. L'appelant gère le cycle de vie de `ondes`
+    (filtrage des ondes terminées avant l'appel).
+
+    surface : pygame.Surface — surface_virtuelle (modifiée in-place)
+    ondes   : liste de dicts {start_ms, sx, sy, rayon_max, duree_ms}
+              avec sx/sy déjà convertis en coords écran virtuelles.
+    t_now   : pygame.time.get_ticks() — timestamp courant en ms.
+    """
+    if not DISTORTION_ECHO_ACTIVE or not ondes:
+        return
+
+    try:
+        import numpy as np
+    except ImportError:
+        return
+
+    largeur, hauteur = surface.get_size()
+    epaisseur     = DISTORTION_ECHO_EPAISSEUR_PX
+    amplitude_max = DISTORTION_ECHO_AMPLITUDE_PX
+    demi          = epaisseur / 2.0
+    pad           = int(demi) + amplitude_max + 1
+
+    try:
+        pixels = pygame.surfarray.pixels3d(surface)   # vue mutable (W, H, 3)
+    except (pygame.error, ValueError):
+        return
+
+    try:
+        for onde in ondes:
+            t = t_now - onde['start_ms']
+            duree = onde['duree_ms']
+            if t < 0 or t >= duree:
+                continue
+
+            ratio = t / duree
+            rayon = onde['rayon_max'] * ratio
+            fade  = 1.0 - ratio
+            sx, sy = onde['sx'], onde['sy']
+
+            x0 = max(0, int(sx - rayon - pad))
+            y0 = max(0, int(sy - rayon - pad))
+            x1 = min(largeur, int(sx + rayon + pad) + 1)
+            y1 = min(hauteur, int(sy + rayon + pad) + 1)
+            if x1 <= x0 or y1 <= y0:
+                continue
+
+            src_snap = pixels[x0:x1, y0:y1].copy()
+
+            xx, yy = np.mgrid[x0:x1, y0:y1].astype(np.float32)
+            dx = xx - sx
+            dy = yy - sy
+            dist = np.sqrt(dx * dx + dy * dy)
+
+            mask = np.abs(dist - rayon) < demi
+            if not mask.any():
+                continue
+
+            profil = np.sin(np.clip((dist - (rayon - demi)) / epaisseur * np.pi, 0, np.pi))
+            amp = profil * amplitude_max * fade
+
+            mag = np.maximum(dist, 1e-3)
+            ux = dx / mag
+            uy = dy / mag
+
+            src_x_rel = np.clip((xx - x0 + ux * amp).astype(np.int32), 0, x1 - x0 - 1)
+            src_y_rel = np.clip((yy - y0 + uy * amp).astype(np.int32), 0, y1 - y0 - 1)
+
+            ix, iy = np.where(mask)
+            pixels[x0 + ix, y0 + iy] = src_snap[src_x_rel[ix, iy], src_y_rel[ix, iy]]
+    finally:
+        del pixels   # libère le lock pixels3d

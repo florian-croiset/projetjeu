@@ -24,6 +24,7 @@ from reseau import udp_protocole as UDP_P
 from reseau.udp_endpoint import UdpEndpoint
 from reseau.udp_connexion import ConnexionUDP
 from ui.camera import calculer_camera, creer_masque_halo
+from ui.effets_visuels import appliquer_distortion_echo
 from core.carte import Carte
 from core.joueur import Joueur
 from core.ennemi import Ennemi
@@ -177,12 +178,36 @@ class BoucleJeuMixin:
                 if event.key == key('echo'):
                     commandes['echo'] = True
                     music.jouer_sfx('echo')
+                    if DISTORTION_ECHO_ACTIVE:
+                        _je = self.joueurs_locaux.get(self.mon_id)
+                        if _je:
+                            if not hasattr(self, '_distortions_echo'):
+                                self._distortions_echo = []
+                            self._distortions_echo.append({
+                                'start_ms':  pygame.time.get_ticks(),
+                                'wx':        _je.rect.centerx,
+                                'wy':        _je.rect.centery,
+                                'rayon_max': PORTEE_ECHO,
+                                'duree_ms':  ECHO_DUREE_REVEAL,
+                            })
                 if event.key == key('dash'):
                     commandes['clavier']['dash'] = True
                     music.jouer_sfx('dash')
                 if event.key == key('echo_dir'):
                     commandes['echo_dir'] = True
                     music.jouer_sfx('echo_dir')
+                    if DISTORTION_ECHO_ACTIVE:
+                        _je = self.joueurs_locaux.get(self.mon_id)
+                        if _je:
+                            if not hasattr(self, '_distortions_echo'):
+                                self._distortions_echo = []
+                            self._distortions_echo.append({
+                                'start_ms':  pygame.time.get_ticks(),
+                                'wx':        _je.rect.centerx,
+                                'wy':        _je.rect.centery,
+                                'rayon_max': PORTEE_ECHO_DIR,
+                                'duree_ms':  int(PORTEE_ECHO_DIR / PORTEE_ECHO * ECHO_DUREE_REVEAL),
+                            })
                 if event.key == key('torche'):
                     commandes['toggle_torche'] = True
                     if not self.torche.allumee:
@@ -449,6 +474,23 @@ class BoucleJeuMixin:
                                (tx - rayon_t - 1, ty - rayon_t - 1),
                                special_flags=pygame.BLEND_RGBA_MIN)
             surface_virtuelle.blit(obscurite, (0, 0))
+
+        # --- Distortion d'écho (effet local "goutte d'eau") ---
+        if DISTORTION_ECHO_ACTIVE and getattr(self, '_distortions_echo', None):
+            t_now_dist = pygame.time.get_ticks()
+            self._distortions_echo = [
+                o for o in self._distortions_echo
+                if t_now_dist - o['start_ms'] < o['duree_ms']
+            ]
+            if self._distortions_echo:
+                ondes_ecran = [{
+                    'start_ms':  o['start_ms'],
+                    'sx':        o['wx'] - camera_offset[0],
+                    'sy':        o['wy'] - camera_offset[1],
+                    'rayon_max': o['rayon_max'],
+                    'duree_ms':  o['duree_ms'],
+                } for o in self._distortions_echo]
+                appliquer_distortion_echo(surface_virtuelle, ondes_ecran, t_now_dist)
 
         # --- Badge torche ---
         if self.torche.jamais_utilisee and mon_joueur:
