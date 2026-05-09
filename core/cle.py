@@ -38,10 +38,6 @@ class Cle:
         self.est_ramassee = False
         self.sprite = _charger_sprite_cle()
         self.couleur = (255, 215, 0)   # Or si pas de sprite
-        # Marqueur de modification réseau : True initialement (premier broadcast),
-        # remis à False par le serveur après diffusion, repassé à True quand
-        # est_ramassee bascule.
-        self._dirty = True
 
     # ------------------------------------------------------------------
     def mettre_a_jour(self, temps_ms):

@@ -44,12 +44,6 @@ class Porte:
         # Phase pour la lueur de la serrure
         self._phase_lueur = 0.0
 
-        # Marqueur réseau : True initialement et pendant l'animation d'ouverture
-        # (l'animation est gameplay-significative, donc diffusée tick par tick).
-        # Une fois fully ouverte, dirty repasse à False et la porte n'est plus
-        # diffusée. Repasse à True dans tenter_ouverture().
-        self._dirty = True
-
     # ------------------------------------------------------------------
     #  LOGIQUE SERVEUR
     # ------------------------------------------------------------------
@@ -67,7 +61,6 @@ class Porte:
         self.en_ouverture     = True
         self._debut_ouverture = pygame.time.get_ticks()
         joueur.have_key       = False   # la clé est consommée
-        self._dirty           = True
         print(f"[PORTE] Ouverture déclenchée par joueur {joueur.id}")
         return True
 
@@ -77,9 +70,6 @@ class Porte:
             elapsed = temps_ms - self._debut_ouverture
             ratio   = min(1.0, elapsed / self.DUREE_OUVERTURE)
             self._offset_anim = int(ratio * self.HAUTEUR)
-            # Animation en cours : chaque tick doit être diffusé pour que
-            # le client voie la porte monter.
-            self._dirty = True
 
             if ratio >= 1.0:
                 # Ouverture terminée → supprimer la hitbox physique

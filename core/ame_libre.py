@@ -57,11 +57,6 @@ class AmeLibre:
 
         self.couleur = COULEUR_AME_LIBRE
         self.est_ramassee = False
-        # Marqueur réseau : True initialement (premier broadcast), False après.
-        # Comme les âmes libres ne mutent pas (elles sont juste supprimées du dict
-        # serveur lors de la collecte), ce flag ne se remet jamais à True après
-        # la première diffusion.
-        self._dirty = True
 
         global SPRITE_CRISTAL_LIBRE
         if SPRITE_CRISTAL_LIBRE is None:

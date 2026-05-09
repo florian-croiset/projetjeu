@@ -650,23 +650,16 @@ class BoucleJeuMixin:
                     da['x'], da['y'], da['id_joueur'])
             self.ames_perdues_locales[da['id']].set_etat(da)
 
-        # --- Âmes libres (sync différentielle) ---
-        # Sync complète envoyée à la première diffusion d'un client.
-        if 'ames_libres_full' in donnees_recues:
-            self.ames_libres_locales.clear()
-            for dal in donnees_recues['ames_libres_full']:
-                self.ames_libres_locales[dal['id']] = AmeLibre(
-                    dal['x'], dal['y'], dal.get('valeur'))
-                self.ames_libres_locales[dal['id']].set_etat(dal)
-        # Mises à jour incrémentales (rare : ces entités ne mutent pas en jeu).
-        for dal in donnees_recues.get('ames_libres_maj', []):
+        # --- Âmes libres ---
+        ids_al = {a['id'] for a in donnees_recues.get('ames_libres', [])}
+        for id_local in list(self.ames_libres_locales.keys()):
+            if id_local not in ids_al:
+                del self.ames_libres_locales[id_local]
+        for dal in donnees_recues.get('ames_libres', []):
             if dal['id'] not in self.ames_libres_locales:
                 self.ames_libres_locales[dal['id']] = AmeLibre(
                     dal['x'], dal['y'], dal.get('valeur'))
             self.ames_libres_locales[dal['id']].set_etat(dal)
-        # Suppressions (collecte par un joueur).
-        for id_supp in donnees_recues.get('ames_libres_supprimees', []):
-            self.ames_libres_locales.pop(id_supp, None)
 
         # --- Âmes loot ---
         ids_loot = {a['id'] for a in donnees_recues.get('ames_loot', [])}
@@ -678,27 +671,19 @@ class BoucleJeuMixin:
                 self.ames_loot_locales[dl['id']] = AmeLoot(dl['x'], dl['y'], dl.get('valeur', 1))
             self.ames_loot_locales[dl['id']].set_etat(dl)
 
-        # --- Orbes de capacité (sync différentielle) ---
-        if 'orbes_capacite_full' in donnees_recues:
-            self.orbes_capacite_locaux.clear()
-            for do in donnees_recues['orbes_capacite_full']:
-                self.orbes_capacite_locaux[do['id']] = OrbeCapacite(
-                    do['x'], do['y'], do['capacite'])
-                self.orbes_capacite_locaux[do['id']].set_etat(do)
-        for do in donnees_recues.get('orbes_capacite_maj', []):
+        # --- Orbes de capacité ---
+        ids_orbes = {o['id'] for o in donnees_recues.get('orbes_capacite', [])}
+        for id_local in list(self.orbes_capacite_locaux.keys()):
+            if id_local not in ids_orbes:
+                del self.orbes_capacite_locaux[id_local]
+        for do in donnees_recues.get('orbes_capacite', []):
             if do['id'] not in self.orbes_capacite_locaux:
                 self.orbes_capacite_locaux[do['id']] = OrbeCapacite(
                     do['x'], do['y'], do['capacite'])
             self.orbes_capacite_locaux[do['id']].set_etat(do)
 
-        # NOUVEAU — Pancartes lore (sync différentielle)
-        if 'pancartes_lore_full' in donnees_recues:
-            self.pancartes_lore_locales.clear()
-            for dp in donnees_recues['pancartes_lore_full']:
-                idx = dp.get('id', 0)
-                self.pancartes_lore_locales[idx] = PancarteLore(dp['x'], dp['y'])
-                self.pancartes_lore_locales[idx].set_etat(dp)
-        for dp in donnees_recues.get('pancartes_lore_maj', []):
+        # NOUVEAU — Pancartes lore
+        for dp in donnees_recues.get('pancartes_lore', []):
             idx = dp.get('id', 0)
             if idx not in self.pancartes_lore_locales:
                 self.pancartes_lore_locales[idx] = PancarteLore(dp['x'], dp['y'])
@@ -711,8 +696,8 @@ class BoucleJeuMixin:
                     self.bulle_lore.ouvrir()
                     self._pancarte_active_id = None
 
-        # --- Porte (sync différentielle) ---
-        data_porte = donnees_recues.get('porte_full') or donnees_recues.get('porte_maj')
+        # --- Porte ---
+        data_porte = donnees_recues.get('porte')
         if data_porte:
             if self.porte_locale is None:
                 self.porte_locale = Porte(data_porte['x'], data_porte['y'])
@@ -733,18 +718,18 @@ class BoucleJeuMixin:
                     png_path =os.path.join(_base, "assets", "demon_slime.png"))
             self.boss_local.set_etat(data_boss['boss'])
             etat_boss_actuel = data_boss['boss']['state']
-            if self._boss_etat_precedent != 'CLEAVE' and etat_boss_actuel == 'CLEAVE':
+            frame_actuelle   = data_boss['boss'].get('frame_index', 0)
+            # Joue le son au moment de l'impact (entrée dans la fenêtre active
+            # de frames du CLEAVE), pas au début de l'animation.
+            if (etat_boss_actuel == 'CLEAVE'
+                    and self._boss_frame_precedent < DemonSlimeBoss.CLEAVE_ACTIVE_FRAME_START
+                    and frame_actuelle >= DemonSlimeBoss.CLEAVE_ACTIVE_FRAME_START):
                 music.jouer_sfx('slash_boss')
-            self._boss_etat_precedent = etat_boss_actuel
+            self._boss_etat_precedent  = etat_boss_actuel
+            self._boss_frame_precedent = frame_actuelle if etat_boss_actuel == 'CLEAVE' else 0
 
-        # --- Clé (sync différentielle) ---
-        # cle_full peut être None (pas de clé encore générée). cle_maj absent
-        # par défaut. On ne touche au state local que si on a reçu de la donnée.
-        data_cle = None
-        if 'cle_full' in donnees_recues:
-            data_cle = donnees_recues['cle_full']
-        elif 'cle_maj' in donnees_recues:
-            data_cle = donnees_recues['cle_maj']
+        # --- Clé ---
+        data_cle = donnees_recues.get('cle')
         if data_cle:
             if self.cle_locale is None:
                 self.cle_locale = Cle(data_cle['x'], data_cle['y'])
@@ -1250,6 +1235,7 @@ class BoucleJeuMixin:
         self.boss_local             = None
         self._porte_etait_en_ouverture  = False
         self._boss_etat_precedent       = None
+        self._boss_frame_precedent      = 0
         self.etat_jeu_interne           = "JEU"
         # NOUVEAU — reset UI pancarte
         self.bulle_lore          = None
