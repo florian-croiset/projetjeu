@@ -180,11 +180,13 @@ class BoucleJeuMixin:
                     music.jouer_sfx('echo')
                     if DISTORTION_ECHO_ACTIVE:
                         _je = self.joueurs_locaux.get(self.mon_id)
-                        if _je:
+                        _now = pygame.time.get_ticks()
+                        if _je and _now - getattr(_je, '_dernier_echo_local_ms', -COOLDOWN_ECHO) >= COOLDOWN_ECHO:
+                            _je._dernier_echo_local_ms = _now
                             if not hasattr(self, '_distortions_echo'):
                                 self._distortions_echo = []
                             self._distortions_echo.append({
-                                'start_ms':  pygame.time.get_ticks(),
+                                'start_ms':  _now,
                                 'wx':        _je.rect.centerx,
                                 'wy':        _je.rect.centery,
                                 'rayon_max': PORTEE_ECHO,
@@ -198,11 +200,14 @@ class BoucleJeuMixin:
                     music.jouer_sfx('echo_dir')
                     if DISTORTION_ECHO_ACTIVE:
                         _je = self.joueurs_locaux.get(self.mon_id)
-                        if _je:
+                        _now = pygame.time.get_ticks()
+                        if (_je and getattr(_je, 'peut_echo_dir', False)
+                                and _now - getattr(_je, '_dernier_echo_dir_local_ms', -COOLDOWN_ECHO_DIR) >= COOLDOWN_ECHO_DIR):
+                            _je._dernier_echo_dir_local_ms = _now
                             if not hasattr(self, '_distortions_echo'):
                                 self._distortions_echo = []
                             self._distortions_echo.append({
-                                'start_ms':  pygame.time.get_ticks(),
+                                'start_ms':  _now,
                                 'wx':        _je.rect.centerx,
                                 'wy':        _je.rect.centery,
                                 'rayon_max': PORTEE_ECHO_DIR,
