@@ -61,10 +61,6 @@ class OrbeCapacite:
                                 self.RAYON * 2, self.RAYON * 2)
 
         self.est_ramasse = False
-        # Marqueur de modification réseau : True initialement pour que la
-        # première diffusion contienne l'orbe ; remis à False par le serveur
-        # après broadcast, retourne à True dans tenter_collecte().
-        self._dirty = True
 
     # ------------------------------------------------------------------
     #  LOGIQUE SERVEUR
@@ -91,7 +87,6 @@ class OrbeCapacite:
 
         joueur.argent -= cout
         self.est_ramasse = True
-        self._dirty = True
 
         if self.capacite == 'double_saut':
             joueur.peut_double_saut = True
