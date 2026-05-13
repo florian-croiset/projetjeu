@@ -169,6 +169,8 @@ class Joueur:
         self._anim_charge_tente = False
         self.animator = None
         self._anim_frames = []
+        self._anim_frame_index = 0
+        self._anim_frame_timer_ms = 0.0
         self._attaque_etait_active = False
 
     # ──────────────────────────────────────────────────────────────────────
