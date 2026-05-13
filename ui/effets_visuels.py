@@ -4,7 +4,36 @@
 
 import pygame
 import math
+import numpy as np
 from parametres import *
+
+# Cache global pour la distorsion d'écho : profil sinusoïdal précalculé
+# Taille fixe pour tous les rayons possibles (jusqu'à 500px)
+_DISTORTION_PROFIL_CACHE = None
+_DISTORTION_PROFIL_CACHE_TAILLE = 512
+
+
+def _generer_profil_distortion_cache():
+    """Génère le cache global du profil sinusoïdal pour la distorsion."""
+    global _DISTORTION_PROFIL_CACHE
+    if _DISTORTION_PROFIL_CACHE is not None:
+        return
+    demi = DISTORTION_ECHO_EPAISSEUR_PX / 2.0
+    amplitude_max = DISTORTION_ECHO_AMPLITUDE_PX
+    epaisseur = DISTORTION_ECHO_EPAISSEUR_PX
+
+    # Précacul du profil pour chaque distance possible
+    # Le profil varie de 0 à pi, ce qui donne un demi-sinus
+    profils = []
+    for i in range(_DISTORTION_PROFIL_CACHE_TAILle):
+        distance_norm = i / (_DISTORTION_PROFIL_CACHE_TAILle - 1) * 2 - 1  # -1 à 1
+        # On want le profil sinusoïdal pour la zone d'impact
+        # (dist - (rayon - demi)) / epaisseur * pi
+        # Pour dist dans [rayon-demi, rayon+demi]
+        value = (distance_norm * demi + demi) / epaisseur * np.pi
+        profil = np.sin(np.clip(value, 0, np.pi))
+        profils.append(profil)
+    _DISTORTION_PROFIL_CACHE = np.array(profils, dtype=np.float32)
 
 
 def dessiner_fond_echo(surface, largeur, hauteur, temps):
