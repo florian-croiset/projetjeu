@@ -760,7 +760,7 @@ class Serveur:
                             if buf is None:
                                 buf = set()
                                 self.vis_delta_buffer[id_j] = buf
-                            print(f"[ECHO] type={echo.get('type')} portee={echo.get('portee_max')} rayon_max={rayon_max} rayon_prec={rayon_prec}")
+                            #print(f"[ECHO] type={echo.get('type')} portee={echo.get('portee_max')} rayon_max={rayon_max} rayon_prec={rayon_prec}")
                             if echo.get('type') == 'dir':
                                 self.carte_jeu.reveler_par_echo_dir_partiel(
                                     echo['cx'], echo['cy'], rayon_max,
