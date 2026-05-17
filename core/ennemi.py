@@ -7,6 +7,7 @@ import os
 import sys
 import pygame
 from parametres import *
+from utils.cache import flip_h, RAYON_AUDITION_TRAQUEUR_SQ
 
 try:
     from core.demon_slime_boss import BossAnimator
@@ -187,7 +188,9 @@ class Ennemi:
         """Déclenchée par le serveur à l'émission d'un écho joueur.
         Passe en CHASSE si la source est dans le rayon d'audition."""
         px, py = position_joueur
-        if math.dist((self.rect.centerx, self.rect.centery), (px, py)) <= self.rayon_audition:
+        dx = self.rect.centerx - px
+        dy = self.rect.centery - py
+        if dx * dx + dy * dy <= RAYON_AUDITION_TRAQUEUR_SQ:
             self.etat       = ETAT_CHASSE
             self.cible_x    = px
             self.cible_y    = py
@@ -531,7 +534,7 @@ class Ennemi:
             self._mettre_a_jour_animation()
             frame_surf, _ = self._anim_frames[self._anim_frame_index]
             if self.direction == -1:
-                frame_surf = pygame.transform.flip(frame_surf, True, False)
+                frame_surf = flip_h(frame_surf)
             if flash_actif:
                 frame_surf = frame_surf.copy()
                 frame_surf.fill((120, 120, 120), special_flags=pygame.BLEND_RGB_ADD)

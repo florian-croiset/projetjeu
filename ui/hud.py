@@ -9,6 +9,7 @@ import sys
 
 from parametres import *
 from utils import envoyer_logs
+from utils.cache import render_text, creer_textes_echo_hud
 
 
 class HudMixin:
@@ -47,6 +48,12 @@ class HudMixin:
         # Surface overlay mort
         self._mort_overlay_cache = None
         self._mort_overlay_size  = None
+        # Pré-rendus de textes statiques du widget Echo (centralisés)
+        self._txt_echo = creer_textes_echo_hud(
+            self._font_label_small,
+            self._font_label_medium,
+            self._font_echo_icon,
+        )
         self._hud_cache_res = (w, h)
 
     # ------------------------------------------------------------------
@@ -177,9 +184,8 @@ class HudMixin:
             flash_alpha = min(255, int(180 * (1.0 - elapsed / 200)))
             pygame.draw.circle(surf_c, (255, 255, 255, flash_alpha), (scx, scy), rayon - 4)
 
-        # Icône centrale "E" (touche d'activation)
-        couleur_e = COULEUR_CYAN if pret else (100, 80, 140)
-        icone_e = self._font_echo_icon.render("E", True, couleur_e)
+        # Icône centrale "E" (touche d'activation) — pré-rendue dans le cache
+        icone_e = self._txt_echo['e_pret'] if pret else self._txt_echo['e_attente']
         surf_c.blit(icone_e, icone_e.get_rect(center=(scx, scy)))
 
         self.ecran.blit(surf_c, (cx_cercle - rayon - 1, cy_cercle - rayon - 1))
@@ -188,15 +194,15 @@ class HudMixin:
         lx = cx_cercle + rayon + 10
         ly = cy_cercle - 18
 
-        # Ligne 1 : mot "ECHO" en petit gris
-        label_titre = self._font_label_small.render("ECHO", True, (100, 85, 130))
+        # Ligne 1 : mot "ECHO" en petit gris — pré-rendu
+        label_titre = self._txt_echo['echo_label']
         self.ecran.blit(label_titre, (lx, ly))
         ly += label_titre.get_height() + 2
 
         # Ligne 2 : état principal — grand, lisible
         if pret:
-            # "PRÊT" en vert/cyan lumineux
-            etat_surf = self._font_label_medium.render("PRÊT", True, COULEUR_CYAN)
+            # "PRÊT" en vert/cyan lumineux — pré-rendu
+            etat_surf = self._txt_echo['echo_pret']
         else:
             # Décompte en secondes avec couleur progressive
             restant   = max(0.0, (COOLDOWN_ECHO - elapsed) / 1000)
@@ -204,7 +210,9 @@ class HudMixin:
             r_c = int(220 * t_ratio + 0   * (1 - t_ratio))
             g_c = int(60  * t_ratio + 200 * (1 - t_ratio))
             b_c = int(60  * t_ratio + 80  * (1 - t_ratio))
-            etat_surf = self._font_label_medium.render(f"{restant:.1f}s", True, (r_c, g_c, b_c))
+            # render_text mémoïse par (font, texte, couleur) — ~25 valeurs distinctes
+            # pour un cooldown 2.5s affiché au dixième.
+            etat_surf = render_text(self._font_label_medium, f"{restant:.1f}s", (r_c, g_c, b_c))
 
         self.ecran.blit(etat_surf, (lx, ly))
         ly += etat_surf.get_height() + 2

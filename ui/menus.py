@@ -9,6 +9,7 @@ import time
 
 from parametres import *
 from utils import langue, music
+from utils.cache import render_text
 from ui.bouton import Bouton
 from ui.slider import Slider
 from ui.effets_visuels import dessiner_fond_echo, dessiner_titre_neon, dessiner_separateur_neon, dessiner_panneau
@@ -890,7 +891,7 @@ class MenusMixin:
             dessiner_separateur_neon(self.ecran, col_gauche, y,
                                     self.largeur_ecran - col_gauche, alpha=100)
             y += 6
-            s = self.police_bouton.render(titre_texte, True, COULEUR_VIOLET_CLAIR)
+            s = render_text(self.police_bouton, titre_texte, COULEUR_VIOLET_CLAIR)
             self.ecran.blit(s, (col_gauche, y))
             y += esp_ligne
 
@@ -902,7 +903,7 @@ class MenusMixin:
 
         def ligne_controle(label, cle_json, btn):
             nonlocal y
-            lbl = self.police_texte.render(label, True, COULEUR_TEXTE)
+            lbl = render_text(self.police_texte, label, COULEUR_TEXTE)
             self.ecran.blit(lbl, (col_gauche + 20, y + 6))
             btn.rect.y = y
             txt = _fmt_touche(params['controles'][cle_json])
@@ -918,7 +919,7 @@ class MenusMixin:
 
         def ligne_toggle(label, valeur_bool, btn, txt_vrai, txt_faux):
             nonlocal y
-            lbl = self.police_texte.render(label, True, COULEUR_TEXTE)
+            lbl = render_text(self.police_texte, label, COULEUR_TEXTE)
             self.ecran.blit(lbl, (col_gauche + 20, y + 6))
             btn.rect.y = y
             btn.texte = txt_vrai if valeur_bool else txt_faux
@@ -929,7 +930,7 @@ class MenusMixin:
 
         def ligne_ip(label, texte_btn, btn):
             nonlocal y
-            lbl = self.police_texte.render(label, True, COULEUR_TEXTE)
+            lbl = render_text(self.police_texte, label, COULEUR_TEXTE)
             self.ecran.blit(lbl, (col_gauche + 20, y + 6))
             btn.rect.y = y
             btn.texte = texte_btn
@@ -937,7 +938,7 @@ class MenusMixin:
             y += esp_ligne
 
         section(langue.get_texte("param_section_jouabilite"))
-        lbl_lng = self.police_texte.render(langue.get_texte("param_langue"), True, COULEUR_TEXTE)
+        lbl_lng = render_text(self.police_texte, langue.get_texte("param_langue"), COULEUR_TEXTE)
         self.ecran.blit(lbl_lng, (col_gauche + 20, y + 6))
         self.btn_changer_langue.rect.y = y
         self.btn_changer_langue.texte = params['jouabilite']['langue'].upper()
@@ -947,7 +948,7 @@ class MenusMixin:
         section(langue.get_texte("param_section_profil"))
 
         # Pseudo
-        lbl_ps = self.police_texte.render(langue.get_texte("param_pseudo"), True, COULEUR_TEXTE)
+        lbl_ps = render_text(self.police_texte, langue.get_texte("param_pseudo"), COULEUR_TEXTE)
         self.ecran.blit(lbl_ps, (col_gauche + 20, y + 6))
         self.input_pseudo_rect.topleft = (col_droite, y)
         bord_ps = COULEUR_CYAN if self.input_pseudo_actif else COULEUR_CYAN_SOMBRE
@@ -965,7 +966,7 @@ class MenusMixin:
 
         # Skin
         skin_val = params.get('profil', {}).get('skin', 0)
-        lbl_sk = self.police_texte.render(langue.get_texte("param_apparence"), True, COULEUR_TEXTE)
+        lbl_sk = render_text(self.police_texte, langue.get_texte("param_apparence"), COULEUR_TEXTE)
         self.ecran.blit(lbl_sk, (col_gauche + 20, y + 6))
         self.btn_changer_skin.rect.topleft = (col_droite, y)
         self.btn_changer_skin.texte = f"{_NOMS_SKINS.get(skin_val, '?')}  ({skin_val + 1}/{NB_SKINS})"
@@ -986,8 +987,8 @@ class MenusMixin:
             if idx_ecran < 0 or idx_ecran >= nb_ecrans:
                 idx_ecran = 0
             w_e, h_e = self._desktop_sizes[idx_ecran]
-            lbl_ecran = self.police_texte.render(
-                langue.get_texte("param_ecran"), True, COULEUR_TEXTE)
+            lbl_ecran = render_text(self.police_texte,
+                langue.get_texte("param_ecran"), COULEUR_TEXTE)
             self.ecran.blit(lbl_ecran, (col_gauche + 20, y + 6))
             self.btn_changer_ecran.rect.y = y
             self.btn_changer_ecran.texte = f"{idx_ecran + 1}/{nb_ecrans}  ({w_e}x{h_e})"
@@ -1001,7 +1002,7 @@ class MenusMixin:
             idx_actif = getattr(self, '_display_index_actif', idx_ecran)
             if idx_ecran != idx_actif:
                 txt_warn = langue.get_texte("param_ecran_redemarrage")
-                lbl_warn = self.police_petit.render(txt_warn, True, (255, 200, 80))
+                lbl_warn = render_text(self.police_petit, txt_warn, (255, 200, 80))
                 self.ecran.blit(lbl_warn, (col_gauche + 20, y))
                 y += int(esp_ligne * 0.6)
 
@@ -1018,8 +1019,8 @@ class MenusMixin:
             _btn.style = style_res
             _btn._definir_style(style_res)
         lbl_res_color = COULEUR_TEXTE_SOMBRE if est_plein_ecran else COULEUR_TEXTE
-        lbl_res = self.police_texte.render(
-            langue.get_texte("param_resolution"), True, lbl_res_color)
+        lbl_res = render_text(self.police_texte,
+            langue.get_texte("param_resolution"), lbl_res_color)
         self.ecran.blit(lbl_res, (col_gauche + 20, y + 6))
 
         # Disposition : [<] [résolution] [>] alignés dans la colonne
@@ -1048,8 +1049,8 @@ class MenusMixin:
             langue.get_texte("param_oui"),
             langue.get_texte("param_non"))
 
-        lbl_lum = self.police_texte.render(
-            langue.get_texte("param_luminosite"), True, COULEUR_TEXTE)
+        lbl_lum = render_text(self.police_texte,
+            langue.get_texte("param_luminosite"), COULEUR_TEXTE)
         self.ecran.blit(lbl_lum, (col_gauche + 20, y + 6))
         self.btn_ouvrir_luminosite.rect.y = y
         valeur_lum = params['video'].get('luminosite', 0.3)
@@ -1092,8 +1093,8 @@ class MenusMixin:
         ligne_ip(langue.get_texte("param_code_room_label"), txt_code_btn,
                  self.btn_copier_code_room)
 
-        aide = self.police_petit.render(
-            "Cliquez pour copier dans le presse-papiers", True, COULEUR_TEXTE_SOMBRE)
+        aide = render_text(self.police_petit,
+            "Cliquez pour copier dans le presse-papiers", COULEUR_TEXTE_SOMBRE)
         self.ecran.blit(aide, (col_gauche + 20, y))
 
         self.btn_appliquer_params.dessiner(self.ecran)

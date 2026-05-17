@@ -996,7 +996,15 @@ class BoucleJeuMixin:
         payload_continus = dict(commandes.get('clavier', {}))
         payload_continus['pseudo'] = commandes.get('pseudo', '')
         payload_continus['skin']   = commandes.get('skin', 0)
-        self.udp_conn.envoyer_unreliable(UDP_P.TYPE_INPUTS_CONTINUS, pickle.dumps(payload_continus))
+        # Cache du pickle : la majorité des frames le payload est identique
+        # (idle, ou même direction maintenue). Évite ~60 pickle.dumps/s.
+        last = getattr(self, '_inputs_pickle_cache', None)
+        if last is not None and last[0] == payload_continus:
+            data_pickle = last[1]
+        else:
+            data_pickle = pickle.dumps(payload_continus)
+            self._inputs_pickle_cache = (payload_continus, data_pickle)
+        self.udp_conn.envoyer_unreliable(UDP_P.TYPE_INPUTS_CONTINUS, data_pickle)
         if any(one_shot_commandes.values()):
             self.udp_conn.envoyer_reliable(UDP_P.TYPE_INPUT_ONESHOT, one_shot_commandes)
 
