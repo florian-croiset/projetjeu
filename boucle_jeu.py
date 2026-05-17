@@ -626,7 +626,7 @@ class BoucleJeuMixin:
             if de['id'] not in self.ennemis_locaux:
                 self.ennemis_locaux[de['id']] = Ennemi(
                     de['x'], de['y'], de['id'],
-                    de.get('type_ennemi', 'garde'))
+                    pv_max=de.get('pv_max', 2))
             ennemi = self.ennemis_locaux[de['id']]
             ennemi.set_etat(de)
             if (not self.udp_actif

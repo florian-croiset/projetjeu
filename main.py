@@ -15,5 +15,3 @@ from client import Client
 if __name__ == "__main__":
     client_jeu = Client()
     client_jeu.lancer_application()
-
-

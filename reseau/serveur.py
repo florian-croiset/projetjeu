@@ -170,18 +170,17 @@ class Serveur:
         return points
 
     def creer_ennemis(self):
+        # (x, y, id, pv_max)  — tous les ennemis ont désormais l'IA traqueur (chasse à l'écoute).
         configs = [
-            (587,  1251, 0, 'patrouilleur'),
-            (1867, 1123, 1, 'garde'),
-            (1191,  707, 2, 'garde'),
-            (2427,  163, 3, 'gardien'),
-            (2851,  259, 4, 'gardien'),
+            (587,  1251, 0, 1),  # ex-patrouilleur → 1 PV (sprite e1)
+            (1867, 1123, 1, 2),  # ex-garde        → 2 PV (sprite e2)
+            (1191,  707, 2, 2),
+            (2427,  163, 3, 3),  # ex-gardien      → 3 PV (sprite e3)
+            (2851,  259, 4, 3),
+            (1333,  995, 5, 2),  # ex-traqueur     → 2 PV
         ]
-        for x, y, eid, type_e in configs:
-            self.ennemis[eid] = Ennemi(x=x, y=y, id=eid, type_ennemi=type_e)
-
-        # Traqueur — IA événementielle basée sur le bruit des échos
-        self.ennemis[5] = EnemyTraqueur(x=1333, y=995, id=5)
+        for x, y, eid, pv in configs:
+            self.ennemis[eid] = Ennemi(x=x, y=y, id=eid, pv_max=pv)
 
     def creer_ames_libres(self):
         positions = [
@@ -866,12 +865,10 @@ class Serveur:
                     if ennemi.est_mort:
                         if temps_actuel - ennemi.temps_mort >= TEMPS_RESPAWN_ENNEMI:
                             ennemi.respawn()
-                            print(f"[SERVEUR] Ennemi {id_ennemi} ({ennemi.type_ennemi}) respawn !")
+                            print(f"[SERVEUR] Ennemi {id_ennemi} (pv_max={ennemi.pv_max}) respawn !")
                     else:
-                        # Traqueur en chasse : mettre à jour la cible vers le joueur le plus proche
-                        if (isinstance(ennemi, EnemyTraqueur)
-                                and ennemi.etat == ETAT_CHASSE
-                                and self.joueurs):
+                        # En chasse : mettre à jour la cible vers le joueur le plus proche
+                        if ennemi.etat == ETAT_CHASSE and self.joueurs:
                             joueur_proche = min(
                                 self.joueurs.values(),
                                 key=lambda j: (
@@ -882,7 +879,8 @@ class Serveur:
                             ennemi.cible_x = joueur_proche.rect.centerx
                             ennemi.cible_y = joueur_proche.rect.centery
                         rects_proches = self.carte_jeu.get_rects_proches(ennemi.rect)
-                        ennemi.appliquer_logique(rects_proches, self.carte_jeu)
+                        ennemi.appliquer_logique(rects_proches, self.carte_jeu,
+                                                 self.joueurs, temps_actuel)
 
                 # 7. Boss Room
                 if not self.boss_room.boss_defeated:
@@ -934,10 +932,17 @@ class Serveur:
                                     del self.ames_perdues[id_ame]
                         self.boss_room.recevoir_attaque_joueur(joueur.rect_attaque, DEGATS_JOUEUR)
 
-                    # B. Dégâts reçus des ennemis
+                    # B. Dégâts reçus des ennemis — uniquement pendant la fenêtre active de l'attaque
                     for ennemi in self.ennemis.values():
-                        if not ennemi.est_mort and joueur.rect.colliderect(ennemi.rect):
-                            joueur.prendre_degat(1, temps_actuel)
+                        if ennemi.est_mort or not ennemi.est_en_attaque:
+                            continue
+                        if not ennemi.hitbox_actif(temps_actuel):
+                            continue
+                        if id_joueur in ennemi.attaque_a_touche:
+                            continue
+                        if ennemi.get_rect_hitbox_attaque().colliderect(joueur.rect):
+                            if joueur.prendre_degat(DEGATS_ATTAQUE_ENNEMI, temps_actuel):
+                                ennemi.attaque_a_touche.add(id_joueur)
 
                     # C. Mort et Respawn
                     if joueur.pv <= 0:
