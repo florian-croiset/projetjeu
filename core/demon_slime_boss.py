@@ -2,6 +2,7 @@ import pygame
 import json
 from enum import Enum, auto
 from parametres import MODE_DEV
+from utils.cache import flip_h
 
 
 # ─────────────────────────────────────────────
@@ -263,7 +264,7 @@ class DemonSlimeBoss:
 
         # Retourne le sprite horizontalement si le boss regarde à gauche
         if self.facing_right:
-            frame_surf = pygame.transform.flip(frame_surf, True, False)
+            frame_surf = flip_h(frame_surf)
 
         surface.blit(frame_surf, (int(self.pos.x), int(self.pos.y)))
 

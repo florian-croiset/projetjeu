@@ -6,6 +6,12 @@ import math
 import os
 import json
 from parametres import *
+from utils.cache import (
+    DIRECTIONS_ECHO_RADIAL,
+    DIRECTIONS_ECHO_DROITE,
+    DIRECTIONS_ECHO_GAUCHE,
+)
+
 
 class Carte:
     def __init__(self, fichier_map="map.json"):
@@ -20,23 +26,10 @@ class Carte:
         self._vis_map_dirty = True     # Flag de rebuild (remplace le hash)
         self._tuiles_a_reveler = []    # Buffer de (x, y) à patcher sur le prebake
         
-        self._directions = [(math.cos(i/NB_RAYONS_ECHO * 2*math.pi), math.sin(i/NB_RAYONS_ECHO * 2*math.pi)) for i in range(NB_RAYONS_ECHO)]
-        
-        # Précalcul des sous-ensembles pour l'écho directionnel (cône ±15°)
-        # Précalcul de NB_RAYONS_ECHO rayons répartis uniformément dans le cône ±15°
-        _demi_rad = ECHO_DIR_DEMI_ANGLE * math.pi / 180
-        # Droite : cône centré sur 0° (angle 0 rad)
-        self._directions_droite = [
-            (math.cos(-_demi_rad + i / (NB_RAYONS_ECHO - 1) * 2 * _demi_rad),
-            math.sin(-_demi_rad + i / (NB_RAYONS_ECHO - 1) * 2 * _demi_rad))
-            for i in range(NB_RAYONS_ECHO)
-        ]
-        # Gauche : cône centré sur 180° (angle pi rad)
-        self._directions_gauche = [
-            (math.cos(math.pi - _demi_rad + i / (NB_RAYONS_ECHO - 1) * 2 * _demi_rad),
-            math.sin(math.pi - _demi_rad + i / (NB_RAYONS_ECHO - 1) * 2 * _demi_rad))
-            for i in range(NB_RAYONS_ECHO)
-        ]
+        # Vecteurs partagés depuis utils.cache — pas de recalcul par instance
+        self._directions         = DIRECTIONS_ECHO_RADIAL
+        self._directions_droite  = DIRECTIONS_ECHO_DROITE
+        self._directions_gauche  = DIRECTIONS_ECHO_GAUCHE
         # Charger le fichier JSON
         if os.path.exists(fichier_map):
             if fichier_map.endswith('.tmx'):

@@ -6,6 +6,7 @@ import sys
 import os
 
 from parametres import *
+from utils.cache import flip_h, render_text, get_font_pseudo
 
 # Import de BossAnimator pour réutiliser le même système d'animation
 try:
@@ -459,7 +460,7 @@ class Joueur:
 
             # Miroir horizontal quand le joueur regarde à gauche
             if self.direction == -1:
-                frame_surf = pygame.transform.flip(frame_surf, True, False)
+                frame_surf = flip_h(frame_surf)
 
             sprite_w = frame_surf.get_width()
             sprite_h = frame_surf.get_height()
@@ -499,11 +500,8 @@ class Joueur:
             return
         off_x, off_y = camera_offset
         taille_px = max(12, int(round(14 * zoom)))
-        cache = getattr(Joueur, '_font_pseudo_cache', None)
-        if cache is None or cache[0] != taille_px:
-            Joueur._font_pseudo_cache = (taille_px, pygame.font.Font(None, taille_px))
-        font = Joueur._font_pseudo_cache[1]
-        pseudo_surf = font.render(self.pseudo, True, (210, 235, 255))
+        font = get_font_pseudo(taille_px)
+        pseudo_surf = render_text(font, self.pseudo, (210, 235, 255))
         cx_ecran = (self.rect.centerx - off_x) * zoom
         top_ecran = (self.rect.top - off_y) * zoom
         px = int(cx_ecran - pseudo_surf.get_width() / 2)
