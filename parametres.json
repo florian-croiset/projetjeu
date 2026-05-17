@@ -8,10 +8,10 @@
         "vsync": false,
         "musique": false,
         "resolution": [
-            1024,
-            768
+            1280,
+            960
         ],
-        "luminosite": 0.0,
+        "luminosite": 1.0,
         "display_index": 0
     },
     "controles": {
@@ -21,7 +21,7 @@
         "echo": "e",
         "attaque": "k",
         "dash": "mouse_1",
-        "echo_dir": "y",
+        "echo_dir": "mouse_1",
         "interagir": "f",
         "torche": "l"
     },

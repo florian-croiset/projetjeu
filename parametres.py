@@ -94,6 +94,27 @@ PV_ENNEMI_BASE = 3
 ARGENT_PAR_ENNEMI = 10
 TEMPS_RESPAWN_ENNEMI = 180000  # 3 minutes en ms
 
+# -- Sprites ennemis (mapping pv_max → préfixe d'asset) --
+SPRITE_ENNEMI_PAR_PV = {1: 'e1', 2: 'e2', 3: 'e3'}
+
+# -- Attaque ennemi --
+PORTEE_ATTAQUE_ENNEMI       = 48     # px horizontal pour déclencher
+PORTEE_ATTAQUE_ENNEMI_VERT  = 64     # px tolérance verticale
+COOLDOWN_ATTAQUE_ENNEMI     = 1500   # ms entre deux attaques
+DEGATS_ATTAQUE_ENNEMI       = 1
+
+# Durées d'animation (calculées depuis les JSON Aseprite)
+DUREE_ATTAQUE_E1    = 1575   # 9  × 175 ms
+DUREE_ATTAQUE_E2    = 1650   # 11 × 150 ms
+DUREE_ATTAQUE_E3_A1 = 2100   # 14 × 150 ms
+DUREE_ATTAQUE_E3_A2 = 1800   # 12 × 150 ms
+
+# Fenêtres de frames pendant lesquelles le hitbox d'attaque est ACTIF (0-based, inclus)
+HITBOX_FRAMES_E1     = (4, 6)    # sur 9 frames
+HITBOX_FRAMES_E2     = (5, 7)    # sur 11
+HITBOX_FRAMES_E3_A1  = (7, 10)   # sur 14
+HITBOX_FRAMES_E3_A2  = (5, 8)    # sur 12
+
 # -- Paramètres des Capacités --
 DISTANCE_DASH = TAILLE_TUILE * 4
 DUREE_DASH = 150

@@ -1,6 +1,7 @@
 import pygame
 import json
 from enum import Enum, auto
+from parametres import MODE_DEV
 
 
 # ─────────────────────────────────────────────
@@ -266,10 +267,18 @@ class DemonSlimeBoss:
 
         surface.blit(frame_surf, (int(self.pos.x), int(self.pos.y)))
 
-        # ── Hitboxes de debug (décommente pour tester) ──────────
-        pygame.draw.rect(surface, (255, 0, 0), self.body_rect, 1)
-        if self.attack_hitbox:
-            pygame.draw.rect(surface, (255, 140, 0), self.attack_hitbox, 2)
+        # ── Hitboxes de debug (MODE_DEV) ────────────────────────
+        # self.pos a été décalé en screen-space par l'appelant ;
+        # body_rect/attack_hitbox sont en world-space, donc on applique
+        # le même delta que celui appliqué à pos.
+        if MODE_DEV:
+            dx = int(self.pos.x) - (self.body_rect.x - (self.sprite_w - self.body_rect.w) // 2)
+            dy = int(self.pos.y) - (self.body_rect.y - (self.sprite_h - self.body_rect.h))
+            body_visuel = self.body_rect.move(dx, dy)
+            pygame.draw.rect(surface, (255, 0, 0), body_visuel, 1)
+            if self.attack_hitbox:
+                atk_visuel = self.attack_hitbox.move(dx, dy)
+                pygame.draw.rect(surface, (255, 140, 0), atk_visuel, 2)
 
     # ────────────────────────────────────────────────────────────
     #  API PUBLIQUE

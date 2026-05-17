@@ -485,6 +485,13 @@ class Joueur:
         # Le pseudo est dessiné séparément via dessiner_pseudo_ecran(),
         # directement sur l'écran final pour éviter le flou de l'upscale.
 
+        if MODE_DEV:
+            rect_hitbox = pygame.Rect(
+                self.rect.x - off_x, self.rect.y - off_y,
+                self.rect.width, self.rect.height,
+            )
+            pygame.draw.rect(surface, (0, 255, 0), rect_hitbox, 1)
+
     def dessiner_pseudo_ecran(self, ecran, camera_offset=(0, 0), zoom=1.0):
         """Dessine le pseudo directement sur l'écran final (post-scale).
         Rendu à la taille `taille_base * zoom` pour rester net tout en suivant la caméra."""
