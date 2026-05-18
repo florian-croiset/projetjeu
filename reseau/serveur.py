@@ -929,10 +929,10 @@ class Serveur:
                                     ame.nb_visuels = ennemi.argent_drop
                                     self.ames_loot[ame.id] = ame
                                     r = random.random()
-                                    if ennemi.pv_max >= 3 and r < 0.6:
+                                    if ennemi.pv_max >= 3 and r < 0.8:
                                         self.potions.dropper(cx, cy, 'large')
                                         print(f"[POTION] Drop large à ({cx}, {cy})")
-                                    elif r < 0.33:
+                                    elif r < 0.4:
                                         self.potions.dropper(cx, cy, 'small')
                                         print(f"[POTION] Drop small à ({cx}, {cy})")
                         for id_ame, ame in list(self.ames_perdues.items()):

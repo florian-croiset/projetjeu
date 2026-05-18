@@ -44,7 +44,7 @@ def _charger_sprites_si_necessaire():
 # Constantes
 # ---------------------------------------------------------------------------
 
-SOIN_SMALL_POTION = 2
+SOIN_SMALL_POTION = 1
 SOIN_LARGE_POTION = 5
 
 
@@ -113,7 +113,6 @@ class Potion:
             self.rect.x - off_x,
             self.rect.y - off_y + int(self._offset_y),
         )
-        print(f"[POTION] Dessin {self.type} à pos écran {pos}")
         if self.sprite:
             surface.blit(self.sprite, pos)
         else:
