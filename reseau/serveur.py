@@ -9,8 +9,10 @@ import time
 import sys
 import secrets
 import pygame
+import random
 
 from core.joueur import Joueur
+from core.potion import GestionnairePotions
 from core.carte import Carte
 from parametres import *
 from sauvegarde import gestion_sauvegarde
@@ -22,6 +24,7 @@ from core.ame_libre import AmeLibre
 from core.ame_loot import AmeLoot
 from core.cle import Cle
 from core.porte import Porte
+from core.potion import GestionnairePotions
 from core.orbe_capacite import OrbeCapacite
 from core.pancarte_lore import PancarteLore   # NOUVEAU
 from reseau.protocole import obtenir_ip_locale, obtenir_ip_vpn, recvall, recv_complet, send_complet
@@ -67,6 +70,7 @@ class Serveur:
         self.cle                 = None
         self.porte               = None
         self.echos_en_cours      = []
+        self.potions             = GestionnairePotions()
 
         # ===== CARTE =====
         import os
@@ -924,6 +928,13 @@ class Serveur:
                                     ame.temps_creation = temps_actuel
                                     ame.nb_visuels = ennemi.argent_drop
                                     self.ames_loot[ame.id] = ame
+                                    r = random.random()
+                                    if ennemi.pv_max >= 3 and r < 0.6:
+                                        self.potions.dropper(cx, cy, 'large')
+                                        print(f"[POTION] Drop large à ({cx}, {cy})")
+                                    elif r < 0.33:
+                                        self.potions.dropper(cx, cy, 'small')
+                                        print(f"[POTION] Drop small à ({cx}, {cy})")
                         for id_ame, ame in list(self.ames_perdues.items()):
                             if ame.id_joueur == id_joueur:
                                 if joueur.rect_attaque.colliderect(ame.rect):
@@ -978,6 +989,9 @@ class Serveur:
                                     self.donnees_partie["ameliorations"]["echo_dir"]    = joueur.peut_echo_dir
                                     gestion_sauvegarde.sauvegarder_partie(
                                         self.id_slot, self.donnees_partie)
+            # --- Potions ---
+            with self.lock:
+                self.potions.mettre_a_jour(temps_actuel, list(self.joueurs.values()))
 
             # 9. Broadcast réseau
             if not hasattr(self, '_dernier_broadcast'):
@@ -1000,6 +1014,7 @@ class Serveur:
                         'porte':          self.porte.get_etat() if self.porte else None,
                         'torche_allumee': self.torche_allumee,
                         'boss_room':      self.boss_room.get_etat(),
+                        'potions':    self.potions.get_etat(),
                     }
                 with self._broadcast_lock:
                     self._etat_broadcast = etat_commun

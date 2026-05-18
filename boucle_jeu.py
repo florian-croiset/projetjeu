@@ -35,6 +35,7 @@ from core.ame_loot import AmeLoot
 from core.cle import Cle
 from core.porte import Porte
 from core.orbe_capacite import OrbeCapacite
+from core.potion import GestionnairePotions
 from core.pancarte_lore import PancarteLore, BulleLore, PopupPaiement, COUT_AMES, COUT_DASH   # NOUVEAU
 
 
@@ -338,6 +339,10 @@ class BoucleJeuMixin:
         if self.porte_locale:
             self.porte_locale.dessiner(surface_virtuelle, camera_offset,
                                        pygame.time.get_ticks())
+
+        # --- Potions ---
+        if hasattr(self, 'potions') and self.potions is not None:
+            self.potions.dessiner(surface_virtuelle, camera_offset)
 
         # --- Orbes de capacité ---
         off_x, off_y = camera_offset
@@ -742,6 +747,10 @@ class BoucleJeuMixin:
             if torche_serveur:
                 self.torche.particules = []
 
+        # --- Potions ---
+        if hasattr(self, 'potions') and self.potions is not None:
+            self.potions.set_etat(donnees_recues.get('potions', []))
+
         # --- Données boss pour HUD ---
         self._derniere_data_boss = donnees_recues.get('boss_room')
 
@@ -1097,6 +1106,7 @@ class BoucleJeuMixin:
         self.pancartes_lore_locales = {}   # NOUVEAU
         self.porte_locale           = None
         self.cle_locale             = None
+        self.potions                = GestionnairePotions()
         # NOUVEAU — UI pancarte (taille dépend de l'écran courant)
         self.bulle_lore         = BulleLore(self.largeur_ecran, self.hauteur_ecran)
         self.popup_paiement     = PopupPaiement(self.largeur_ecran, self.hauteur_ecran)
