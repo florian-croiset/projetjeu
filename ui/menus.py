@@ -39,15 +39,25 @@ class MenusMixin:
             y = y_start + i * esp
             return Bouton(cx - lw // 2, y, lw, bh, texte, self.police_bouton, style=style)
 
+        nb_boutons = 6
+        hauteur_groupe = nb_boutons * esp - self._espacement_bouton()
+        y_start = self.cy - hauteur_groupe // 2 + self.hauteur_ecran // 10
+
+        def _btn(i, texte, style="normal"):
+            y = y_start + i * esp
+            return Bouton(cx - lw // 2, y, lw, bh, texte, self.police_bouton, style=style)
+
         self.btn_nouvelle_partie = _btn(0, langue.get_texte("menu_nouvelle_partie"))
         self.btn_continuer       = _btn(1, langue.get_texte("menu_continuer"))
         self.btn_rejoindre       = _btn(2, langue.get_texte("menu_rejoindre"))
         self.btn_parametres      = _btn(3, langue.get_texte("menu_parametres"))
-        self.btn_quitter         = _btn(4, langue.get_texte("menu_quitter"), style="ghost")
+        self.btn_tutoriel        = _btn(4, "Tutoriel", style="ghost")
+        self.btn_quitter         = _btn(5, langue.get_texte("menu_quitter"), style="ghost")
 
         self.boutons_menu_principal = [
             self.btn_nouvelle_partie, self.btn_continuer,
-            self.btn_rejoindre, self.btn_parametres, self.btn_quitter
+            self.btn_rejoindre, self.btn_tutoriel,
+            self.btn_parametres, self.btn_quitter
         ]
         self.btn_copier_ip_locale = Bouton(0, 0, self._scale(300), self._scale(36), "", self.police_petit)
 
@@ -292,6 +302,8 @@ class MenusMixin:
                 self.infos_slots = gestion_sauvegarde.get_infos_slots()
             if self.btn_rejoindre.verifier_clic(event):
                 self.etat_jeu = "MENU_REJOINDRE"
+            if self.btn_tutoriel.verifier_clic(event):
+                self._lancer_tutoriel()
             if self.btn_parametres.verifier_clic(event):
                 self.parametres_temp = copy.deepcopy(self.parametres)
                 self.etat_jeu_precedent = "MENU_PRINCIPAL"
@@ -1233,3 +1245,20 @@ class MenusMixin:
                 self.etat_jeu_interne = "PARAMETRES_JEU"
             if self.btn_pause_quitter.verifier_clic(event):
                 self.etat_jeu = "MENU_PRINCIPAL"
+
+    def _lancer_tutoriel(self):
+        from ui.tutoriel import Tutoriel
+        controles = self.parametres.get('controles', {})
+        tuto = Tutoriel(
+            self.ecran,
+            self.largeur_ecran,
+            self.hauteur_ecran,
+            controles,
+            self.police_titre,
+            self.police_texte,
+            self.police_bouton,
+            self.police_petit,
+        )
+        tuto.lancer()
+        # Retour transparent : on réaffiche simplement le menu principal
+        # (la boucle principale reprend sans changement d'état)
