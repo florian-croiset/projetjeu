@@ -17,3 +17,5 @@ hamachi.txt
 .vscode/
 .claude/
 parametres.json
+benchmark_results.json
+PROPOSITIONS_OPTIMISATION.md
