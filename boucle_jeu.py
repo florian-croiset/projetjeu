@@ -702,6 +702,9 @@ class BoucleJeuMixin:
                     self._pancarte_active_id = None
 
         # --- Portes ---
+        if not hasattr(self, '_portes_etaient_en_ouverture'):
+            self._portes_etaient_en_ouverture = {}
+
         data_portes = donnees_recues.get('portes', [])
         for i, data_porte in enumerate(data_portes):
             if i not in self.portes_locales:

@@ -214,7 +214,7 @@ class Serveur:
     def creer_porte(self):
         portes_config = [
             (995, 960),      # Porte de sortie principale
-            (2912, 614),     # Nouvelle porte
+            (2940, 580),     # Nouvelle porte
         ]
         for i, (x, y) in enumerate(portes_config):
             self.portes[i] = Porte(x=x, y=y)
