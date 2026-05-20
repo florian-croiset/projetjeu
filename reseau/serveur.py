@@ -965,7 +965,7 @@ class Serveur:
                         if id_joueur in ennemi.attaque_a_touche:
                             continue
                         if ennemi.get_rect_hitbox_attaque().colliderect(joueur.rect):
-                            if joueur.prendre_degat(DEGATS_ATTAQUE_ENNEMI, temps_actuel):
+                            if joueur.prendre_degat(DEGATS_ATTAQUE_ENNEMI, temps_actuel, source_x=ennemi.rect.centerx):
                                 ennemi.attaque_a_touche.add(id_joueur)
 
                     # C. Mort et Respawn

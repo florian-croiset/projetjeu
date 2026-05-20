@@ -398,6 +398,31 @@ class HudMixin:
         self.ecran.blit(nom, (bar_x, bar_y - 18))
 
 
+    def _dessiner_message_fin(self, surface):
+        """Affiche le message de fin avec un fondu progressif."""
+        if self._fin_message_depuis is None:
+            return
+        elapsed = pygame.time.get_ticks() - self._fin_message_depuis
+        # Fondu d'apparition sur 1500 ms
+        alpha = min(255, int(255 * min(elapsed, 1500) / 1500))
+        sw, sh = surface.get_size()
+
+        taille_titre = max(48, sh // 14)
+        if (not hasattr(self, '_font_fin')
+                or getattr(self, '_font_fin_taille', None) != taille_titre):
+            self._font_fin = pygame.font.Font(None, taille_titre)
+            self._font_fin_taille = taille_titre
+
+        # Voile sombre pour faire ressortir le texte
+        overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, int(alpha * 0.5)))
+        surface.blit(overlay, (0, 0))
+
+        txt = self._font_fin.render("Fin merci d'avoir jouer", True, (0, 212, 255))
+        txt.set_alpha(alpha)
+        rect = txt.get_rect(center=(sw // 2, sh // 2))
+        surface.blit(txt, rect)
+
     def _dessiner_badge_torche(self, surface, camera_offset):
         """
         Affiche un petit badge [L] au-dessus de la torche

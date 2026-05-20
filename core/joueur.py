@@ -132,6 +132,15 @@ class Joueur:
         self.commandes = {'gauche': False, 'droite': False, 'saut': False, 'attaque': False, 'dash': False}
         self.saut_precedent = False
 
+        # Game feel : sauts assistés (coyote / jump buffer / variable jump)
+        self.coyote_jusqu_a = 0       # timestamp jusqu'auquel le coyote-jump reste valide
+        self.jump_buffer_jusqu_a = 0  # timestamp jusqu'auquel un appui Espace mémorisé est valide
+        self.saut_coupe = False       # variable jump : True une fois la coupe appliquée pour ce saut
+
+        # Game feel : knockback sur dégâts
+        self.recul_vx = 0.0
+        self.recul_jusqu_a = 0        # timestamp de fin du knockback (input H désactivé jusque-là)
+
         self.sons_a_jouer = []
         self.sons = {
             'saut':        True,
@@ -222,26 +231,52 @@ class Joueur:
                     self.commandes['dash'] = False
                     self.sons_a_jouer.append('dash')
 
-            # 2. Mouvement horizontal
-            if self.commandes['gauche']:
-                dx = -VITESSE_JOUEUR
-                self.direction = -1
-            if self.commandes['droite']:
-                dx = VITESSE_JOUEUR
-                self.direction = 1
+            # 2. Mouvement horizontal — désactivé pendant le knockback
+            en_recul = temps_actuel < self.recul_jusqu_a
+            if en_recul:
+                dx = self.recul_vx
+                # On laisse la direction du regard inchangée pendant le recul
+            else:
+                if self.commandes['gauche']:
+                    dx = -VITESSE_JOUEUR
+                    self.direction = -1
+                if self.commandes['droite']:
+                    dx = VITESSE_JOUEUR
+                    self.direction = 1
 
-            # 3. Saut et Double Saut
+            # 3. Saut, Double Saut, Coyote, Jump Buffer, Variable Jump Height
             saut_actuel = self.commandes.get('saut', False)
-            if saut_actuel and not self.saut_precedent:
-                if self.sur_le_sol:
+            edge_saut = saut_actuel and not self.saut_precedent
+
+            # Eligibilité au saut depuis le sol (sol réel OU coyote actif)
+            coyote_actif = temps_actuel < self.coyote_jusqu_a
+
+            saut_declenche = False
+            if edge_saut:
+                if self.sur_le_sol or coyote_actif:
                     self.vel_y = -FORCE_SAUT
                     self.sur_le_sol = False
                     self.a_double_saute = False
+                    saut_declenche = True
                 elif self.peut_double_saut and not self.a_double_saute:
                     self.vel_y = -FORCE_DOUBLE_SAUT
                     self.a_double_saute = True
+                    saut_declenche = True
+                else:
+                    # Pas de saut possible : on mémorise l'appui pour l'atterrissage
+                    self.jump_buffer_jusqu_a = temps_actuel + JUMP_BUFFER_MS
+
+            if saut_declenche:
+                self.coyote_jusqu_a = 0
+                self.jump_buffer_jusqu_a = 0
+                self.saut_coupe = False
 
             self.saut_precedent = saut_actuel
+
+            # Variable jump height : si le joueur relâche Espace en montée, coupe la vélocité une fois
+            if (not saut_actuel) and self.vel_y < 0 and not self.saut_coupe:
+                self.vel_y *= COUPE_SAUT_FACTEUR
+                self.saut_coupe = True
 
             self.vel_y += GRAVITE
             if self.vel_y > 10:
@@ -285,6 +320,18 @@ class Joueur:
             self.dash_disponibles_en_air = DASH_EN_AIR_MAX
             if self.sons.get('saut'):
                 self.sons_a_jouer.append('saut')
+            # Jump buffer : un appui mémorisé déclenche un saut immédiat à l'atterrissage
+            if temps_actuel < self.jump_buffer_jusqu_a and not self.est_en_dash:
+                self.vel_y = -FORCE_SAUT
+                self.sur_le_sol = False
+                self.a_double_saute = False
+                self.jump_buffer_jusqu_a = 0
+                self.coyote_jusqu_a = 0
+                self.saut_coupe = False
+
+        # Coyote time : on vient de quitter le sol sans avoir sauté (chute naturelle)
+        elif ancien_sur_le_sol and not self.sur_le_sol and self.vel_y >= 0:
+            self.coyote_jusqu_a = temps_actuel + COYOTE_TIME_MS
 
     def gerer_attaque(self, temps_actuel):
         """Gère la logique d'attaque (création hitbox, cooldown)."""
@@ -308,8 +355,9 @@ class Joueur:
 
         return False
 
-    def prendre_degat(self, montant, temps_actuel):
-        """Tente d'infliger des dégâts au joueur."""
+    def prendre_degat(self, montant, temps_actuel, source_x=None):
+        """Tente d'infliger des dégâts au joueur.
+        Si source_x est fourni, applique un knockback à l'opposé de la source."""
         if temps_actuel - self.dernier_degat_temps > TEMPS_INVINCIBILITE:
             self.pv -= montant
             self.dernier_degat_temps = temps_actuel
@@ -317,6 +365,13 @@ class Joueur:
                 self.sons_a_jouer.append('mort')
             else:
                 self.sons_a_jouer.append('degat')
+            # Knockback : pas pendant un dash (sinon ça coupe la mécanique défensive)
+            if source_x is not None and not self.est_en_dash:
+                direction = 1 if self.rect.centerx >= source_x else -1
+                self.recul_vx = direction * RECUL_VX
+                self.vel_y = RECUL_VY
+                self.recul_jusqu_a = temps_actuel + RECUL_DUREE_MS
+                self.sur_le_sol = False
             return True
         return False
 

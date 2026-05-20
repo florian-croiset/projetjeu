@@ -75,6 +75,17 @@ PV_JOUEUR_MAX = 5
 TEMPS_INVINCIBILITE = 1000
 ARGENT_DEPART = 0
 
+# -- Game feel : sauts assistés --
+COYOTE_TIME_MS     = 100    # Fenêtre après avoir quitté le sol pendant laquelle on peut encore sauter
+JUMP_BUFFER_MS     = 100    # Fenêtre avant l'atterrissage pendant laquelle un appui Espace est mémorisé
+COUPE_SAUT_FACTEUR = 0.5    # Si Espace est relâché en montée : vel_y *= ce facteur (variable jump height)
+
+# -- Game feel : knockback sur dégâts --
+RECUL_VX        = 4.0       # Vélocité horizontale appliquée au joueur touché
+RECUL_VY        = -5.0      # Petit hop vertical au knockback
+RECUL_DUREE_MS  = 200       # Durée pendant laquelle l'input horizontal est ignoré
+
+
 # -- Paramètres de Combat --
 DUREE_ATTAQUE = 200
 COOLDOWN_ATTAQUE = 800

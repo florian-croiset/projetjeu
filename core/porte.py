@@ -60,7 +60,6 @@ class Porte:
 
         self.en_ouverture     = True
         self._debut_ouverture = pygame.time.get_ticks()
-        joueur.have_key       = False   # la clé est consommée
         print(f"[PORTE] Ouverture déclenchée par joueur {joueur.id}")
         return True
 

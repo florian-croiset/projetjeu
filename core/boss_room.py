@@ -109,6 +109,15 @@ class BossRoom:
                         if joueur.pv <= 0:
                             joueur.pv = 0
                             joueur.sons_a_jouer.append('mort')
+                        else:
+                            # Knockback à l'opposé du boss (uniquement si encore vivant)
+                            if not joueur.est_en_dash:
+                                from parametres import RECUL_VX, RECUL_VY, RECUL_DUREE_MS
+                                direction = 1 if joueur.rect.centerx >= self.boss.attack_hitbox.centerx else -1
+                                joueur.recul_vx = direction * RECUL_VX
+                                joueur.vel_y = RECUL_VY
+                                joueur.recul_jusqu_a = temps_actuel + RECUL_DUREE_MS
+                                joueur.sur_le_sol = False
                         self._a_touche_ce_swing = True
                         print(f"[BossRoom] Boss touche joueur — PV restants : {joueur.pv}")
         else:
