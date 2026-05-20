@@ -115,6 +115,13 @@ class BoucleJeuMixin:
             pygame.display.flip()
             self.horloge.tick(FPS)
 
+        relay = getattr(self, '_relay_instance', None)
+        if relay:
+            try:
+                relay.arreter()
+                print("[CLIENT] Relay embarqué arrêté")
+            except Exception as e:
+                print(f"[CLIENT] Erreur arrêt relay: {e}")
         pygame.quit()
         sys.exit()
 
@@ -532,6 +539,10 @@ class BoucleJeuMixin:
 
         self.dessiner_hud()
 
+        # Message de fin (déclenché à l'ouverture de la première porte)
+        if getattr(self, '_fin_message_depuis', None) is not None:
+            self._dessiner_message_fin(self.ecran)
+
         # NOUVEAU — Rendu UI pancarte par-dessus tout (sur self.ecran, pas sur surface_virtuelle)
         # La bulle et la popup sont dessinées dans boucle_jeu_reseau après display.flip
 
@@ -716,6 +727,8 @@ class BoucleJeuMixin:
             etait_en_ouverture = self._portes_etaient_en_ouverture.get(i, False)
             if not etait_en_ouverture and porte.en_ouverture:
                 music.jouer_sfx('porte')
+                if i == 0 and getattr(self, '_fin_message_depuis', None) is None:
+                    self._fin_message_depuis = pygame.time.get_ticks()
             self._portes_etaient_en_ouverture[i] = porte.en_ouverture
 
         # --- Boss ---
@@ -892,20 +905,18 @@ class BoucleJeuMixin:
     def lancer_partie_locale(self, id_slot, est_nouvelle_partie=False):
         type_lancement  = "nouvelle" if est_nouvelle_partie else "charger"
         self._serveur_instance = None
-        relay_precedent = getattr(self, '_relay_instance', None)
-        if relay_precedent:
-            try:
-                relay_precedent.arreter()
-            except Exception:
-                pass
-        self._relay_instance   = None
 
-        try:
-            self._relay_instance = demarrer_relay_thread(RELAY_PORT)
-            print(f"[CLIENT] Relay auto-démarré sur le port {RELAY_PORT}")
-        except Exception as e:
-            print(f"[CLIENT] Impossible de démarrer le relay: {e}")
+        # Réutiliser le relay s'il tourne déjà (il reste actif entre les parties)
+        if getattr(self, '_relay_instance', None) and self._relay_instance._running:
+            print(f"[CLIENT] Relay déjà actif sur le port {RELAY_PORT}, réutilisation")
+        else:
             self._relay_instance = None
+            try:
+                self._relay_instance = demarrer_relay_thread(RELAY_PORT)
+                print(f"[CLIENT] Relay auto-démarré sur le port {RELAY_PORT}")
+            except Exception as e:
+                print(f"[CLIENT] Impossible de démarrer le relay: {e}")
+                self._relay_instance = None
 
         relay_host = obtenir_ip_locale() if self._relay_instance else ""
         relay_port = RELAY_PORT
@@ -1236,13 +1247,8 @@ class BoucleJeuMixin:
                     srv.pathfinding.arreter()
             except Exception:
                 pass
-        relay = getattr(self, '_relay_instance', None)
-        if relay:
-            try:
-                relay.arreter()
-                print("[CLIENT] Relay embarqué arrêté")
-            except Exception as e:
-                print(f"[CLIENT] Erreur arrêt relay: {e}")
+        # Le relay reste actif entre les parties pour éviter "Address already in use".
+        # Il est arrêté uniquement à la fermeture de l'app (voir arreter_relay_global).
         music.torche_boucle_stop()
         if hasattr(self, 'torche') and self.torche:
             self.torche.allumee = False
@@ -1250,7 +1256,6 @@ class BoucleJeuMixin:
         self.mon_id                 = -1
         self.code_room              = None
         self._serveur_instance      = None
-        self._relay_instance        = None
         self.joueurs_locaux         = {}
         self.ennemis_locaux         = {}
         self.ames_perdues_locales   = {}
@@ -1264,6 +1269,7 @@ class BoucleJeuMixin:
         self.vis_map_locale         = None
         self.boss_local             = None
         self._portes_etaient_en_ouverture  = {}
+        self._fin_message_depuis        = None
         self._boss_etat_precedent       = None
         self._boss_frame_precedent      = 0
         self.etat_jeu_interne           = "JEU"
