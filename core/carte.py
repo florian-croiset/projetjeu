@@ -71,7 +71,7 @@ class Carte:
                     for y in range(self.hauteur_map):
                         for x in range(self.largeur_map):
                             gid = valeurs[y * self.largeur_map + x]
-                            if gid != 0 and self.map_data[y][x] == 0:
+                            if gid != 0:
                                 self.map_data[y][x] = 1
 
             self.spawn = None
@@ -93,38 +93,64 @@ class Carte:
                     grille.append(valeurs[row_y * self.largeur_map:(row_y + 1) * self.largeur_map])
                 self.layers_gids.append(grille)
 
-            # Tileset
-            ts_el = root.find('tileset')
-            self.tileset_firstgid = int(ts_el.attrib.get('firstgid', 1))
+            # Tilesets — charge TOUS les tilesets
+            self.tilesets = []
             self.tileset = None
+            self.tileset_firstgid = 1
+            self.tileset_colonnes = 1
+            self.tileset_taille = 32
+            self.tileset_spacing = 0
+            self.tileset_margin = 0
 
-            tsx_src = ts_el.attrib.get('source', '')
-            if tsx_src:
-                tsx_path = os.path.join(base, tsx_src)
-                tsx_tree = ET.parse(tsx_path)
-                tsx_root = tsx_tree.getroot()
-                self.tileset_taille   = int(tsx_root.attrib.get('tilewidth', 32))
-                self.tileset_spacing  = int(tsx_root.attrib.get('spacing', 0))
-                self.tileset_margin   = int(tsx_root.attrib.get('margin', 0))
-                img_el = tsx_root.find('image')
-                img_w  = int(img_el.attrib.get('width', 0))
-                self.tileset_colonnes = (img_w - 2 * self.tileset_margin + self.tileset_spacing) // (self.tileset_taille + self.tileset_spacing)
-                tileset_img_src = img_el.attrib.get('source', 'tileset.png')
-            else:
-                self.tileset_taille   = int(ts_el.attrib.get('tilewidth', 32))
-                self.tileset_spacing  = int(ts_el.attrib.get('spacing', 0))
-                self.tileset_margin   = int(ts_el.attrib.get('margin', 0))
-                self.tileset_colonnes = 11
-                tileset_img_src = 'tileset.png'
+            for ts_el in root.findall('tileset'):
+                firstgid = int(ts_el.attrib.get('firstgid', 1))
+                tsx_src = ts_el.attrib.get('source', '')
+                if tsx_src:
+                    tsx_path = os.path.join(base, tsx_src)
+                    tsx_tree = ET.parse(tsx_path)
+                    tsx_root = tsx_tree.getroot()
+                    taille  = int(tsx_root.attrib.get('tilewidth', 32))
+                    spacing = int(tsx_root.attrib.get('spacing', 0))
+                    margin  = int(tsx_root.attrib.get('margin', 0))
+                    img_el  = tsx_root.find('image')
+                    img_w   = int(img_el.attrib.get('width', 0))
+                    colonnes = (img_w - 2*margin + spacing) // (taille + spacing) if (taille+spacing) > 0 else 1
+                    img_src  = img_el.attrib.get('source', '')
+                else:
+                    taille   = int(ts_el.attrib.get('tilewidth', 32))
+                    spacing  = int(ts_el.attrib.get('spacing', 0))
+                    margin   = int(ts_el.attrib.get('margin', 0))
+                    colonnes = 11
+                    img_el   = ts_el.find('image')
+                    img_src  = img_el.attrib.get('source', '') if img_el is not None else ''
 
-            try:
-                self.tileset = pygame.image.load(
-                    os.path.join(base, tileset_img_src)).convert_alpha()
-                print("[CARTE] Tileset chargé")
-            except Exception as e:
-                print(f"[CARTE] Tileset introuvable : {e}")
+                if not img_src:
+                    continue
+                img_path = os.path.join(base, img_src)
+                try:
+                    surf = pygame.image.load(img_path).convert_alpha()
+                    self.tilesets.append({
+                        'firstgid': firstgid,
+                        'surface':  surf,
+                        'colonnes': colonnes,
+                        'taille':   taille,
+                        'spacing':  spacing,
+                        'margin':   margin,
+                    })
+                    print(f"[CARTE] Tileset chargé : {img_src} (firstgid={firstgid})")
+                except Exception as e:
+                    print(f"[CARTE] Tileset introuvable : {img_path} — {e}")
 
-            self._cache_tuiles = {}   # Reset cache si tileset rechargé
+            if self.tilesets:
+                t0 = self.tilesets[0]
+                self.tileset          = t0['surface']
+                self.tileset_firstgid = t0['firstgid']
+                self.tileset_colonnes = t0['colonnes']
+                self.tileset_taille   = t0['taille']
+                self.tileset_spacing  = t0['spacing']
+                self.tileset_margin   = t0['margin']
+
+            self._cache_tuiles = {}
 
             # Image layers (midground, background PNG)
             self.image_layers = []
@@ -510,23 +536,27 @@ class Carte:
     
 
     def get_tile_surface(self, gid):
-        if self.tileset is None or gid <= 0:
+        if gid <= 0:
             return None
-        # Lookup cache — subsurface() n'est appelé qu'une seule fois par GID
         if gid in self._cache_tuiles:
             return self._cache_tuiles[gid]
-        idx = gid - self.tileset_firstgid
-        if idx < 0:
+        ts = None
+        for t in sorted(getattr(self, 'tilesets', []), key=lambda x: -x['firstgid']):
+            if gid >= t['firstgid']:
+                ts = t
+                break
+        if ts is None:
             self._cache_tuiles[gid] = None
             return None
-        col = idx % self.tileset_colonnes
-        row = idx // self.tileset_colonnes
-        x = self.tileset_margin + col * (self.tileset_taille + self.tileset_spacing)
-        y = self.tileset_margin + row * (self.tileset_taille + self.tileset_spacing)
-        ts_w, ts_h = self.tileset.get_size()
-        if x + self.tileset_taille > ts_w or y + self.tileset_taille > ts_h:
+        idx = gid - ts['firstgid']
+        col = idx % ts['colonnes']
+        row = idx // ts['colonnes']
+        x   = ts['margin'] + col * (ts['taille'] + ts['spacing'])
+        y   = ts['margin'] + row * (ts['taille'] + ts['spacing'])
+        w, h = ts['surface'].get_size()
+        if x + ts['taille'] > w or y + ts['taille'] > h:
             self._cache_tuiles[gid] = None
             return None
-        surf = self.tileset.subsurface(pygame.Rect(x, y, self.tileset_taille, self.tileset_taille))
+        surf = ts['surface'].subsurface(pygame.Rect(x, y, ts['taille'], ts['taille']))
         self._cache_tuiles[gid] = surf
         return surf
