@@ -453,6 +453,12 @@ class Joueur:
         if not self._anim_charge_tente:
             self._init_animator()
 
+        # Flash blanc au coup reçu (même effet que les ennemis)
+        flash_actif = (
+            self.dernier_degat_temps > 0
+            and pygame.time.get_ticks() - self.dernier_degat_temps < 300
+        )
+
         if self.animator and self._anim_frames:
             self._mettre_a_jour_animation()
 
@@ -461,6 +467,10 @@ class Joueur:
             # Miroir horizontal quand le joueur regarde à gauche
             if self.direction == -1:
                 frame_surf = flip_h(frame_surf)
+
+            if flash_actif:
+                frame_surf = frame_surf.copy()
+                frame_surf.fill((120, 120, 120), special_flags=pygame.BLEND_RGB_ADD)
 
             sprite_w = frame_surf.get_width()
             sprite_h = frame_surf.get_height()
@@ -474,6 +484,9 @@ class Joueur:
         elif self.sprite:
             # Fallback : sprite statique mis à l'échelle
             sprite_a_dessiner = pygame.transform.flip(self.sprite, self.direction == -1, False)
+            if flash_actif:
+                sprite_a_dessiner = sprite_a_dessiner.copy()
+                sprite_a_dessiner.fill((120, 120, 120), special_flags=pygame.BLEND_RGB_ADD)
             surface.blit(sprite_a_dessiner, (self.rect.x - off_x, self.rect.y - off_y))
         else:
             # Dernier recours : rectangle coloré
@@ -481,7 +494,7 @@ class Joueur:
                 self.rect.x - off_x, self.rect.y - off_y,
                 self.rect.width, self.rect.height
             )
-            pygame.draw.rect(surface, self.couleur, rect_visuel)
+            pygame.draw.rect(surface, COULEUR_BLANC if flash_actif else self.couleur, rect_visuel)
 
         # Le pseudo est dessiné séparément via dessiner_pseudo_ecran(),
         # directement sur l'écran final pour éviter le flou de l'upscale.
@@ -548,6 +561,7 @@ class Joueur:
             'peut_echo_dir':     self.peut_echo_dir,
             'echo_age_ms':       max(0, pygame.time.get_ticks() - self.dernier_echo_temps),
             'echo_dir_age_ms':   max(0, pygame.time.get_ticks() - self.dernier_echo_dir_temps),
+            'degat_age_ms':      max(0, temps_actuel - self.dernier_degat_temps) if self.dernier_degat_temps > 0 else None,
             'sons':              sons,
             # Champs pour les animations côté client
             'sur_le_sol':        self.sur_le_sol,
@@ -584,6 +598,9 @@ class Joueur:
         age_dir = data.get('echo_dir_age_ms')
         if age_dir is not None:
             self.dernier_echo_dir_temps = pygame.time.get_ticks() - age_dir
+        age_degat = data.get('degat_age_ms')
+        if age_degat is not None:
+            self.dernier_degat_temps = pygame.time.get_ticks() - age_degat
         # Champs animation
         self.sur_le_sol  = data.get('sur_le_sol', self.sur_le_sol)
         self.en_mouvement = data.get('en_mouvement', self.en_mouvement)

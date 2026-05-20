@@ -126,7 +126,8 @@ class DemonSlimeBoss:
     ATTACK_RADIUS   = 80    # Distance (px) pour déclencher le cleave
     MOVE_SPEED      = 90    # Vitesse de déplacement (px/seconde)
     MAX_HP          = 300   # Points de vie maximum
-    ATTACK_COOLDOWN = 1200  # Délai minimum entre deux cleave (ms)
+    ATTACK_COOLDOWN      = 1200  # Délai minimum entre deux cleave (ms)
+    INVINCIBILITY_DURATION = 800  # Iframes après un TAKE_HIT (ms)
 
     # Indices des frames pendant lesquelles la hitbox d'attaque est ACTIVE.
     # Ajuste selon ton animation (ouvre-la dans Aseprite pour compter les frames).
@@ -167,6 +168,10 @@ class DemonSlimeBoss:
         # Temps restant avant de pouvoir relancer un cleave (en ms)
         self.attack_cooldown_timer = 0
 
+        # Iframes après un TAKE_HIT — pendant ce temps le boss ne peut plus
+        # être interrompu, pour éviter qu'un spam de coups bloque toute attaque.
+        self.invincibility_timer = 0   # en ms
+
         # Hitbox d'attaque — None quand le cleave n'est pas en phase active
         self.attack_hitbox = None  # type: pygame.Rect | None
 
@@ -197,6 +202,9 @@ class DemonSlimeBoss:
         if self.attack_cooldown_timer > 0:
             self.attack_cooldown_timer -= dt_ms
 
+        if self.invincibility_timer > 0:
+            self.invincibility_timer -= dt_ms
+
         # ── Calcul de la distance et direction vers le joueur ───
         player_center = pygame.Vector2(player_rect.centerx, player_rect.centery)
         boss_center   = pygame.Vector2(
@@ -205,8 +213,10 @@ class DemonSlimeBoss:
         )
         distance_to_player = boss_center.distance_to(player_center)
 
-        # Le boss se retourne selon le côté où se trouve le joueur
-        self.facing_right = player_center.x >= boss_center.x
+        # Le boss se retourne uniquement hors attaque — pendant un CLEAVE la
+        # direction est verrouillée pour que le joueur puisse esquiver en dashant.
+        if self.state in (BossState.IDLE, BossState.WALK):
+            self.facing_right = player_center.x >= boss_center.x
 
         # ── TRANSITIONS D'ÉTAT ──────────────────────────────────
         # CLEAVE et TAKE_HIT sont "verrouillants" : le boss reste dans
@@ -298,8 +308,9 @@ class DemonSlimeBoss:
         if self.hp <= 0:
             self.hp = 0
             self._change_state(BossState.DEATH)
-        elif self.state != BossState.TAKE_HIT:
-            # Interrompt n'importe quel état sauf DEATH et TAKE_HIT lui-même
+        elif self.state != BossState.TAKE_HIT and self.invincibility_timer <= 0:
+            # Interrompt l'état courant, sauf si le boss est déjà en TAKE_HIT
+            # ou protégé par ses iframes (évite le spam qui bloquerait les attaques).
             self._change_state(BossState.TAKE_HIT)
 
     @property
@@ -369,8 +380,8 @@ class DemonSlimeBoss:
             hy = int(self.pos.y) + int(self.sprite_h * 0.3)
 
             if self.facing_right:
-                # Flippé vers droite → machette sur la moitié gauche du sprite
-                hx = int(self.pos.x)
+                # Flippé vers droite → machette sur la moitié droite du sprite
+                hx = int(self.pos.x) + self.sprite_w - hw
             else:
                 # Par défaut vers gauche → machette sur la moitié gauche du sprite
                 hx = int(self.pos.x)
@@ -412,7 +423,8 @@ class DemonSlimeBoss:
             self._change_state(BossState.IDLE)
 
         elif self.state == BossState.TAKE_HIT:
-            # Réaction au coup terminée → reprend la logique normale
+            # Réaction au coup terminée → iframes puis logique normale
+            self.invincibility_timer = self.INVINCIBILITY_DURATION
             self._change_state(BossState.IDLE)
 
         elif self.state == BossState.DEATH:

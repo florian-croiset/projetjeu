@@ -20,7 +20,7 @@
         "saut": "space",
         "echo": "e",
         "attaque": "k",
-        "dash": "mouse_1",
+        "dash": "c",
         "echo_dir": "y",
         "interagir": "f",
         "torche": "l"
