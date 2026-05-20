@@ -129,3 +129,18 @@ class BossRoom:
 
     def _on_boss_defeated(self, joueurs):
         print("[BossRoom] Boss vaincu !")
+
+    def reset_boss(self):
+        """Réinitialise le boss à son état initial sans défaite."""
+        self.fight_started = False
+        self._a_touche_ce_swing = False
+        self.boss.hp = self.boss.MAX_HP
+        self.boss.state = BossState.IDLE
+        self.boss.current_anim_frames = self.boss.animator.get_animation(self.boss.ANIM_IDLE)
+        self.boss.current_frame_index = 0
+        self.boss.frame_timer_ms = 0.0
+        self.boss.attack_cooldown_timer = 0
+        self.boss.invincibility_timer = 0
+        self.boss.velocity.x = 0
+        self.boss.velocity.y = 0
+        print("[BossRoom] Boss réinitialisé")

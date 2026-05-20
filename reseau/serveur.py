@@ -69,7 +69,7 @@ class Serveur:
         self.vis_delta_buffer    = {}
         self.vis_needs_full      = {}
         self.cle                 = None
-        self.porte               = None
+        self.portes              = {}  # id -> Porte
         self.echos_en_cours      = []
         self.potions             = GestionnairePotions()
 
@@ -212,8 +212,13 @@ class Serveur:
         print(f"[SERVEUR] {len(self.orbes_capacite)} orbes de capacité créés")
 
     def creer_porte(self):
-        self.porte = Porte(x=995, y=960)
-        print(f"[SERVEUR] Porte créée à ({self.porte.x}, {self.porte.y})")
+        portes_config = [
+            (995, 960),      # Porte de sortie principale
+            (2912, 614),     # Nouvelle porte
+        ]
+        for i, (x, y) in enumerate(portes_config):
+            self.portes[i] = Porte(x=x, y=y)
+            print(f"[SERVEUR] Porte {i} créée à ({x}, {y})")
 
     def creer_pancartes_lore(self):
         configs = [
@@ -860,15 +865,16 @@ class Serveur:
                             joueur.have_key       = True
                             print(f"[SERVEUR] Joueur {id_joueur} a ramasse la cle !")
 
-                # 4. Porte : animation + interaction
-                if self.porte and not self.porte.est_ouverte:
-                    self.porte.mettre_a_jour(temps_actuel)
-                    if not self.porte.en_ouverture:
-                        for joueur in self.joueurs.values():
-                            if joueur.rect.colliderect(
-                                    pygame.Rect(self.porte.x - 8, self.porte.y,
-                                                self.porte.LARGEUR + 16, self.porte.HAUTEUR)):
-                                self.porte.tenter_ouverture(joueur)
+                # 4. Portes : animation + interaction
+                for id_porte, porte in list(self.portes.items()):
+                    if not porte.est_ouverte:
+                        porte.mettre_a_jour(temps_actuel)
+                        if not porte.en_ouverture:
+                            for joueur in self.joueurs.values():
+                                if joueur.rect.colliderect(
+                                        pygame.Rect(porte.x - 8, porte.y,
+                                                    porte.LARGEUR + 16, porte.HAUTEUR)):
+                                    porte.tenter_ouverture(joueur)
 
                 # 6. Ennemis — physique + respawn
                 for id_ennemi, ennemi in list(self.ennemis.items()):
@@ -907,17 +913,19 @@ class Serveur:
 
                 self._temps_precedent = temps_actuel
 
-                # 8. Joueurs — collisions spatiales + porte
-                porte_rect = None
-                if self.porte and not self.porte.est_ouverte:
-                    r = self.porte.rect_collision
-                    if r.width > 0 and r.height > 0:
-                        porte_rect = r
+                # 8. Joueurs — collisions spatiales + portes
+                rects_portes = []
+                for porte in self.portes.values():
+                    if not porte.est_ouverte:
+                        r = porte.rect_collision
+                        if r.width > 0 and r.height > 0:
+                            rects_portes.append(r)
                 for id_joueur, joueur in list(self.joueurs.items()):
                     rects_proches = self.carte_jeu.get_rects_proches(joueur.rect)
-                    if porte_rect and joueur.rect.colliderect(
-                            porte_rect.inflate(TAILLE_TUILE * 2, TAILLE_TUILE * 2)):
-                        rects_proches = rects_proches + [porte_rect]
+                    for porte_rect in rects_portes:
+                        if joueur.rect.colliderect(
+                                porte_rect.inflate(TAILLE_TUILE * 2, TAILLE_TUILE * 2)):
+                            rects_proches = rects_proches + [porte_rect]
                     joueur.appliquer_physique(rects_proches)
 
                     # A. Attaque
@@ -968,9 +976,15 @@ class Serveur:
                             joueur.temps_mort = temps_actuel
                             if joueur.ame_perdue and joueur.ame_perdue.id in self.ames_perdues:
                                 del self.ames_perdues[joueur.ame_perdue.id]
-                            nouvelle_ame = AmePerdue(
-                                joueur.rect.centerx, joueur.rect.centery,
-                                id_joueur, joueur.argent)
+
+                            # Si en combat du boss, l'âme se crée au point de réapparition
+                            if self.boss_room.fight_started:
+                                x_ame, y_ame = 2555, 294
+                                self.boss_room.reset_boss()
+                            else:
+                                x_ame, y_ame = joueur.rect.centerx, joueur.rect.centery
+
+                            nouvelle_ame = AmePerdue(x_ame, y_ame, id_joueur, joueur.argent)
                             self.ames_perdues[nouvelle_ame.id] = nouvelle_ame
                             joueur.ame_perdue = nouvelle_ame
                             joueur.argent     = 0
@@ -1018,7 +1032,7 @@ class Serveur:
                         'pancartes_lore': [p.get_etat(id_pancarte=i)
                                            for i, p in self.pancartes_lore.items()],
                         'cle':            self.cle.get_etat() if self.cle else None,
-                        'porte':          self.porte.get_etat() if self.porte else None,
+                        'portes':         [p.get_etat() for p in self.portes.values()],
                         'torche_allumee': self.torche_allumee,
                         'boss_room':      self.boss_room.get_etat(),
                         'potions':    self.potions.get_etat(),

@@ -335,10 +335,10 @@ class BoucleJeuMixin:
 
         self.carte.dessiner_carte(surface_virtuelle, self.vis_map_locale, camera_offset)
 
-        # --- Porte ---
-        if self.porte_locale:
-            self.porte_locale.dessiner(surface_virtuelle, camera_offset,
-                                       pygame.time.get_ticks())
+        # --- Portes ---
+        ticks_render_portes = pygame.time.get_ticks()
+        for porte in self.portes_locales.values():
+            porte.dessiner(surface_virtuelle, camera_offset, ticks_render_portes)
 
         # --- Potions ---
         if hasattr(self, 'potions') and self.potions is not None:
@@ -701,15 +701,19 @@ class BoucleJeuMixin:
                     self.bulle_lore.ouvrir()
                     self._pancarte_active_id = None
 
-        # --- Porte ---
-        data_porte = donnees_recues.get('porte')
-        if data_porte:
-            if self.porte_locale is None:
-                self.porte_locale = Porte(data_porte['x'], data_porte['y'])
-            self.porte_locale.set_etat(data_porte)
-            if not self._porte_etait_en_ouverture and self.porte_locale.en_ouverture:
+        # --- Portes ---
+        data_portes = donnees_recues.get('portes', [])
+        for i, data_porte in enumerate(data_portes):
+            if i not in self.portes_locales:
+                self.portes_locales[i] = Porte(data_porte['x'], data_porte['y'])
+            porte = self.portes_locales[i]
+            porte.set_etat(data_porte)
+
+            # Jouer le son d'ouverture si la porte commence à s'ouvrir
+            etait_en_ouverture = self._portes_etaient_en_ouverture.get(i, False)
+            if not etait_en_ouverture and porte.en_ouverture:
                 music.jouer_sfx('porte')
-            self._porte_etait_en_ouverture = self.porte_locale.en_ouverture
+            self._portes_etaient_en_ouverture[i] = porte.en_ouverture
 
         # --- Boss ---
         data_boss = donnees_recues.get('boss_room')
@@ -1104,7 +1108,7 @@ class BoucleJeuMixin:
         self.ames_loot_locales      = {}
         self.orbes_capacite_locaux  = {}
         self.pancartes_lore_locales = {}   # NOUVEAU
-        self.porte_locale           = None
+        self.portes_locales         = {}   # id -> Porte
         self.cle_locale             = None
         self.potions                = GestionnairePotions()
         # NOUVEAU — UI pancarte (taille dépend de l'écran courant)
@@ -1251,12 +1255,12 @@ class BoucleJeuMixin:
         self.ames_loot_locales      = {}
         self.orbes_capacite_locaux  = {}
         self.pancartes_lore_locales = {}   # NOUVEAU
-        self.porte_locale           = None
+        self.portes_locales         = {}   # id -> Porte
         self.cle_locale             = None
         self.carte                  = None
         self.vis_map_locale         = None
         self.boss_local             = None
-        self._porte_etait_en_ouverture  = False
+        self._portes_etaient_en_ouverture  = {}
         self._boss_etat_precedent       = None
         self._boss_frame_precedent      = 0
         self.etat_jeu_interne           = "JEU"
