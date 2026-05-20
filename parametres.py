@@ -69,7 +69,7 @@ COULEUR_PV_PERDU      = (30, 20, 60)        # PV perdu en violet très sombre
 
 # -- Paramètres du Joueur --
 VITESSE_JOUEUR = 5
-FORCE_SAUT = 13
+FORCE_SAUT = 20
 GRAVITE = 0.6
 PV_JOUEUR_MAX = 5
 TEMPS_INVINCIBILITE = 1000
