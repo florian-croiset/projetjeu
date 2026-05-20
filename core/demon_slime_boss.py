@@ -376,8 +376,8 @@ class DemonSlimeBoss:
 
         if active:
             hw = int(self.sprite_w * 0.4)
-            hh = int(self.sprite_h * 0.4)
-            hy = int(self.pos.y) + int(self.sprite_h * 0.3)
+            hh = int(self.sprite_h * 0.3)
+            hy = int(self.pos.y) + (self.sprite_h - hh)
 
             if self.facing_right:
                 # Flippé vers droite → machette sur la moitié droite du sprite
