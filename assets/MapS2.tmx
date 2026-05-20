@@ -1,19 +1,19 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <map version="1.10" tiledversion="1.12.1" orientation="orthogonal" renderorder="right-down" width="100" height="70" tilewidth="32" tileheight="32" infinite="0" nextlayerid="64" nextobjectid="17">
  <editorsettings>
-  <export target="MapS2.tmx" format="tmx"/>
+  <export target="MapS2.tmx" format="tmx" />
  </editorsettings>
  <tileset firstgid="1" name="tiles" tilewidth="32" tileheight="32" spacing="6" margin="6" tilecount="176" columns="11">
-  <image source="tileset.png" width="446" height="628"/>
+  <image source="tileset.png" width="446" height="628" />
  </tileset>
- <tileset firstgid="177" source="plaques_deco_solaris_tuiles.tsx"/>
- <tileset firstgid="2481" source="base_solaris.tsx"/>
+ <tileset firstgid="177" source="plaques_deco_solaris_tuiles.tsx" />
+ <tileset firstgid="2481" source="base_solaris.tsx" />
  <imagelayer id="14" name="Calque d'Images 2" visible="0" offsetx="0.6361" offsety="-0.9693">
-  <image source="Back2.png" width="576" height="384"/>
+  <image source="Back2.png" width="576" height="384" />
  </imagelayer>
- <imagelayer id="16" name="Calque d'Images 4"/>
+ <imagelayer id="16" name="Calque d'Images 4" />
  <imagelayer id="15" name="Calque d'Images 2" visible="0" opacity="0.9" offsetx="5.36339" offsety="-5.81779">
-  <image source="Back3.png" width="384" height="256"/>
+  <image source="Back3.png" width="384" height="256" />
  </imagelayer>
  <layer id="63" name="Deco.2" width="100" height="70">
   <data encoding="csv">
@@ -461,7 +461,7 @@
  </layer>
  <objectgroup id="8" name="Spawn">
   <object id="12" x="1354.67" y="719.333">
-   <point/>
+   <point />
   </object>
  </objectgroup>
 </map>

@@ -180,17 +180,15 @@ class Serveur:
         return points
 
     def creer_ennemis(self):
-        # (x, y, id, pv_max)  — tous les ennemis ont désormais l'IA traqueur (chasse à l'écoute).
-        configs = [
-            (587,  1251, 0, 1),  # ex-patrouilleur → 1 PV (sprite e1)
-            (1867, 1123, 1, 2),  # ex-garde        → 2 PV (sprite e2)
-            (1191,  707, 2, 2),
-            (2427,  163, 3, 3),  # ex-gardien      → 3 PV (sprite e3)
-            (2851,  259, 4, 3),
-            (1333,  995, 5, 2),  # ex-traqueur     → 2 PV
-        ]
-        for x, y, eid, pv in configs:
-            self.ennemis[eid] = Ennemi(x=x, y=y, id=eid, pv_max=pv)
+        import json, os
+        chemin = os.path.join(os.path.dirname(__file__), '..', 'assets', 'ennemis.json')
+        try:
+            with open(chemin, 'r') as f:
+                configs = json.load(f)
+        except FileNotFoundError:
+            configs = []
+        for eid, cfg in enumerate(configs):
+            self.ennemis[eid] = Ennemi(x=cfg['x'], y=cfg['y'], id=eid, pv_max=cfg['pv_max'])
 
     def creer_ames_libres(self):
         positions = [
