@@ -157,6 +157,17 @@ class Ennemi:
         self.cible_y        = 0
         self.fin_alerte     = 0
 
+        # Pathfinding A* (chasse)
+        # On garde un chemin en cache et on ne replannifie qu'à intervalles
+        # ou quand la cible bouge significativement (économise les calculs).
+        self._chemin              = []     # liste de tuiles (tx, ty)
+        self._chemin_index        = 0
+        self._chemin_req_ms       = -1     # timestamp du dernier résultat consommé
+        self._dernier_replan_ms   = -10_000
+        self._cible_path_tile     = None   # (tx, ty) de la cible au moment du replan
+        self._derniere_pos_tile   = None   # détection blocage (anti-stagnation)
+        self._compteur_blocage    = 0
+
         # FSM d'attaque
         self.dernier_attaque_temps  = -COOLDOWN_ATTAQUE_ENNEMI
         self.est_en_attaque         = False
@@ -198,8 +209,18 @@ class Ennemi:
             return True
         return False
 
-    def appliquer_logique(self, rects_collision, carte, joueurs, temps_actuel):
-        """Pilotage IA : patrouille → chasse → attaque + physique."""
+    def appliquer_logique(self, rects_collision, carte, joueurs, temps_actuel,
+                          pathfinding=None):
+        """Pilotage IA : patrouille → chasse → attaque + physique.
+
+        `pathfinding` (PathfindingService) est optionnel : s'il est fourni,
+        la chasse utilise A* pour contourner les obstacles ; sinon on
+        retombe sur la chasse en ligne droite (comportement historique).
+        """
+        # 0a. Fin du clignotement de dégât (200 ms)
+        if self.clignotement and (temps_actuel - self.dernier_coup_recu) >= 200:
+            self.clignotement = False
+
         # 0. Fin d'alerte → retour patrouille
         if self.etat == ETAT_CHASSE and temps_actuel >= self.fin_alerte:
             self.etat = ETAT_PATROUILLE
@@ -207,6 +228,12 @@ class Ennemi:
                 self.vitesse_de_base if self.vitesse_patrouille >= 0
                 else -self.vitesse_de_base
             )
+            # Plus en chasse → on libère la mémoire du chemin
+            if pathfinding is not None:
+                pathfinding.oublier(self.id)
+            self._chemin = []
+            self._chemin_index = 0
+            self._cible_path_tile = None
 
         # 1. Fin d'attaque
         if self.etat == ETAT_ATTAQUE and (
@@ -227,18 +254,13 @@ class Ennemi:
                 self._declencher_attaque(cible, temps_actuel)
 
         # 3. Choix de dx selon l'état
+        saut_path = False
         if self.etat == ETAT_ATTAQUE:
             dx = 0
             self.en_mouvement = False
             self.etat_anim = self._nom_etat_anim_attaque()
         elif self.etat == ETAT_CHASSE:
-            dir_x = self.cible_x - self.rect.centerx
-            if dir_x > 4:
-                dx = self.vitesse_chasse
-            elif dir_x < -4:
-                dx = -self.vitesse_chasse
-            else:
-                dx = 0
+            dx, saut_path = self._decision_chasse(carte, pathfinding, temps_actuel)
             if dx != 0:
                 self.vitesse_patrouille = dx
                 self.direction = 1 if dx > 0 else -1
@@ -257,6 +279,10 @@ class Ennemi:
                 self.direction = 1 if dx > 0 else -1
             self.en_mouvement = dx != 0
             self.etat_anim = 'run' if dx != 0 else 'idle'
+
+        # 3b. Saut proactif si A* veut nous faire monter (et qu'on est au sol)
+        if saut_path and self.sur_le_sol and self.vel_y >= 0:
+            self.vel_y = -FORCE_SAUT_TRAQUEUR
 
         # 4. Physique (gravité toujours appliquée)
         etait_au_sol = self.sur_le_sol
@@ -334,6 +360,12 @@ class Ennemi:
         self.attaque_a_touche.clear()
         self.attaque_debut_ms   = 0
         self.etat_anim          = 'idle'
+        # Reset pathfinding
+        self._chemin            = []
+        self._chemin_index      = 0
+        self._chemin_req_ms     = -1
+        self._dernier_replan_ms = -10_000
+        self._cible_path_tile   = None
         # Réinitialise l'animation client si présente
         self._anim_courante     = f'{self.sprite_prefix}_idle'
         self._anim_frame_index  = 0
@@ -343,6 +375,96 @@ class Ennemi:
                 self._anim_frames = self.animator.get_animation(self._anim_courante)
             except KeyError:
                 self._anim_frames = []
+
+    # ------------------------------------------------------------------
+    #  Pathfinding A* (mode chasse)
+    # ------------------------------------------------------------------
+
+    def _decision_chasse(self, carte, pathfinding, temps_actuel):
+        """Renvoie (dx, doit_sauter) pour le mode CHASSE.
+
+        Privilégie le chemin A* si `pathfinding` est fourni ; sinon ligne
+        droite (fallback historique). Met à jour le buffer de chemin de
+        l'ennemi (consommation des résultats, demande de replan)."""
+        if pathfinding is None:
+            return self._dx_ligne_droite(), False
+
+        # 1. Consomme le dernier résultat A* si plus récent que le précédent.
+        res = pathfinding.recuperer(self.id)
+        if res is not None:
+            ts, chemin = res
+            if ts > self._chemin_req_ms:
+                self._chemin = chemin
+                self._chemin_index = 0
+                self._chemin_req_ms = ts
+
+        # 2. Replan si nécessaire (stale, fini, ou cible déplacée).
+        cur_tx = self.rect.centerx // TAILLE_TUILE
+        cur_ty = self.rect.centery // TAILLE_TUILE
+        goal_tx = int(self.cible_x) // TAILLE_TUILE
+        goal_ty = int(self.cible_y) // TAILLE_TUILE
+
+        stale       = (temps_actuel - self._dernier_replan_ms) > 500
+        sans_chemin = (not self._chemin
+                       or self._chemin_index >= len(self._chemin))
+        cible_bouge = (self._cible_path_tile is None
+                       or abs(self._cible_path_tile[0] - goal_tx) >= 2
+                       or abs(self._cible_path_tile[1] - goal_ty) >= 2)
+        if stale or sans_chemin or cible_bouge:
+            pathfinding.demander(
+                self.id, (cur_tx, cur_ty), (goal_tx, goal_ty), temps_actuel,
+            )
+            self._dernier_replan_ms = temps_actuel
+            self._cible_path_tile = (goal_tx, goal_ty)
+
+        # 3. Avance le curseur du chemin jusqu'à la prochaine tuile non
+        #    déjà occupée.
+        while self._chemin_index < len(self._chemin):
+            wx, wy = self._chemin[self._chemin_index]
+            if (wx, wy) == (cur_tx, cur_ty):
+                self._chemin_index += 1
+            else:
+                break
+
+        if self._chemin_index >= len(self._chemin):
+            # Pas de chemin exploitable cette frame → ligne droite.
+            return self._dx_ligne_droite(), False
+
+        # 4. Choisit dx en regardant la prochaine tuile horizontalement
+        #    significative (skip les verticales pures).
+        horiz_target = None
+        fin = min(len(self._chemin), self._chemin_index + 4)
+        for k in range(self._chemin_index, fin):
+            wx, _wy = self._chemin[k]
+            if wx != cur_tx:
+                horiz_target = wx
+                break
+
+        if horiz_target is not None:
+            target_cx = horiz_target * TAILLE_TUILE + TAILLE_TUILE // 2
+            if target_cx > self.rect.centerx + 4:
+                dx = self.vitesse_chasse
+            elif target_cx < self.rect.centerx - 4:
+                dx = -self.vitesse_chasse
+            else:
+                dx = 0
+        else:
+            dx = 0
+
+        # 5. Saute si le prochain waypoint est au-dessus.
+        wx, wy = self._chemin[self._chemin_index]
+        doit_sauter = wy < cur_ty
+
+        return dx, doit_sauter
+
+    def _dx_ligne_droite(self):
+        """Chasse historique : aligne dx sur la cible en ligne droite."""
+        dir_x = self.cible_x - self.rect.centerx
+        if dir_x > 4:
+            return self.vitesse_chasse
+        if dir_x < -4:
+            return -self.vitesse_chasse
+        return 0
 
     # ------------------------------------------------------------------
     #  Helpers d'attaque
@@ -519,7 +641,7 @@ class Ennemi:
         # Flash blanc au coup reçu
         flash_actif = False
         if self.clignotement:
-            if pygame.time.get_ticks() - self.dernier_coup_recu < 120:
+            if pygame.time.get_ticks() - self.dernier_coup_recu < 200:
                 flash_actif = True
             else:
                 self.clignotement = False

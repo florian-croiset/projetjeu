@@ -18,6 +18,7 @@ from parametres import *
 from sauvegarde import gestion_sauvegarde
 from sauvegarde import points_sauvegarde
 from core.ennemi import Ennemi, EnemyTraqueur, ETAT_CHASSE
+from core.pathfinding import PathfindingService
 from core.boss_room import BossRoom
 from core.ame_perdue import AmePerdue
 from core.ame_libre import AmeLibre
@@ -84,6 +85,11 @@ class Serveur:
         self.rects_collision      = self.carte_jeu.get_rects_collisions()
         self.carte_jeu.construire_grille_collision()
         self.points_sauvegarde_map = self.scanner_points_sauvegarde()
+
+        # ===== PATHFINDING (thread A* dédié) =====
+        # Sert l'IA de chasse des ennemis ; la carte est en lecture seule
+        # après chargement, donc l'accès depuis le worker est sans verrou.
+        self.pathfinding = PathfindingService(self.carte_jeu)
 
         # ===== SAUVEGARDE =====
         self.id_slot       = id_slot
@@ -884,7 +890,8 @@ class Serveur:
                             ennemi.cible_y = joueur_proche.rect.centery
                         rects_proches = self.carte_jeu.get_rects_proches(ennemi.rect)
                         ennemi.appliquer_logique(rects_proches, self.carte_jeu,
-                                                 self.joueurs, temps_actuel)
+                                                 self.joueurs, temps_actuel,
+                                                 pathfinding=self.pathfinding)
 
                 # 7. Boss Room
                 if not self.boss_room.boss_defeated:

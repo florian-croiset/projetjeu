@@ -1224,6 +1224,11 @@ class BoucleJeuMixin:
                 srv.serveur_socket.close()
             except Exception:
                 pass
+            try:
+                if getattr(srv, 'pathfinding', None) is not None:
+                    srv.pathfinding.arreter()
+            except Exception:
+                pass
         relay = getattr(self, '_relay_instance', None)
         if relay:
             try:
