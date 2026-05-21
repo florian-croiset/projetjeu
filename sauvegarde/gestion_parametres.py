@@ -5,9 +5,20 @@
 import random
 import json
 import os
+import sys
 
 def get_chemin_absolu_parametres():
-    """Renvoie le chemin complet vers parametres.json à la racine du projet."""
+    """Retourne le chemin vers parametres.json (dossier utilisateur si exécutable compilé)."""
+    if getattr(sys, 'frozen', False):
+        if sys.platform == 'win32':
+            base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+        elif sys.platform == 'darwin':
+            base = os.path.expanduser('~/Library/Application Support')
+        else:
+            base = os.environ.get('XDG_DATA_HOME', os.path.expanduser('~/.local/share'))
+        dossier = os.path.join(base, 'Echo')
+        os.makedirs(dossier, exist_ok=True)
+        return os.path.join(dossier, 'parametres.json')
     racine_projet = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(racine_projet, "parametres.json")
 
@@ -20,7 +31,7 @@ def creer_parametres_defaut():
             "sensibilite_souris": 0.5
         },
         "video": {
-            "plein_ecran": False,
+            "plein_ecran": True,
             "vsync": False,
             "musique": True,
             "resolution": [1920, 1080],

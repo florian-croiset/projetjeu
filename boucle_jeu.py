@@ -702,11 +702,6 @@ class BoucleJeuMixin:
                     do['x'], do['y'], do['capacite'])
             self.orbes_capacite_locaux[do['id']].set_etat(do)
 
-        # Comptage des kills
-        if getattr(ennemi, 'est_mort', False) and not getattr(ennemi, '_mort_compte', False):
-            ennemi._mort_compte = True
-            self._ennemis_tues_total += 1
-
         # --- Pancartes lore ---
         for dp in donnees_recues.get('pancartes_lore', []):
             idx = dp.get('id', 0)

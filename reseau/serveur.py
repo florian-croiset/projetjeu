@@ -79,6 +79,7 @@ class Serveur:
             dossier_script = sys._MEIPASS
         else:
             dossier_script = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self._dossier_script = dossier_script
         chemin_map = os.path.join(dossier_script, "assets/MapS2.tmx")
         self.carte_jeu = Carte(chemin_map)
 
@@ -181,7 +182,7 @@ class Serveur:
 
     def creer_ennemis(self):
         import json, os
-        chemin = os.path.join(os.path.dirname(__file__), '..', 'assets', 'ennemis.json')
+        chemin = os.path.join(self._dossier_script, 'assets', 'ennemis.json')
         try:
             with open(chemin, 'r') as f:
                 configs = json.load(f)
@@ -192,7 +193,7 @@ class Serveur:
 
     def creer_ames_libres(self):
         import json, os
-        chemin = os.path.join(os.path.dirname(__file__), '..', 'assets', 'ames.json')
+        chemin = os.path.join(self._dossier_script, 'assets', 'ames.json')
         try:
             with open(chemin, 'r') as f:
                 configs = json.load(f)

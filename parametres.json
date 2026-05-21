@@ -6,12 +6,12 @@
     "video": {
         "plein_ecran": true,
         "vsync": false,
-        "musique": false,
+        "musique": true,
         "resolution": [
-            1280,
-            960
+            1920,
+            1080
         ],
-        "luminosite": 1.0,
+        "luminosite": 0.3,
         "display_index": 0
     },
     "controles": {
