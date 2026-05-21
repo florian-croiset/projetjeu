@@ -35,8 +35,7 @@ from core.cle import Cle
 from core.porte import Porte
 from core.orbe_capacite import OrbeCapacite
 from core.potion import GestionnairePotions
-from core.pancarte_lore import PancarteLore, BulleLore, PopupPaiement, COUT_AMES, COUT_DASH
-# --- Journal et icône de quête ---
+from core.pancarte_lore import PancarteLore, BulleLore, PopupPaiement, NotificationCapacite, COUT_AMES, COUT_DASH
 from ui.quete import WidgetQuete, JournalQuete
 
 
@@ -697,10 +696,17 @@ class BoucleJeuMixin:
             if id_local not in ids_orbes:
                 del self.orbes_capacite_locaux[id_local]
         for do in donnees_recues.get('orbes_capacite', []):
+            orbe_avant    = self.orbes_capacite_locaux.get(do['id'])
+            etait_ramasse = orbe_avant.est_ramasse if orbe_avant else False
             if do['id'] not in self.orbes_capacite_locaux:
                 self.orbes_capacite_locaux[do['id']] = OrbeCapacite(
                     do['x'], do['y'], do['capacite'])
             self.orbes_capacite_locaux[do['id']].set_etat(do)
+            if not etait_ramasse and do.get('est_ramasse'):
+                cap = do.get('capacite', '')
+                if cap == 'double_saut' and hasattr(self, 'notif_capacite') and self.notif_capacite:
+                    touche = self.parametres.get('controles', {}).get('saut', 'ESPACE')
+                    self.notif_capacite.notifier('double_saut', touche)
 
         # --- Pancartes lore ---
         for dp in donnees_recues.get('pancartes_lore', []):
@@ -716,6 +722,9 @@ class BoucleJeuMixin:
                     if type_p == 'shop_dash':
                         from core.pancarte_lore import TEXTE_LORE_DASH
                         self.bulle_lore.ouvrir(TEXTE_LORE_DASH)
+                        if self.notif_capacite:
+                            touche = self.parametres.get('controles', {}).get('dash', 'LSHIFT')
+                            self.notif_capacite.notifier('dash', touche)
                     else:
                         self.bulle_lore.ouvrir()
                     self._pancarte_active_id = None
@@ -1144,8 +1153,8 @@ class BoucleJeuMixin:
         self.widget_quete  = WidgetQuete(self.police_bouton, self.police_petit)
         self.journal_quete = JournalQuete(
             self.largeur_ecran, self.hauteur_ecran,
-            self.police_titre, self.police_texte, self.police_petit,
-        )
+            self.police_titre, self.police_texte, self.police_petit,)
+        self.notif_capacite = NotificationCapacite(self.largeur_ecran, self.hauteur_ecran)
         profil = self.parametres.get('profil', {})
         self._profil_pseudo = profil.get('pseudo', 'Joueur')
         self._profil_skin   = profil.get('skin', 0)
@@ -1294,3 +1303,4 @@ class BoucleJeuMixin:
         # --- Reset journal et icône quête ---
         self.widget_quete  = None
         self.journal_quete = None
+        self.notif_capacite = None

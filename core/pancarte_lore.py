@@ -708,3 +708,151 @@ class PopupPaiement:
             surface.blit(t1, t1.get_rect(center=(cx, cy - 14)))
             t2 = self._font_sub.render("Vous portez désormais le pas des Éclaireurs.", True, (175, 148, 80))
             surface.blit(t2, t2.get_rect(center=(cx, cy + 10)))
+
+
+
+# ── Notification de capacité débloquée ──────────────────────────────────────
+
+class NotificationCapacite:
+    """
+    Bandeau de notification quand une capacité est débloquée.
+    Style : pierre sombre translucide, runes, texte doré.
+    """
+    DUREE_MS    = 4500
+    FONDU_MS    = 600
+    LARGEUR     = 420
+    HAUTEUR     = 72
+
+    _ICONES = {
+        'dash':        [((-10,0),(10,0)), ((0,-8),(10,0)), ((0,8),(10,0)), ((-14,-5),(-6,0)), ((-14,5),(-6,0))],
+        'double_saut': [((-8,8),(0,-8)), ((0,-8),(8,8)), ((-8,-2),(0,-12)), ((0,-12),(8,-2))],
+    }
+
+    def __init__(self, largeur_ecran: int, hauteur_ecran: int):
+        self.lw = largeur_ecran
+        self.lh = hauteur_ecran
+        self._queue   = []   # liste de dicts en attente
+        self._actuel  = None
+        self._debut   = 0
+        self._font_titre = pygame.font.Font(None, 28)
+        self._font_sub   = pygame.font.Font(None, 22)
+        self._font_touche = pygame.font.Font(None, 24)
+
+    def notifier(self, capacite: str, touche: str = ''):
+        """Ajoute une notification à la file."""
+        labels = {
+            'dash':        ("Pas de l'Éclaireur absorbé", "Le souffle des anciens vous porte — Dash"),
+            'double_saut': ("Mémoire du bond retrouvée",  "L'élan des Éclaireurs vous habite — Double Saut"),
+        }
+        titre, sous = labels.get(capacite, ("Capacité débloquée", capacite))
+        self._queue.append({
+            'capacite': capacite,
+            'titre':    titre,
+            'sous':     sous,
+            'touche':   touche.upper(),
+        })
+
+    def mettre_a_jour(self, temps_ms: int):
+        if self._actuel is None and self._queue:
+            self._actuel = self._queue.pop(0)
+            self._debut  = temps_ms
+        if self._actuel:
+            if temps_ms - self._debut > self.DUREE_MS:
+                self._actuel = None
+
+    def dessiner(self, surface: pygame.Surface, temps_ms: int):
+        if self._actuel is None:
+            return
+
+        elapsed = temps_ms - self._debut
+        # Calcul alpha (fondu entrant + sortant)
+        if elapsed < self.FONDU_MS:
+            alpha = int(255 * elapsed / self.FONDU_MS)
+        elif elapsed > self.DUREE_MS - self.FONDU_MS:
+            alpha = int(255 * (self.DUREE_MS - elapsed) / self.FONDU_MS)
+        else:
+            alpha = 255
+        alpha = max(0, min(255, alpha))
+
+        W, H = self.LARGEUR, self.HAUTEUR
+        # Position : bas de l'écran, centré
+        x = self.lw // 2 - W // 2
+        y = self.lh - H - 32
+
+        # Fond pierre sombre
+        fond = pygame.Surface((W, H), pygame.SRCALPHA)
+        for fy in range(H):
+            t = fy / H
+            r = int(18 + t * 10)
+            g = int(14 + t * 8)
+            b = int(26 + t * 14)
+            a = int(210 * alpha / 255)
+            pygame.draw.line(fond, (r, g, b, a), (0, fy), (W, fy))
+
+        # Bordure dorée
+        coul_bord = (115, 88, 22, alpha)
+        pygame.draw.rect(fond, coul_bord, pygame.Rect(0, 0, W, H), 2, border_radius=6)
+        pygame.draw.rect(fond, (75, 57, 12, alpha // 2),
+                         pygame.Rect(3, 3, W - 6, H - 6), 1, border_radius=4)
+
+        # Ligne dorée gauche (accentuation)
+        for fy in range(6, H - 6):
+            a_line = int(180 * alpha / 255)
+            fond.set_at((4, fy), (180, 140, 40, a_line))
+
+        # Runes décoratives coins
+        _dessiner_rune(fond, _RUNES_FORMES[5], 8, 8, 8,
+                       (140, 108, 28, int(160 * alpha / 255)))
+        _dessiner_rune(fond, _RUNES_FORMES[2], W - 18, 8, 8,
+                       (140, 108, 28, int(160 * alpha / 255)))
+
+        surface.blit(fond, (x, y))
+
+        # Icône de la capacité (dessinée à la main)
+        cap = self._actuel['capacite']
+        icone_x = x + 28
+        icone_y = y + H // 2
+
+        # Cercle de fond icône
+        circ = pygame.Surface((36, 36), pygame.SRCALPHA)
+        pygame.draw.circle(circ, (40, 35, 55, int(200 * alpha / 255)), (18, 18), 17)
+        pygame.draw.circle(circ, (100, 78, 18, int(180 * alpha / 255)), (18, 18), 17, 2)
+        surface.blit(circ, (icone_x - 18, icone_y - 18))
+
+        # Segments de l'icône
+        segs = self._ICONES.get(cap, [])
+        col_icone = (80, 210, 230) if cap == 'dash' else (180, 130, 255)
+        if segs:
+            tmp_icone = pygame.Surface((36, 36), pygame.SRCALPHA)
+            for (x1, y1), (x2, y2) in segs:
+                pygame.draw.line(tmp_icone, (*col_icone, int(220 * alpha / 255)),
+                                (18 + x1, 18 + y1), (18 + x2, 18 + y2), 2)
+            surface.blit(tmp_icone, (icone_x - 18, icone_y - 18))
+
+        # Texte
+        tx = x + 56
+        col_titre = (220, 178, 58, alpha)
+        col_sous  = (160, 135, 80, alpha)
+
+        # Titre
+        s_titre = self._font_titre.render(self._actuel['titre'], True, (220, 178, 58))
+        tmp = pygame.Surface(s_titre.get_size(), pygame.SRCALPHA)
+        tmp.blit(s_titre, (0, 0))
+        tmp.set_alpha(alpha)
+        surface.blit(tmp, (tx, y + 12))
+
+        # Sous-titre
+        s_sous = self._font_sub.render(self._actuel['sous'], True, (160, 135, 80))
+        tmp2 = pygame.Surface(s_sous.get_size(), pygame.SRCALPHA)
+        tmp2.blit(s_sous, (0, 0))
+        tmp2.set_alpha(alpha)
+        surface.blit(tmp2, (tx, y + 36))
+
+        # Touche
+        if self._actuel['touche']:
+            tk_label = f"[ {self._actuel['touche']} ]"
+            s_tk = self._font_touche.render(tk_label, True, (80, 210, 230))
+            tmp3 = pygame.Surface(s_tk.get_size(), pygame.SRCALPHA)
+            tmp3.blit(s_tk, (0, 0))
+            tmp3.set_alpha(alpha)
+            surface.blit(tmp3, (x + W - s_tk.get_width() - 16, y + H // 2 - s_tk.get_height() // 2))

@@ -121,6 +121,8 @@ class HudMixin:
                 ames=getattr(self, '_ames_recoltees_total', 0))
             self.widget_quete.dessiner(self.ecran, y_offset = y_cur + 56)
 
+        self._dessiner_notification_capacite()
+
         if MODE_DEV:
             self._dessiner_debug_hud()
 
@@ -295,6 +297,13 @@ class HudMixin:
             s = self._font_capacite.render(icone, True, (255, 255, 255))
             self.ecran.blit(s, s.get_rect(center=(cx + taille // 2, y + taille // 2)))
             cx += taille + espace
+
+    def _dessiner_notification_capacite(self):
+        if not hasattr(self, 'notif_capacite') or not self.notif_capacite:
+            return
+        temps_ms = pygame.time.get_ticks()
+        self.notif_capacite.mettre_a_jour(temps_ms)
+        self.notif_capacite.dessiner(self.ecran, temps_ms)
 
     # ------------------------------------------------------------------
     #  CLÉ

@@ -175,7 +175,7 @@ class OrbeCapacite:
         surface.blit(nom_surf, nom_rect)
 
          # Prix en âmes
-        cout = 30 if self.capacite == 'dash' else 20
+        cout = 50 if self.capacite == 'dash' else 30
         prix_surf = police_nom.render(f"{cout} âmes", True, (200, 160, 255))
         prix_rect = prix_surf.get_rect(center=(cx, cy - self.RAYON - 22))
         bg2 = pygame.Surface((prix_rect.width + 8, prix_rect.height + 4), pygame.SRCALPHA)

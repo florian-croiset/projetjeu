@@ -204,8 +204,8 @@ class Tutoriel:
         bw  = max(150, largeur //  9)
         bot = hauteur - bh - 28
 
-        self.btn_suivant   = Bouton(self.cx + 15,    bot, bw, bh, "Suivant  →",   police_bouton)
-        self.btn_precedent = Bouton(self.cx - bw - 15, bot, bw, bh, "←  Retour", police_bouton, style="ghost")
+        self.btn_suivant   = Bouton(self.cx + 15,    bot, bw, bh, "Suivant  >>",   police_bouton)
+        self.btn_precedent = Bouton(self.cx - bw - 15, bot, bw, bh, "<<  Retour", police_bouton, style="ghost")
         self.btn_fermer    = Bouton(self.cx + 15,    bot, bw, bh, "Commencer !",  police_bouton)
         self.btn_passer    = Bouton(largeur - 200,   22,  175, bh - 10, "Passer ×",
                                     police_petit or police_bouton, style="ghost")
