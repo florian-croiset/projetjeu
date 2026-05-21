@@ -6,7 +6,7 @@
     "video": {
         "plein_ecran": true,
         "vsync": false,
-        "musique": true,
+        "musique": false,
         "resolution": [
             1920,
             1080
