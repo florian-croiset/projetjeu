@@ -23,7 +23,8 @@
         "dash": "c",
         "echo_dir": "y",
         "interagir": "f",
-        "torche": "l"
+        "torche": "l",
+        "journal": "i"
     },
     "sons": {
         "volume_sfx": 0.8,
