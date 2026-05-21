@@ -353,6 +353,49 @@ class BoucleJeuMixin:
 
         self.carte.dessiner_carte(surface_virtuelle, self.vis_map_locale, camera_offset)
 
+        # --- Fondu progressif des tuiles révélées par écho ---
+        if self._fade_surface is not None and ASSOMBRISSEMENT:
+            now_fade = pygame.time.get_ticks()
+
+            # Torche allumée : maintient les tuiles de son rayon visibles
+            if getattr(self, 'torche', None) and self.torche.allumee:
+                tx_world = self.torche.x + TAILLE_TUILE // 2
+                ty_world = self.torche.y + TAILLE_TUILE // 2
+                r = RAYON_LUMIERE_TORCHE
+                t_min_x = max(0, int((tx_world - r) // TAILLE_TUILE))
+                t_max_x = min(self.carte.largeur_map - 1, int((tx_world + r) // TAILLE_TUILE))
+                t_min_y = max(0, int((ty_world - r) // TAILLE_TUILE))
+                t_max_y = min(self.carte.hauteur_map - 1, int((ty_world + r) // TAILLE_TUILE))
+                r2 = r * r
+                for tty in range(t_min_y, t_max_y + 1):
+                    for ttx in range(t_min_x, t_max_x + 1):
+                        cx = ttx * TAILLE_TUILE + TAILLE_TUILE // 2
+                        cy = tty * TAILLE_TUILE + TAILLE_TUILE // 2
+                        if (cx - tx_world) ** 2 + (cy - ty_world) ** 2 <= r2:
+                            self.echo_fade_times[(ttx, tty)] = now_fade
+                            if not self.vis_map_locale[tty][ttx]:
+                                self.vis_map_locale[tty][ttx] = True
+                                self.carte._tuiles_a_reveler.append((ttx, tty))
+                                self.carte._vis_map_dirty = True
+
+            expirés = []
+            for (tx, ty), t_reveal in self.echo_fade_times.items():
+                age = now_fade - t_reveal
+                if age >= DUREE_FADE_ECHO:
+                    expirés.append((tx, ty))
+                    alpha = 255
+                else:
+                    alpha = int(age * 255 / DUREE_FADE_ECHO)
+                self._fade_surface.fill(
+                    (0, 0, 0, alpha),
+                    pygame.Rect(tx * TAILLE_TUILE, ty * TAILLE_TUILE,
+                                TAILLE_TUILE, TAILLE_TUILE))
+            for tile in expirés:
+                del self.echo_fade_times[tile]
+            off_x, off_y = camera_offset
+            surface_virtuelle.blit(self._fade_surface, (0, 0),
+                                   pygame.Rect(off_x, off_y, lv, hv))
+
         # --- Portes ---
         ticks_render_portes = pygame.time.get_ticks()
         for porte in self.portes_locales.values():
@@ -583,8 +626,15 @@ class BoucleJeuMixin:
             if self.carte:
                 self.carte._vis_map_dirty = True
         if donnees_recues.get('vis_delta') and self.vis_map_locale:
+            now_fade = pygame.time.get_ticks()
             for x, y in donnees_recues['vis_delta']:
                 self.vis_map_locale[y][x] = True
+                self.echo_fade_times[(x, y)] = now_fade
+                if self._fade_surface is not None:
+                    self._fade_surface.fill(
+                        (0, 0, 0, 0),
+                        pygame.Rect(x * TAILLE_TUILE, y * TAILLE_TUILE,
+                                    TAILLE_TUILE, TAILLE_TUILE))
             if self.carte and donnees_recues['vis_delta']:
                 self.carte._tuiles_a_reveler.extend(donnees_recues['vis_delta'])
                 self.carte._vis_map_dirty = True
@@ -1137,6 +1187,11 @@ class BoucleJeuMixin:
         chemin_map = os.path.join(dossier_script, "assets/MapS2.tmx")
         self.carte                  = Carte(chemin_map)
         self.vis_map_locale         = self.carte.creer_carte_visibilite_vierge()
+        self.echo_fade_times        = {}
+        map_w = self.carte.largeur_map * TAILLE_TUILE
+        map_h = self.carte.hauteur_map * TAILLE_TUILE
+        self._fade_surface          = pygame.Surface((map_w, map_h), pygame.SRCALPHA)
+        self._fade_surface.fill((0, 0, 0, 255))
         self.joueurs_locaux         = {}
         self.ennemis_locaux         = {}
         self.ames_perdues_locales   = {}
@@ -1296,6 +1351,8 @@ class BoucleJeuMixin:
         self._argent_joueur_precedent = None
         self.carte                  = None
         self.vis_map_locale         = None
+        self._fade_surface          = None
+        self.echo_fade_times        = {}
         self.boss_local             = None
         self._portes_etaient_en_ouverture = {}
         self._fin_message_depuis          = None

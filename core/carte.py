@@ -250,8 +250,8 @@ class Carte:
                     if 0 <= nx < self.largeur_map and 0 <= ny < self.hauteur_map:
                         if not vis_map[ny][nx]:
                             vis_map[ny][nx] = True
-                            if delta_set is not None:
-                                delta_set.add((nx, ny))
+                        if delta_set is not None:
+                            delta_set.add((nx, ny))
 
     def reveler_par_echo(self, centre_x, centre_y, vis_map):
         """Lance des rayons via l'algorithme DDA (rapide et précis)."""
@@ -460,8 +460,8 @@ class Carte:
             if 0 <= tuile_actuelle_x < self.largeur_map and 0 <= tuile_actuelle_y < self.hauteur_map:
                 if not vis_map[tuile_actuelle_y][tuile_actuelle_x]:
                     vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
-                    if delta_set is not None:
-                        delta_set.add((tuile_actuelle_x, tuile_actuelle_y))
+                if delta_set is not None:
+                    delta_set.add((tuile_actuelle_x, tuile_actuelle_y))
             while True:
                 if t_max_x < t_max_y:
                     distance_parcourue = t_max_x
@@ -477,8 +477,8 @@ class Carte:
                     break
                 if not vis_map[tuile_actuelle_y][tuile_actuelle_x]:
                     vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
-                    if delta_set is not None:
-                        delta_set.add((tuile_actuelle_x, tuile_actuelle_y))
+                if delta_set is not None:
+                    delta_set.add((tuile_actuelle_x, tuile_actuelle_y))
                 if self.map_data[tuile_actuelle_y][tuile_actuelle_x] in [1, 3]:
                     self._reveler_voisins(tuile_actuelle_x, tuile_actuelle_y, vis_map, delta_set)
                     break
@@ -510,8 +510,8 @@ class Carte:
             if 0 <= tuile_actuelle_x < self.largeur_map and 0 <= tuile_actuelle_y < self.hauteur_map:
                 if not vis_map[tuile_actuelle_y][tuile_actuelle_x]:
                     vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
-                    if delta_set is not None:
-                        delta_set.add((tuile_actuelle_x, tuile_actuelle_y))
+                if delta_set is not None:
+                    delta_set.add((tuile_actuelle_x, tuile_actuelle_y))
             while True:
                 if t_max_x < t_max_y:
                     distance_parcourue = t_max_x
@@ -527,13 +527,13 @@ class Carte:
                     break
                 if not vis_map[tuile_actuelle_y][tuile_actuelle_x]:
                     vis_map[tuile_actuelle_y][tuile_actuelle_x] = True
-                    if delta_set is not None:
-                        delta_set.add((tuile_actuelle_x, tuile_actuelle_y))
+                if delta_set is not None:
+                    delta_set.add((tuile_actuelle_x, tuile_actuelle_y))
                 if self.map_data[tuile_actuelle_y][tuile_actuelle_x] in [1, 3]:
                     self._reveler_voisins(tuile_actuelle_x, tuile_actuelle_y, vis_map, delta_set)
                     break
-    
-    
+
+
 
     def get_tile_surface(self, gid):
         if gid <= 0:
