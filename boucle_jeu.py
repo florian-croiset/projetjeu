@@ -409,22 +409,6 @@ class BoucleJeuMixin:
 
             if proche:
                 ennemi.dessiner(surface_virtuelle, camera_offset)
-            elif flash_actif and not ennemi.est_mort:
-                ratio = 1.0 - (temps_depuis_flash / DUREE_FLASH_ECHO_ENNEMI)
-                off_x, off_y = camera_offset
-                cx = ennemi.rect.centerx - off_x
-                cy = ennemi.rect.centery - off_y
-                halo = self._flash_halo_surf
-                halo.fill((0, 0, 0, 0))
-                pygame.draw.circle(halo, (0, 212, 255, max(0, min(255, int(80 * ratio)))),
-                                   (30, 30), 30)
-                surface_virtuelle.blit(halo, (cx - 30, cy - 30))
-                e_size = (ennemi.rect.w, ennemi.rect.h)
-                if e_size not in self._flash_tmp_cache:
-                    self._flash_tmp_cache[e_size] = pygame.Surface(e_size, pygame.SRCALPHA)
-                tmp = self._flash_tmp_cache[e_size]
-                tmp.fill((0, 212, 255, max(0, min(255, int(255 * ratio)))))
-                surface_virtuelle.blit(tmp, (ennemi.rect.x - off_x, ennemi.rect.y - off_y))
 
         # --- Boss ---
         if self.boss_local and not getattr(self.boss_local, 'is_dead', False):
