@@ -44,7 +44,7 @@ def _charger_sprites_si_necessaire():
 # Constantes
 # ---------------------------------------------------------------------------
 
-SOIN_SMALL_POTION = 1
+SOIN_SMALL_POTION = 2
 SOIN_LARGE_POTION = 5
 
 
