@@ -119,7 +119,8 @@ class HudMixin:
                 self.boss_local,
                 ennemis_tues=getattr(self, '_ennemis_tues_total', 0),
                 ames=getattr(self, '_ames_recoltees_total', 0))
-            self.widget_quete.dessiner(self.ecran, y_offset = y_cur + 56)
+            touche_journal = self.parametres.get('controles', {}).get('journal', 'i')
+            self.widget_quete.dessiner(self.ecran, y_offset=y_cur + 56, touche_journal=touche_journal)
 
         self._dessiner_notification_capacite()
 

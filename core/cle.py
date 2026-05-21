@@ -58,13 +58,15 @@ class Cle:
         cx = self.rect.centerx - off_x
         cy = self.rect.centery - off_y
 
-        # ── Halo doré pulsant ──────────────────────────────────────────
+        # ── Halo doré pulsant (surface réutilisée) ────────────────────
         pulse = 0.6 + 0.4 * math.sin(temps_ms / 500)
-        halo = pygame.Surface((48, 48), pygame.SRCALPHA)
+        if not hasattr(self, '_halo_surf'):
+            self._halo_surf = pygame.Surface((48, 48), pygame.SRCALPHA)
+        self._halo_surf.fill((0, 0, 0, 0))
         for r_h, a_h in [(22, 15), (15, 35), (9, 60)]:
-            pygame.draw.ellipse(halo, (255, 215, 0, int(a_h * pulse)),
+            pygame.draw.ellipse(self._halo_surf, (255, 215, 0, int(a_h * pulse)),
                                 pygame.Rect(24 - r_h, 24 - r_h, r_h * 2, r_h * 2))
-        surface.blit(halo, (cx - 24, cy - 24))
+        surface.blit(self._halo_surf, (cx - 24, cy - 24))
 
         # ── Dessin de la clé ───────────────────────────────────────────
         # La clé est orientée verticalement :

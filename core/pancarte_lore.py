@@ -696,7 +696,7 @@ class PopupPaiement:
             surface.blit(hint, hint.get_rect(center=(cx, self.rect.bottom - 14)))
 
         elif self.mode == 'pauvre':
-            t1 = self._font.render("⚠  Âmes insuffisantes", True, (220, 80, 80))
+            t1 = self._font.render("!  Âmes insuffisantes", True, (220, 80, 80))
             surface.blit(t1, t1.get_rect(center=(cx, cy - 22)))
             t2 = self._font.render(f"Il vous faut {self._cout} âmes.", True, (180, 100, 100))
             surface.blit(t2, t2.get_rect(center=(cx, cy + 2)))

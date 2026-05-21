@@ -4,6 +4,7 @@
 import pygame
 import sys
 import os
+import math
 
 
 # ---------------------------------------------------------------------------
@@ -44,8 +45,8 @@ def _charger_sprites_si_necessaire():
 # Constantes
 # ---------------------------------------------------------------------------
 
-SOIN_SMALL_POTION = 2
-SOIN_LARGE_POTION = 5
+SOIN_SMALL_POTION = 1
+SOIN_LARGE_POTION = 2
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +92,7 @@ class Potion:
 
         # Animation flottement
         self._temps += dt_ms * 0.003  # vitesse
-        self._offset_y = 3 * (pygame.math.Vector2(0, 1).rotate(self._temps * 57.3).y)
+        self._offset_y = 3.0 * math.cos(self._temps)
 
         soins = []
         for joueur in joueurs:
