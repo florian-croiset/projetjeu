@@ -280,23 +280,73 @@ class HudMixin:
     # ------------------------------------------------------------------
 
     def _dessiner_indicateurs_capacites(self, x, y, joueur):
-        """Petites pastilles pour les capacités actives."""
-        taille  = 16
-        espace  = 4
-        cx      = x
-        capacites = []
+        """Petites pastilles pour les capacités actives — icônes dessinées en code."""
+        rayon  = max(10, self.hauteur_ecran // 60)
+        espace = max(6, rayon // 2)
+        cx     = x + rayon
+
+        def _pastille(surface, cx, cy, r, couleur):
+            """Fond circulaire avec bord légèrement plus clair."""
+            pygame.draw.circle(surface, couleur, (cx, cy), r)
+            r2, g2, b2 = min(couleur[0]+60, 255), min(couleur[1]+60, 255), min(couleur[2]+60, 255)
+            pygame.draw.circle(surface, (r2, g2, b2), (cx, cy), r, 2)
+
+        def _icone_double_saut(surface, cx, cy, r):
+            """Deux petites flèches vers le haut."""
+            ep = max(1, r // 5)
+            w  = max(4, r // 2)
+            for dy_off in (-r // 4, r // 3):
+                # Trait vertical
+                pygame.draw.line(surface, (255,255,255),
+                                (cx, cy + dy_off + w//2), (cx, cy + dy_off - w//2), ep)
+                # Pointe gauche
+                pygame.draw.line(surface, (255,255,255),
+                                (cx, cy + dy_off - w//2), (cx - w//2, cy + dy_off), ep)
+                # Pointe droite
+                pygame.draw.line(surface, (255,255,255),
+                                (cx, cy + dy_off - w//2), (cx + w//2, cy + dy_off), ep)
+
+        def _icone_dash(surface, cx, cy, r):
+            """Flèche horizontale vers la droite."""
+            ep  = max(1, r // 4)
+            w   = max(4, r * 2 // 3)
+            cy2 = cy
+            # Trait horizontal
+            pygame.draw.line(surface, (255,255,255),
+                            (cx - w//2, cy2), (cx + w//2, cy2), ep)
+            # Pointe haute
+            pygame.draw.line(surface, (255,255,255),
+                            (cx + w//2, cy2), (cx + w//2 - w//3, cy2 - w//3), ep)
+            # Pointe basse
+            pygame.draw.line(surface, (255,255,255),
+                            (cx + w//2, cy2), (cx + w//2 - w//3, cy2 + w//3), ep)
+
+        def _icone_echo_dir(surface, cx, cy, r):
+            """Petit anneau avec deux traits latéraux (onde directionnelle)."""
+            ep = max(1, r // 5)
+            ri = max(3, r // 2)
+            pygame.draw.circle(surface, (255,255,255), (cx, cy), ri, ep)
+            # Traits latéraux
+            pygame.draw.line(surface, (255,255,255),
+                            (cx - r + 1, cy), (cx - ri - 1, cy), ep)
+            pygame.draw.line(surface, (255,255,255),
+                            (cx + ri + 1, cy), (cx + r - 1, cy), ep)
+
+        cy = y + rayon
+
         if getattr(joueur, 'peut_double_saut', False):
-            capacites.append(('↑↑', (80, 160, 255)))
-        if getattr(joueur, 'peut_dash',        False):
-            capacites.append(('»',  (180, 80, 255)))
-        if getattr(joueur, 'peut_echo_dir',    False):
-            capacites.append(('◎',  (0, 200, 180)))
-        for icone, couleur in capacites:
-            pygame.draw.circle(self.ecran, couleur,
-                               (cx + taille // 2, y + taille // 2), taille // 2)
-            s = self._font_capacite.render(icone, True, (255, 255, 255))
-            self.ecran.blit(s, s.get_rect(center=(cx + taille // 2, y + taille // 2)))
-            cx += taille + espace
+            _pastille(self.ecran, cx, cy, rayon, (80, 160, 255))
+            _icone_double_saut(self.ecran, cx, cy, rayon)
+            cx += rayon * 2 + espace
+
+        if getattr(joueur, 'peut_dash', False):
+            _pastille(self.ecran, cx, cy, rayon, (180, 80, 255))
+            _icone_dash(self.ecran, cx, cy, rayon)
+            cx += rayon * 2 + espace
+
+        if getattr(joueur, 'peut_echo_dir', False):
+            _pastille(self.ecran, cx, cy, rayon, (0, 200, 180))
+            _icone_echo_dir(self.ecran, cx, cy, rayon)
 
     def _dessiner_notification_capacite(self):
         if not hasattr(self, 'notif_capacite') or not self.notif_capacite:
