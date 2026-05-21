@@ -4,6 +4,7 @@
 import pygame
 import sys
 import os
+import math
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +92,7 @@ class Potion:
 
         # Animation flottement
         self._temps += dt_ms * 0.003  # vitesse
-        self._offset_y = 3 * (pygame.math.Vector2(0, 1).rotate(self._temps * 57.3).y)
+        self._offset_y = 3.0 * math.cos(self._temps)
 
         soins = []
         for joueur in joueurs:

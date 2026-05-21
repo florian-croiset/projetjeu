@@ -5,8 +5,10 @@
 #   ┌─ Caches pygame ─────────────────────────────────────────────────────┐
 #   │  flip_h(surface)               → surface flippée horizontalement    │
 #   │  render_text(font, txt, coul)  → font.render() mémoïsé              │
-#   │  get_font_pseudo(taille_px)    → font Pygame pour les pseudos       │
+#   │  get_font_defaut(taille_px)    → pygame.font.Font(None, taille)     │
+#   │  get_font_pseudo(taille_px)    → alias de get_font_defaut           │
 #   │  creer_textes_echo_hud(fonts)  → surfaces statiques du widget Echo  │
+#   │  label_bg(w, h, alpha=120)     → surface de fond semi-transparent   │
 #   └─────────────────────────────────────────────────────────────────────┘
 #   ┌─ Constantes pré-calculées ─────────────────────────────────────────┐
 #   │  DIRECTIONS_ECHO_RADIAL        → vecteurs des rayons radiaux       │
@@ -74,21 +76,58 @@ def render_text(font: pygame.font.Font, texte: str, couleur) -> pygame.Surface:
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  CACHE — FONT POUR LES PSEUDOS JOUEURS
+#  CACHE — FONT PYGAME PAR DÉFAUT (par taille en pixels)
 # ══════════════════════════════════════════════════════════════════════
-# Le pseudo est rendu à une taille proportionnelle au zoom caméra.
-# La font Pygame est mise en cache par taille (en pixels).
+# Utilisé par les pseudos joueurs ET par tous les rendus qui faisaient
+# auparavant `pygame.font.Font(None, taille)` à chaque frame (orbes,
+# portes, etc.). La construction d'une font Pygame est lente —
+# l'instance est partagée par tous les appelants à taille égale.
 
-_FONT_PSEUDO_CACHE: dict = {}
+_FONT_DEFAUT_CACHE: dict = {}
 
 
-def get_font_pseudo(taille_px: int) -> pygame.font.Font:
-    """Retourne la font Pygame par défaut à la taille demandée, mémoïsée."""
-    font = _FONT_PSEUDO_CACHE.get(taille_px)
+def get_font_defaut(taille_px: int) -> pygame.font.Font:
+    """Retourne `pygame.font.Font(None, taille_px)` mémoïsée par taille."""
+    font = _FONT_DEFAUT_CACHE.get(taille_px)
     if font is None:
         font = pygame.font.Font(None, taille_px)
-        _FONT_PSEUDO_CACHE[taille_px] = font
+        _FONT_DEFAUT_CACHE[taille_px] = font
     return font
+
+
+# Alias conservé pour la compatibilité : le pseudo joueur utilisait
+# historiquement un cache dédié.
+get_font_pseudo = get_font_defaut
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  CACHE — SURFACES DE FOND SEMI-TRANSPARENT (« label bg »)
+# ══════════════════════════════════════════════════════════════════════
+# Petit rectangle SRCALPHA rempli d'une seule couleur uniforme — utilisé
+# comme arrière-plan des étiquettes flottantes (orbe, pseudo, etc.).
+# La clé inclut la taille ET l'alpha (la couleur de remplissage est
+# toujours du noir, c'est le cas réel utilisé partout dans le jeu).
+
+_LABEL_BG_CACHE: dict = {}
+_LABEL_BG_MAX = 128
+
+
+def label_bg(largeur: int, hauteur: int, alpha: int = 120) -> pygame.Surface:
+    """Surface noire SRCALPHA (`(0,0,0,alpha)`) mémoïsée par dimensions.
+
+    Réutilisable pour les arrière-plans d'étiquettes — la même
+    instance est renvoyée à chaque appel, ne pas la modifier.
+    """
+    key = (largeur, hauteur, alpha)
+    cached = _LABEL_BG_CACHE.get(key)
+    if cached is not None:
+        return cached
+    if len(_LABEL_BG_CACHE) >= _LABEL_BG_MAX:
+        _LABEL_BG_CACHE.clear()
+    surf = pygame.Surface((largeur, hauteur), pygame.SRCALPHA)
+    surf.fill((0, 0, 0, alpha))
+    _LABEL_BG_CACHE[key] = surf
+    return surf
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -159,4 +198,5 @@ def vider_caches() -> None:
     """Purge tous les caches dynamiques (à appeler si les fonts sont recréées)."""
     _FLIP_H_CACHE.clear()
     _TEXT_CACHE.clear()
-    _FONT_PSEUDO_CACHE.clear()
+    _FONT_DEFAUT_CACHE.clear()
+    _LABEL_BG_CACHE.clear()

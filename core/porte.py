@@ -8,6 +8,7 @@ import math
 import os
 import sys
 from parametres import TAILLE_TUILE, COULEUR_CYAN, COULEUR_CYAN_SOMBRE, COULEUR_TEXTE_SOMBRE
+from utils.cache import get_font_defaut, render_text
 
 
 class Porte:
@@ -120,12 +121,15 @@ class Porte:
 
         if self.est_ouverte and not self.en_ouverture:
             # Porte complètement ouverte : juste un petit halo résiduel au sol
-            halo = pygame.Surface((self.LARGEUR + 16, 12), pygame.SRCALPHA)
+            if not hasattr(self, '_halo_sol_surf'):
+                self._halo_sol_surf = pygame.Surface(
+                    (self.LARGEUR + 16, 12), pygame.SRCALPHA)
+            self._halo_sol_surf.fill((0, 0, 0, 0))
             t = temps_ms / 1200
             a = int(30 + 20 * math.sin(t))
-            pygame.draw.ellipse(halo, (0, 212, 255, a),
+            pygame.draw.ellipse(self._halo_sol_surf, (0, 212, 255, a),
                                 pygame.Rect(0, 0, self.LARGEUR + 16, 12))
-            surface.blit(halo, (sx - 8, sy + self.HAUTEUR - 6))
+            surface.blit(self._halo_sol_surf, (sx - 8, sy + self.HAUTEUR - 6))
             return
 
         # --- Cadre de la porte (toujours dessiné) ---
@@ -185,18 +189,19 @@ class Porte:
         """Petite serrure avec lueur pulsante."""
         pulse = 0.5 + 0.5 * math.sin(temps_ms / 800)
 
-        # Halo doré
-        halo = pygame.Surface((32, 32), pygame.SRCALPHA)
+        # Halo doré (surface réutilisée)
+        if not hasattr(self, '_halo_serrure_surf'):
+            self._halo_serrure_surf = pygame.Surface((32, 32), pygame.SRCALPHA)
+        self._halo_serrure_surf.fill((0, 0, 0, 0))
         a = int(80 * pulse)
-        pygame.draw.circle(halo, (255, 200, 50, a), (16, 16), 14)
-        surface.blit(halo, (cx - 16, cy - 16))
+        pygame.draw.circle(self._halo_serrure_surf, (255, 200, 50, a), (16, 16), 14)
+        surface.blit(self._halo_serrure_surf, (cx - 16, cy - 16))
 
         # Corps de la serrure (trou de serrure stylisé)
         pygame.draw.circle(surface, (200, 160, 40), (cx, cy - 2), 5)
         pygame.draw.rect(surface, (200, 160, 40),
                          pygame.Rect(cx - 3, cy + 2, 6, 7), border_radius=1)
 
-        # Indicateur "Clé requise"
-        police = pygame.font.Font(None, 24)
-        txt = police.render("🔑", True, (255, 215, 0))
+        # Indicateur "Clé requise" (font + texte mémoïsés)
+        txt = render_text(get_font_defaut(24), "🔑", (255, 215, 0))
         surface.blit(txt, (cx - txt.get_width() // 2, cy + 12))

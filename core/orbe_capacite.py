@@ -7,6 +7,7 @@ import math
 import os
 import sys
 from parametres import TAILLE_TUILE, COULEUR_VIOLET, COULEUR_VIOLET_CLAIR, COULEUR_CYAN
+from utils.cache import get_font_defaut, render_text, label_bg
 
 
 # Couleurs et icônes par type de capacité
@@ -138,47 +139,49 @@ class OrbeCapacite:
         r, g, b = self.couleur
         r2, g2, b2 = self.couleur2
 
-        # --- Halo externe ---
-        halo_surf = pygame.Surface((70, 70), pygame.SRCALPHA)
+        # --- Halo externe (surface réutilisée) ---
+        if not hasattr(self, '_halo_surf'):
+            self._halo_surf = pygame.Surface((70, 70), pygame.SRCALPHA)
+        self._halo_surf.fill((0, 0, 0, 0))
         for rayon, alpha_base in [(32, 12), (24, 25), (16, 45)]:
             a = int(alpha_base * pulse)
-            pygame.draw.circle(halo_surf, (r, g, b, a), (35, 35), rayon)
-        surface.blit(halo_surf, (cx - 35, cy - 35))
+            pygame.draw.circle(self._halo_surf, (r, g, b, a), (35, 35), rayon)
+        surface.blit(self._halo_surf, (cx - 35, cy - 35))
 
-        # --- Corps de l'orbe ---
-        corps = pygame.Surface((self.RAYON * 2 + 4, self.RAYON * 2 + 4), pygame.SRCALPHA)
+        # --- Corps de l'orbe (surface réutilisée) ---
+        if not hasattr(self, '_corps_surf'):
+            self._corps_surf = pygame.Surface(
+                (self.RAYON * 2 + 4, self.RAYON * 2 + 4), pygame.SRCALPHA)
+        self._corps_surf.fill((0, 0, 0, 0))
         # Cercle extérieur
-        pygame.draw.circle(corps, (r, g, b, 200),
+        pygame.draw.circle(self._corps_surf, (r, g, b, 200),
                            (self.RAYON + 2, self.RAYON + 2), self.RAYON)
         # Reflet interne
-        pygame.draw.circle(corps, (r2, g2, b2, 160),
+        pygame.draw.circle(self._corps_surf, (r2, g2, b2, 160),
                            (self.RAYON + 2 - 3, self.RAYON + 2 - 3), self.RAYON - 4)
         # Bord lumineux
-        pygame.draw.circle(corps, (r2, g2, b2, 220),
+        pygame.draw.circle(self._corps_surf, (r2, g2, b2, 220),
                            (self.RAYON + 2, self.RAYON + 2), self.RAYON, width=2)
-        surface.blit(corps, (cx - self.RAYON - 2, cy - self.RAYON - 2))
+        surface.blit(self._corps_surf, (cx - self.RAYON - 2, cy - self.RAYON - 2))
 
-        # --- Icône centrale ---
-        police = pygame.font.Font(None, 30)
-        icone_surf = police.render(self.icone, True, (255, 255, 255))
+        # --- Icône centrale (font + texte mémoïsés) ---
+        police = get_font_defaut(30)
+        icone_surf = render_text(police, self.icone, (255, 255, 255))
         icone_rect = icone_surf.get_rect(center=(cx, cy))
         surface.blit(icone_surf, icone_rect)
 
         # --- Étiquette au-dessus ---
-        police_nom = pygame.font.Font(None, 24)
-        nom_surf = police_nom.render(self.nom, True, (r2, g2, b2))
+        police_nom = get_font_defaut(24)
+        nom_surf = render_text(police_nom, self.nom, (r2, g2, b2))
         nom_rect = nom_surf.get_rect(center=(cx, cy - self.RAYON - 10))
-        # Fond semi-transparent
-        bg = pygame.Surface((nom_rect.width + 8, nom_rect.height + 4), pygame.SRCALPHA)
-        bg.fill((0, 0, 0, 120))
-        surface.blit(bg, (nom_rect.x - 4, nom_rect.y - 2))
+        surface.blit(label_bg(nom_rect.width + 8, nom_rect.height + 4),
+                     (nom_rect.x - 4, nom_rect.y - 2))
         surface.blit(nom_surf, nom_rect)
 
-         # Prix en âmes
+        # Prix en âmes
         cout = 50 if self.capacite == 'dash' else 30
-        prix_surf = police_nom.render(f"{cout} âmes", True, (200, 160, 255))
+        prix_surf = render_text(police_nom, f"{cout} âmes", (200, 160, 255))
         prix_rect = prix_surf.get_rect(center=(cx, cy - self.RAYON - 22))
-        bg2 = pygame.Surface((prix_rect.width + 8, prix_rect.height + 4), pygame.SRCALPHA)
-        bg2.fill((0, 0, 0, 120))
-        surface.blit(bg2, (prix_rect.x - 4, prix_rect.y - 2))
+        surface.blit(label_bg(prix_rect.width + 8, prix_rect.height + 4),
+                     (prix_rect.x - 4, prix_rect.y - 2))
         surface.blit(prix_surf, prix_rect)
