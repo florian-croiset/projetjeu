@@ -29,7 +29,7 @@
     "sons": {
         "volume_sfx": 0.8,
         "volume_musique": 0.5,
-        "activer_sfx": true
+        "activer_sfx": false
     },
     "meta": {
         "tutoriel_vu": true

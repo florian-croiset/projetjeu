@@ -39,6 +39,13 @@ class HudMixin:
         self._surf_c_cache      = pygame.Surface((self._echo_rayon * 2 + 2,
                                                   self._echo_rayon * 2 + 2),
                                                  pygame.SRCALPHA)
+        # Mini cooldown (dash / echo_dir) — même taille que l'écho
+        self._mini_rayon = self._echo_rayon
+        mini_r = self._mini_rayon
+        mini_w = mini_r * 2 + 12 + self._echo_bar_w + 8
+        mini_h = mini_r * 2 + 4
+        self._mini_widget_cache  = pygame.Surface((mini_w, mini_h), pygame.SRCALPHA)
+        self._mini_circle_cache  = pygame.Surface((mini_r * 2 + 2, mini_r * 2 + 2), pygame.SRCALPHA)
         # Surface halo flash ennemi (60x60)
         self._flash_halo_surf = pygame.Surface((60, 60), pygame.SRCALPHA)
         # Cache des surfaces tmp flash par taille d'ennemi
@@ -106,12 +113,12 @@ class HudMixin:
         # Indicateur Echo (le plus important après les PV)
         y_cur += 4
         self._dessiner_indicateur_echo(x0, y_cur, mon_joueur)
-        y_cur += self._echo_rayon * 2 + 24   # hauteur du widget echo
+        y_cur += self._echo_rayon * 2 + 10
 
-        # Capacités débloquées
-        self._dessiner_indicateurs_capacites(x0, y_cur, mon_joueur)
+        # Mini-cooldowns capacités (dash + écho directionnel) + pastille double saut
+        y_cur = self._dessiner_indicateurs_capacites(x0, y_cur, mon_joueur)
 
-        # Icône journal (haut gauche, en dessous de l'indicateur Echo et des capacités)
+        # Icône journal — en haut à droite
         if hasattr(self, 'widget_quete') and self.widget_quete:
             self.widget_quete.mettre_a_jour(
                 self.cle_locale,
@@ -120,7 +127,9 @@ class HudMixin:
                 ennemis_tues=getattr(self, '_ennemis_tues_total', 0),
                 ames=getattr(self, '_ames_recoltees_total', 0))
             touche_journal = self.parametres.get('controles', {}).get('journal', 'i')
-            self.widget_quete.dessiner(self.ecran, y_offset=y_cur + 56, touche_journal=touche_journal)
+            x_journal = self.largeur_ecran - 100
+            self.widget_quete.dessiner(self.ecran, y_offset=24, touche_journal=touche_journal,
+                                       x_offset=x_journal)
 
         self._dessiner_notification_capacite()
 
@@ -281,73 +290,172 @@ class HudMixin:
     # ------------------------------------------------------------------
 
     def _dessiner_indicateurs_capacites(self, x, y, joueur):
-        """Petites pastilles pour les capacités actives — icônes dessinées en code."""
+        """Pastille double saut + mini-cooldowns dash et écho directionnel."""
         rayon  = max(10, self.hauteur_ecran // 60)
         espace = max(6, rayon // 2)
         cx     = x + rayon
+        cy     = y + rayon
 
         def _pastille(surface, cx, cy, r, couleur):
-            """Fond circulaire avec bord légèrement plus clair."""
             pygame.draw.circle(surface, couleur, (cx, cy), r)
             r2, g2, b2 = min(couleur[0]+60, 255), min(couleur[1]+60, 255), min(couleur[2]+60, 255)
             pygame.draw.circle(surface, (r2, g2, b2), (cx, cy), r, 2)
 
         def _icone_double_saut(surface, cx, cy, r):
-            """Deux petites flèches vers le haut."""
             ep = max(1, r // 5)
             w  = max(4, r // 2)
             for dy_off in (-r // 4, r // 3):
-                # Trait vertical
-                pygame.draw.line(surface, (255,255,255),
-                                (cx, cy + dy_off + w//2), (cx, cy + dy_off - w//2), ep)
-                # Pointe gauche
-                pygame.draw.line(surface, (255,255,255),
-                                (cx, cy + dy_off - w//2), (cx - w//2, cy + dy_off), ep)
-                # Pointe droite
-                pygame.draw.line(surface, (255,255,255),
-                                (cx, cy + dy_off - w//2), (cx + w//2, cy + dy_off), ep)
+                pygame.draw.line(surface, (255, 255, 255),
+                                 (cx, cy + dy_off + w//2), (cx, cy + dy_off - w//2), ep)
+                pygame.draw.line(surface, (255, 255, 255),
+                                 (cx, cy + dy_off - w//2), (cx - w//2, cy + dy_off), ep)
+                pygame.draw.line(surface, (255, 255, 255),
+                                 (cx, cy + dy_off - w//2), (cx + w//2, cy + dy_off), ep)
 
-        def _icone_dash(surface, cx, cy, r):
-            """Flèche horizontale vers la droite."""
-            ep  = max(1, r // 4)
-            w   = max(4, r * 2 // 3)
-            cy2 = cy
-            # Trait horizontal
-            pygame.draw.line(surface, (255,255,255),
-                            (cx - w//2, cy2), (cx + w//2, cy2), ep)
-            # Pointe haute
-            pygame.draw.line(surface, (255,255,255),
-                            (cx + w//2, cy2), (cx + w//2 - w//3, cy2 - w//3), ep)
-            # Pointe basse
-            pygame.draw.line(surface, (255,255,255),
-                            (cx + w//2, cy2), (cx + w//2 - w//3, cy2 + w//3), ep)
+        y_cur = y
 
-        def _icone_echo_dir(surface, cx, cy, r):
-            """Petit anneau avec deux traits latéraux (onde directionnelle)."""
-            ep = max(1, r // 5)
-            ri = max(3, r // 2)
-            pygame.draw.circle(surface, (255,255,255), (cx, cy), ri, ep)
-            # Traits latéraux
-            pygame.draw.line(surface, (255,255,255),
-                            (cx - r + 1, cy), (cx - ri - 1, cy), ep)
-            pygame.draw.line(surface, (255,255,255),
-                            (cx + ri + 1, cy), (cx + r - 1, cy), ep)
-
-        cy = y + rayon
-
+        # Pastille double saut (pas de cooldown à afficher)
         if getattr(joueur, 'peut_double_saut', False):
             _pastille(self.ecran, cx, cy, rayon, (80, 160, 255))
             _icone_double_saut(self.ecran, cx, cy, rayon)
-            cx += rayon * 2 + espace
+            y_cur = cy + rayon + espace
 
+        # Mini-cooldown dash
         if getattr(joueur, 'peut_dash', False):
-            _pastille(self.ecran, cx, cy, rayon, (180, 80, 255))
-            _icone_dash(self.ecran, cx, cy, rayon)
-            cx += rayon * 2 + espace
+            y_cur = self._dessiner_mini_cooldown(
+                x, y_cur,
+                touche_label='C',
+                titre='DASH',
+                couleur_pastille=(180, 80, 255),
+                dernier_temps=getattr(joueur, 'dernier_dash_temps', 0),
+                cooldown_ms=COOLDOWN_DASH,
+                icone_fn=self._dessiner_icone_mini_dash,
+            )
+            y_cur += espace
 
+        # Mini-cooldown écho directionnel
         if getattr(joueur, 'peut_echo_dir', False):
-            _pastille(self.ecran, cx, cy, rayon, (0, 200, 180))
-            _icone_echo_dir(self.ecran, cx, cy, rayon)
+            y_cur = self._dessiner_mini_cooldown(
+                x, y_cur,
+                touche_label='Y',
+                titre='ÉCH.DIR',
+                couleur_pastille=(0, 200, 180),
+                dernier_temps=getattr(joueur, 'dernier_echo_dir_temps', 0),
+                cooldown_ms=COOLDOWN_ECHO_DIR,
+                icone_fn=self._dessiner_icone_mini_echo_dir,
+            )
+            y_cur += espace
+
+        return y_cur
+
+    # ------------------------------------------------------------------
+    #  MINI-COOLDOWN WIDGET (dash / écho dir)
+    # ------------------------------------------------------------------
+
+    def _dessiner_mini_cooldown(self, x, y, touche_label, titre,
+                                couleur_pastille, dernier_temps, cooldown_ms, icone_fn):
+        """
+        Widget compact de cooldown pour dash / écho directionnel.
+        Retourne y + hauteur du widget.
+        """
+        temps_actuel = pygame.time.get_ticks()
+        r   = self._mini_rayon
+        cx  = x + r
+        cy  = y + r
+        elapsed = temps_actuel - dernier_temps
+        ratio   = max(0.0, min(1.0, elapsed / cooldown_ms))
+        pret    = ratio >= 1.0
+
+        # Fond
+        surf = self._mini_widget_cache
+        surf.fill((0, 0, 0, 0))
+        surf.fill((8, 6, 20, 140))
+        pygame.draw.rect(surf, (30, 20, 60, 160),
+                         surf.get_rect(), width=1, border_radius=5)
+        self.ecran.blit(surf, (x - 2, y - 2))
+
+        # Cercle
+        sc = self._mini_circle_cache
+        sc.fill((0, 0, 0, 0))
+        scx = r + 1
+        scy = r + 1
+        pygame.draw.circle(sc, (25, 18, 45, 200), (scx, scy), r)
+        pygame.draw.circle(sc, (50, 35, 80, 220), (scx, scy), r, width=2)
+
+        if pret:
+            pulse = 0.82 + 0.18 * math.sin(temps_actuel / 450)
+            rc, gc, bc = couleur_pastille
+            pygame.draw.circle(sc, (rc, gc, bc, int(55 * pulse)), (scx, scy), r - 2)
+            pygame.draw.circle(sc, (rc, gc, bc, 255), (scx, scy), r, width=2)
+        else:
+            self._dessiner_arc_cooldown(sc, scx, scy, r - 2, ratio)
+            pygame.draw.circle(sc, (55, 38, 85, 180), (scx, scy), r, width=1)
+
+        if 0 <= elapsed < 200:
+            flash_a = min(255, int(160 * (1.0 - elapsed / 200)))
+            pygame.draw.circle(sc, (255, 255, 255, flash_a), (scx, scy), r - 3)
+
+        # Lettre de touche au centre du cercle (même style que "E" dans l'écho)
+        couleur_lettre = COULEUR_CYAN if pret else (100, 80, 140)
+        lettre_surf = render_text(self._font_echo_icon, touche_label, couleur_lettre)
+        sc.blit(lettre_surf, lettre_surf.get_rect(center=(scx, scy)))
+        self.ecran.blit(sc, (cx - r - 1, cy - r - 1))
+
+        # Labels à droite — même disposition que l'écho
+        lx = cx + r + 10
+        ly = cy - 18
+
+        titre_surf = render_text(self._font_label_small, titre, (100, 85, 130))
+        self.ecran.blit(titre_surf, (lx, ly))
+        ly += titre_surf.get_height() + 2
+
+        if pret:
+            etat_surf = render_text(self._font_label_medium, "PRÊT", COULEUR_CYAN)
+        else:
+            restant  = max(0.0, (cooldown_ms - elapsed) / 1000)
+            t_ratio  = 1.0 - ratio
+            r_c = int(220 * t_ratio + 0   * (1 - t_ratio))
+            g_c = int(60  * t_ratio + 200 * (1 - t_ratio))
+            b_c = int(60  * t_ratio + 80  * (1 - t_ratio))
+            etat_surf = render_text(self._font_label_medium, f"{restant:.1f}s", (r_c, g_c, b_c))
+        self.ecran.blit(etat_surf, (lx, ly))
+        ly += etat_surf.get_height() + 2
+
+        # Barre de progression
+        bar_w  = self._echo_bar_w
+        bar_h  = max(3, self.hauteur_ecran // 360)
+        pygame.draw.rect(self.ecran, (40, 28, 60), pygame.Rect(lx, ly, bar_w, bar_h), border_radius=2)
+        if ratio > 0:
+            fill_w = int(bar_w * ratio)
+            r_b = int(180 * (1 - ratio))
+            g_b = int(60  * (1 - ratio) + 210 * ratio)
+            b_b = int(60  * (1 - ratio) + 190 * ratio)
+            pygame.draw.rect(self.ecran, (r_b, g_b, b_b),
+                             pygame.Rect(lx, ly, fill_w, bar_h), border_radius=2)
+
+        return y + r * 2 + 4
+
+    @staticmethod
+    def _dessiner_icone_mini_dash(surf, cx, cy, r, pret):
+        """Flèche horizontale → (dash)."""
+        couleur = COULEUR_CYAN if pret else (100, 80, 140)
+        ep = max(1, r // 4)
+        w  = max(4, r * 2 // 3)
+        pygame.draw.line(surf, couleur, (cx - w//2, cy), (cx + w//2, cy), ep)
+        pygame.draw.line(surf, couleur,
+                         (cx + w//2, cy), (cx + w//2 - w//3, cy - w//3), ep)
+        pygame.draw.line(surf, couleur,
+                         (cx + w//2, cy), (cx + w//2 - w//3, cy + w//3), ep)
+
+    @staticmethod
+    def _dessiner_icone_mini_echo_dir(surf, cx, cy, r, pret):
+        """Petit anneau + traits latéraux (écho directionnel)."""
+        couleur = COULEUR_CYAN if pret else (100, 80, 140)
+        ep = max(1, r // 5)
+        ri = max(3, r // 2)
+        pygame.draw.circle(surf, couleur, (cx, cy), ri, ep)
+        pygame.draw.line(surf, couleur, (cx - r + 1, cy), (cx - ri - 1, cy), ep)
+        pygame.draw.line(surf, couleur, (cx + ri + 1, cy), (cx + r - 1, cy), ep)
 
     def _dessiner_notification_capacite(self):
         if not hasattr(self, 'notif_capacite') or not self.notif_capacite:
