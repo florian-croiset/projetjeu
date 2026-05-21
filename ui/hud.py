@@ -418,7 +418,7 @@ class HudMixin:
         overlay.fill((0, 0, 0, int(alpha * 0.5)))
         surface.blit(overlay, (0, 0))
 
-        txt = self._font_fin.render("Fin merci d'avoir jouer", True, (0, 212, 255))
+        txt = self._font_fin.render("FIN merci d'avoir joué", True, (0, 212, 255))
         txt.set_alpha(alpha)
         rect = txt.get_rect(center=(sw // 2, sh // 2))
         surface.blit(txt, rect)
