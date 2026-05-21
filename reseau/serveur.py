@@ -384,17 +384,15 @@ class Serveur:
                         # NOUVEAU — Interaction pancarte lore
                         if commandes.get('interagir'):
                             joueur = self.joueurs[id_joueur]
-                            for pancarte in self.pancartes_lore.values():
+                            for i, pancarte in self.pancartes_lore.items():
                                 dx = joueur.rect.centerx - pancarte.rect.centerx
                                 dy = joueur.rect.centery - pancarte.rect.centery
                                 dist = (dx**2 + dy**2) ** 0.5
+                                print(f"[DEBUG] pancarte {i} dist={dist:.0f} debloquee={pancarte.est_debloquee} argent={joueur.argent}")
                                 if dist <= PancarteLore.PORTEE_INTERACTION:
                                     if not pancarte.est_debloquee:
                                         resultat = pancarte.tenter_paiement(joueur)
-                                        if resultat == 'debloquee':
-                                            print(f"[SERVEUR] Joueur {id_joueur} débloque une pancarte lore")
-                                        elif resultat == 'pauvre':
-                                            print(f"[SERVEUR] Joueur {id_joueur} pas assez d'âmes pour la pancarte")
+                                        print(f"[DEBUG] resultat paiement={resultat}")
                                     break
 
             except (socket.timeout, socket.error, ValueError):
@@ -561,12 +559,15 @@ class Serveur:
                         self.donnees_partie["ameliorations"]["echo_dir"]    = joueur_ckpt.peut_echo_dir
                         gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
             if payload.get('interagir'):
-                for pancarte in self.pancartes_lore.values():
+                for i, pancarte in self.pancartes_lore.items():
                     dx = joueur.rect.centerx - pancarte.rect.centerx
                     dy = joueur.rect.centery - pancarte.rect.centery
-                    if (dx*dx + dy*dy) ** 0.5 <= PancarteLore.PORTEE_INTERACTION:
+                    dist = (dx**2 + dy**2) ** 0.5
+                    print(f"[DEBUG] pancarte {i} type={pancarte.type_pancarte} dist={dist:.0f} debloquee={pancarte.est_debloquee} argent={joueur.argent}")
+                    if dist <= PancarteLore.PORTEE_INTERACTION:
                         if not pancarte.est_debloquee:
-                            pancarte.tenter_paiement(joueur)
+                            resultat = pancarte.tenter_paiement(joueur)
+                            print(f"[DEBUG] resultat={resultat}")
                         break
 
     def _udp_ip_autorisee(self, ip: str, now_ms: int) -> bool:

@@ -1,16 +1,16 @@
 # core/pancarte_lore.py
-# Pancarte de lore interactive : verrouillée par défaut, débloquée contre des âmes.
-# Une fois payée, affiche un texte de lore dans une bulle de dialogue stylisée.
-# L'état est persistant (sauvegardé via gestion_sauvegarde).
+# Stèle de lore ancienne : pierre gravée de runes incompréhensibles.
+# Interaction → paiement en âmes → traduction du message de l'Éclaireur.
 
 import pygame
 import math
 import os
 import sys
+import random
 from parametres import TAILLE_TUILE, COULEUR_TEXTE, COULEUR_FOND
 
 
-# ── Texte de lore affiché après déverrouillage ──────────────────────────────
+# ── Texte de lore ──────────────────────────────────────────────────────────
 TEXTE_LORE = [
     "Ici repose le serment des Premiers Éclaireurs.",
     "",
@@ -32,51 +32,97 @@ TEXTE_LORE = [
     "                      An 1 du Grand Silence",
 ]
 
-COUT_AMES = 30          # Coût en âmes pour déverrouiller
-COUT_DASH = 50          # Coût en âmes pour acheter le dash
-LARGEUR_PANCARTE = 48   # Pixels (1.5 tuile)
+TEXTE_LORE_DASH = [
+    "Ici fut gravé le Pas de l'Éclaireur.",
+    "",
+    "« Avant que le Silence nous engloutisse,",
+    "  nous courions entre les ombres.",
+    "  Pas pour fuir —",
+    "  pour exister encore une seconde de plus.",
+    "",
+    "  Ce mouvement n'est pas une technique.",
+    "  C'est un réflexe de survivant.",
+    "  Le corps qui refuse de s'arrêter",
+    "  quand tout lui dit de tomber.",
+    "",
+    "  Si tu lis ces mots,",
+    "  c'est que tu as encore quelque chose",
+    "  qui vaut la peine d'être couru. »",
+    "",
+    "                    — Aelys, Dernière Éclaireure,",
+    "                      An 1 du Grand Silence",
+]
+
+COUT_AMES = 30
+COUT_DASH = 50
+LARGEUR_PANCARTE = 48
 HAUTEUR_PANCARTE = 56
+
+# ── Formes runiques dessinées à la main ────────────────────────────────────
+# Chaque rune est une liste de segments (x1, y1, x2, y2) dans une grille 8×12.
+_RUNES_FORMES = [
+    [(4, 0, 4, 12), (2, 3, 6, 3), (2, 9, 6, 9)],           # 0 : I ramifié
+    [(1, 1, 7, 11), (7, 1, 1, 11)],                          # 1 : X
+    [(2, 0, 7, 6), (7, 6, 2, 12)],                           # 2 : zigzag
+    [(4, 0, 4, 12), (4, 4, 1, 1), (4, 4, 7, 1)],             # 3 : flèche haut
+    [(2, 0, 2, 12), (2, 3, 7, 1), (2, 7, 7, 5)],             # 4 : tige branches
+    [(4, 0, 7, 4), (7, 4, 4, 8), (4, 8, 1, 4), (1, 4, 4, 0)], # 5 : losange
+    [(2, 0, 2, 12), (7, 0, 7, 12), (2, 0, 7, 12)],           # 6 : N
+    [(4, 0, 4, 12), (1, 4, 7, 4)],                           # 7 : T
+    [(3, 0, 3, 12), (3, 5, 7, 2), (3, 5, 7, 8)],             # 8 : flèche droite
+    [(3, 0, 3, 12), (3, 4, 7, 7), (7, 7, 3, 10)],            # 9 : serpent
+]
+
+# Séquences de runes sur chaque ligne d'inscription (indices dans _RUNES_FORMES)
+_LIGNES_INSCRIPTION = [
+    [4, 7, 0, 2, 8],
+    [1, 3, 9, 6, 4],
+    [7, 0, 5, 8, 3],
+]
+
+# Couleurs pierre
+_PIERRE      = (72,  68,  80)
+_PIERRE_BORD = (38,  35,  46)
+_PIERRE_LUM  = (108, 103, 120)
+_PIERRE_OMBR = (50,  47,  58)
+
+
+def _dessiner_rune(surf, formes, x, y, scale, couleur):
+    """Dessine une rune (liste de segments) à (x, y) avec l'échelle donnée."""
+    ep = max(1, scale // 7)
+    for x1, y1, x2, y2 in formes:
+        sx1 = x + x1 * scale // 8
+        sy1 = y + y1 * scale // 12
+        sx2 = x + x2 * scale // 8
+        sy2 = y + y2 * scale // 12
+        pygame.draw.line(surf, couleur, (sx1, sy1), (sx2, sy2), ep)
 
 
 class PancarteLore:
     """
-    Pancarte mystérieuse verrouillée par défaut.
-    - Interagir (touche E à portée) → invite de paiement.
-    - Si assez d'âmes → déverrouillage permanent + son.
-    - Une fois déverrouillée → interagir ouvre la bulle de lore.
+    Stèle de pierre gravée de runes incompréhensibles.
+    - Interaction → paiement → traduction débloquée.
+    - Interagir une fois débloquée → lecture du message de l'Éclaireur.
     """
 
-    PORTEE_INTERACTION = 80   # pixels
+    PORTEE_INTERACTION = 80
 
     def __init__(self, x: int, y: int):
         self.x = x
         self.y = y
         self.rect = pygame.Rect(x, y, LARGEUR_PANCARTE, HAUTEUR_PANCARTE)
         self.est_debloquee = False
-
-        # Phase sinusoïdale pour les particules d'âmes
         self._phase = 0.0
-        self._particules = []
-        self._particules_init = False
-
-        # Fonts (initialisées au premier dessin)
-        self._font_lore   = None
-        self._font_titre  = None
-        self._font_ui     = None
-        self._font_runic  = None
-
-        # Cache surface pancarte (rebuilt si état change)
-        self._surf_cache   = None
-        self._surf_etat    = None   # 'locked' | 'unlocked'
+        self._font_lore  = None
+        self._font_titre = None
+        self._font_ui    = None
+        self._surf_cache = None
+        self._surf_etat  = None
 
     # ── Réseau ──────────────────────────────────────────────────────────────
 
     def get_etat(self, id_pancarte: int = None) -> dict:
-        d = {
-            'x':             self.x,
-            'y':             self.y,
-            'est_debloquee': self.est_debloquee,
-        }
+        d = {'x': self.x, 'y': self.y, 'est_debloquee': self.est_debloquee, 'type_pancarte': getattr(self, 'type_pancarte', 'lore'),}
         if id_pancarte is not None:
             d['id'] = id_pancarte
         return d
@@ -85,15 +131,15 @@ class PancarteLore:
         self.x             = data['x']
         self.y             = data['y']
         self.est_debloquee = data['est_debloquee']
+        self.type_pancarte = data.get('type_pancarte', 'lore')
         self.rect.topleft  = (self.x, self.y)
+        self._surf_cache   = None
 
     # ── Logique serveur ─────────────────────────────────────────────────────
 
     def tenter_paiement(self, joueur) -> str:
         if self.est_debloquee:
             return 'deja_debloquee'
-        
-        # Pancarte shop dash
         if getattr(self, 'type_pancarte', 'lore') == 'shop_dash':
             if joueur.argent < COUT_DASH:
                 return 'pauvre'
@@ -104,8 +150,6 @@ class PancarteLore:
             self.est_debloquee = True
             joueur.sons_a_jouer.append('ame_libre')
             return 'debloquee'
-
-        # Pancarte lore normale
         if joueur.argent < COUT_AMES:
             return 'pauvre'
         joueur.argent -= COUT_AMES
@@ -114,7 +158,6 @@ class PancarteLore:
         return 'debloquee'
 
     def mettre_a_jour(self, temps_ms: int):
-        """Mise à jour animation particules."""
         self._phase = (temps_ms / 1200.0) % (2 * math.pi)
 
     # ── Rendu client ────────────────────────────────────────────────────────
@@ -124,186 +167,327 @@ class PancarteLore:
             return
         self._font_lore  = pygame.font.Font(None, 28)
         self._font_titre = pygame.font.Font(None, 34)
-        self._font_ui    = pygame.font.Font(None, 30)
-        self._font_runic = pygame.font.Font(None, 36)
+        self._font_ui    = pygame.font.Font(None, 28)
 
-    def dessiner(self, surface: pygame.Surface, camera_offset=(0, 0), temps_ms: int = 0,
-                 touche_interagir: str = 'F'):
+    def dessiner(self, surface: pygame.Surface, camera_offset=(0, 0),
+                 temps_ms: int = 0, touche_interagir: str = 'F'):
         self._init_fonts()
         off_x, off_y = camera_offset
         sx = self.x - off_x
         sy = self.y - off_y
 
-        # ── Halo d'âmes flottantes autour de la pancarte ────────────────
-        halo_surf = pygame.Surface((LARGEUR_PANCARTE + 40, HAUTEUR_PANCARTE + 40), pygame.SRCALPHA)
-        pulse = 0.6 + 0.4 * math.sin(self._phase)
-        if self.est_debloquee:
-            # Halo doré chaleureux une fois déverrouillée
-            for r, a in [(28, 12), (20, 22), (12, 40)]:
-                pygame.draw.ellipse(halo_surf, (255, 200, 80, int(a * pulse)),
-                                    pygame.Rect(20 - r, 20 - r + HAUTEUR_PANCARTE // 2,
-                                                r * 2, r * 2))
-        else:
-            # Halo violet mystérieux
-            for r, a in [(28, 15), (20, 28), (12, 50)]:
-                pygame.draw.ellipse(halo_surf, (140, 80, 255, int(a * pulse)),
-                                    pygame.Rect(20 - r, 20 - r + HAUTEUR_PANCARTE // 2,
-                                                r * 2, r * 2))
-        surface.blit(halo_surf, (sx - 20, sy - 20))
+        # Halo ambiant
+        self._dessiner_halo(surface, sx, sy)
 
-        # ── Corps de la pancarte ────────────────────────────────────────
+        # Surface stèle (mise en cache)
         etat_actuel = 'unlocked' if self.est_debloquee else 'locked'
         if self._surf_cache is None or self._surf_etat != etat_actuel:
             self._surf_cache = self._construire_surface_pancarte(etat_actuel)
             self._surf_etat  = etat_actuel
+        # La surface est 8px plus large et 12px plus haute que le rect
+        surface.blit(self._surf_cache, (sx - 4, sy - 6))
 
-        surface.blit(self._surf_cache, (sx, sy))
-
-        # ── Particules d'âmes flottantes ────────────────────────────────
+        # Particules runiques
         self._dessiner_particules(surface, sx, sy, temps_ms)
 
-        # ── Indicateur d'interaction (si non déverrouillée) ─────────────
+        # Badge d'interaction
         self._dessiner_indicateur(surface, sx, sy, temps_ms, touche_interagir)
 
+    # ── Construction de la surface stèle ────────────────────────────────────
+
     def _construire_surface_pancarte(self, etat: str) -> pygame.Surface:
-        """Construit et retourne la surface de la pancarte (cachée)."""
-        w, h = LARGEUR_PANCARTE, HAUTEUR_PANCARTE
-        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        W = LARGEUR_PANCARTE + 8   # 56
+        H = HAUTEUR_PANCARTE + 12  # 68
+        surf = pygame.Surface((W, H), pygame.SRCALPHA)
 
-        # Fond bois usé
-        couleur_bois = (85, 52, 28) if etat == 'locked' else (100, 65, 35)
-        couleur_bord = (55, 32, 12)
-        pygame.draw.rect(surf, couleur_bois, pygame.Rect(0, 0, w, h), border_radius=4)
-        pygame.draw.rect(surf, couleur_bord, pygame.Rect(0, 0, w, h), width=2, border_radius=4)
+        rng_t = random.Random(314)
 
-        # Veinures du bois (lignes horizontales très fines)
-        for i in range(3, h - 3, 7):
-            alpha = 30 + (i % 14) * 2
-            ligne = pygame.Surface((w - 6, 1), pygame.SRCALPHA)
-            ligne.fill((200, 140, 70, alpha))
-            surf.blit(ligne, (3, i))
+        # ── Socle / piédestal ──
+        socle = pygame.Rect(W // 2 - 12, H - 10, 24, 8)
+        pygame.draw.rect(surf, _PIERRE_OMBR, socle, border_radius=2)
+        pygame.draw.rect(surf, _PIERRE_BORD, socle, 1, border_radius=2)
 
-        # Reflet supérieur (effet vieux bois ciré)
-        reflet = pygame.Surface((w - 8, 3), pygame.SRCALPHA)
-        reflet.fill((255, 200, 120, 25))
-        surf.blit(reflet, (4, 3))
+        # ── Corps de la stèle (légèrement arrondi au sommet) ──
+        stele = pygame.Rect(2, 2, W - 4, H - 12)
+        pygame.draw.rect(surf, _PIERRE, stele, border_radius=5)
+
+        # Texture grain pierre (points aléatoires, cachés, Random fixe)
+        for _ in range(220):
+            gx = rng_t.randint(3, W - 4)
+            gy = rng_t.randint(3, H - 13)
+            ga = rng_t.randint(10, 35)
+            gc = rng_t.choice((_PIERRE_OMBR, _PIERRE_LUM))
+            surf.set_at((gx, gy), (*gc, ga))
+
+        # Fissure diagonale (décorative)
+        for fi in range(stele.top + 8, stele.bottom - 6):
+            fx = W // 3 + int(math.sin(fi * 0.25) * 2)
+            if 3 <= fx < W - 3:
+                surf.set_at((fx, fi), (*_PIERRE_BORD, 160))
+
+        # Bords de la stèle
+        pygame.draw.rect(surf, _PIERRE_BORD, stele, 2, border_radius=5)
+        # Highlight gauche et haut (effet lumière)
+        pygame.draw.line(surf, (*_PIERRE_LUM, 100), (3, 6), (3, H - 14), 1)
+        pygame.draw.line(surf, (*_PIERRE_LUM, 70),  (4, 4), (W - 5, 4),  1)
+
+        # ── Zone d'inscription gravée ──
+        marge  = 7
+        zone   = pygame.Rect(marge, marge + 4, W - marge * 2, H - marge * 2 - 10)
+        zone_s = pygame.Surface((zone.w, zone.h), pygame.SRCALPHA)
+        zone_s.fill((*_PIERRE_OMBR, 80))
+        surf.blit(zone_s, zone.topleft)
+        pygame.draw.rect(surf, (*_PIERRE_BORD, 180), zone, 1)
+
+        # Coins gravés de la zone
+        sz = 3
+        for cx, cy in [(zone.x, zone.y), (zone.right - sz, zone.y),
+                       (zone.x, zone.bottom - sz), (zone.right - sz, zone.bottom - sz)]:
+            pygame.draw.rect(surf, (*_PIERRE_LUM, 120), pygame.Rect(cx, cy, sz, sz))
+
+        type_p = getattr(self, 'type_pancarte', 'lore')
 
         if etat == 'locked':
-            # Symbole cadenas au centre
-            cx, cy = w // 2, h // 2 - 4
-            # Corps du cadenas
-            pygame.draw.rect(surf, (60, 40, 10), pygame.Rect(cx - 7, cy, 14, 10), border_radius=2)
-            pygame.draw.rect(surf, (100, 70, 20), pygame.Rect(cx - 7, cy, 14, 10), width=1, border_radius=2)
-            # Anneau du cadenas
-            pygame.draw.arc(surf, (100, 70, 20),
-                            pygame.Rect(cx - 5, cy - 8, 10, 12), 0, math.pi, 2)
-            # Chaînes (traits obliques sur les bords)
-            for dx in [4, 9, 14, 19]:
-                pygame.draw.line(surf, (80, 60, 20), (dx, 8), (dx + 3, 14), 1)
-                pygame.draw.line(surf, (80, 60, 20), (w - dx, h - 8), (w - dx - 3, h - 14), 1)
-            # Texte "???"
-            f = pygame.font.Font(None, 24)
-            s = f.render("???", True, (160, 120, 60))
-            surf.blit(s, s.get_rect(center=(cx, cy + 16)))
+            # Runes incompréhensibles gravées dans la pierre
+            if type_p == 'shop_dash':
+                coul_rune = (70, 210, 225)
+                coul_ombr = (15, 55, 65, 180)
+            else:
+                coul_rune = (145, 85, 255)
+                coul_ombr = (25, 10, 55, 180)
+
+            scale  = 7
+            rune_w = scale + 4
+            rune_h = scale + 5
+            nb_cols = max(1, (zone.w - 6) // rune_w)
+            nb_rows = len(_LIGNES_INSCRIPTION)
+            tot_w  = nb_cols * rune_w
+            tot_h  = nb_rows * rune_h
+            sx0    = zone.x + (zone.w - tot_w) // 2
+            sy0    = zone.y + (zone.h - tot_h) // 2
+
+            for li, ligne in enumerate(_LIGNES_INSCRIPTION):
+                for ri in range(nb_cols):
+                    ridx  = ligne[ri % len(ligne)]
+                    rx    = sx0 + ri * rune_w
+                    ry    = sy0 + li * rune_h
+                    frome = _RUNES_FORMES[ridx % len(_RUNES_FORMES)]
+                    # Ombre de gravure (décalage +1)
+                    _dessiner_rune(surf, frome, rx + 1, ry + 1, scale, coul_ombr)
+                    # Rune principale
+                    _dessiner_rune(surf, frome, rx, ry, scale, (*coul_rune, 215))
+
         else:
-            # Rune lumineuse centrale
-            f = pygame.font.Font(None, 42)
-            s = f.render("✦", True, (255, 200, 80))
-            surf.blit(s, s.get_rect(center=(w // 2, h // 2 - 4)))
-            f2 = pygame.font.Font(None, 22)
-            s2 = f2.render("LORE", True, (200, 160, 60))
-            surf.blit(s2, s2.get_rect(center=(w // 2, h // 2 + 14)))
+            # État déverrouillé : mandala runique doré
+            cx_s = W // 2
+            cy_s = zone.y + zone.h // 2
+
+            # Cercle de base gravé
+            pygame.draw.circle(surf, _PIERRE_OMBR, (cx_s, cy_s), 14)
+            pygame.draw.circle(surf, (110, 85, 22), (cx_s, cy_s), 14, 2)
+
+            # 6 petites runes en couronne
+            for i in range(6):
+                a = i * math.pi / 3
+                rx = int(cx_s + math.cos(a) * 20) - 3
+                ry = int(cy_s + math.sin(a) * 20) - 5
+                f  = _RUNES_FORMES[i % len(_RUNES_FORMES)]
+                _dessiner_rune(surf, f, rx + 1, ry + 1, 6, (40, 30, 5, 160))
+                _dessiner_rune(surf, f, rx, ry, 6, (185, 145, 40))
+
+            # Étoile centrale
+            f_star = pygame.font.Font(None, 30)
+            star   = f_star.render("✦", True, (255, 200, 55))
+            surf.blit(star, star.get_rect(center=(cx_s, cy_s)))
 
         return surf
 
+    # ── Halo ambiant ────────────────────────────────────────────────────────
+
+    def _dessiner_halo(self, surface, sx, sy):
+        pulse = 0.5 + 0.5 * math.sin(self._phase)
+        sz    = 64
+        halo  = pygame.Surface((sz, sz), pygame.SRCALPHA)
+        cx, cy = sz // 2, sz // 2
+
+        if self.est_debloquee:
+            col = (255, 190, 50)
+            for r, a in [(26, 8), (18, 18), (10, 35)]:
+                pygame.draw.circle(halo, (*col, int(a * pulse)),
+                                   (cx, cy + 10), r)
+        else:
+            type_p = getattr(self, 'type_pancarte', 'lore')
+            col = (60, 200, 220) if type_p == 'shop_dash' else (130, 70, 255)
+            for r, a in [(26, 10), (18, 22), (10, 42)]:
+                pygame.draw.circle(halo, (*col, int(a * pulse)),
+                                   (cx, cy + 10), r)
+
+        # Particules de lumière montantes sur le halo
+        for i in range(3):
+            ph  = self._phase + i * 2.1
+            hpx = int(cx + math.cos(ph * 0.8) * 9)
+            hpy = int(cy + 4 - (i * 6) - (math.sin(ph) * 4))
+            ha  = max(0, int(70 * math.sin(ph + 1.5)))
+            if 0 <= hpx < sz and 0 <= hpy < sz:
+                pygame.draw.circle(halo, (*col, ha), (hpx, hpy), 2)
+
+        surface.blit(halo, (sx + LARGEUR_PANCARTE // 2 - cx,
+                            sy + HAUTEUR_PANCARTE // 2 - cy))
+
+    # ── Particules runiques flottantes ───────────────────────────────────────
+
     def _dessiner_particules(self, surface, sx, sy, temps_ms):
-        """Petites âmes flottantes autour de la pancarte."""
-        nb = 5 if not self.est_debloquee else 3
+        """Petites runes flottant autour de la stèle."""
+        type_p  = getattr(self, 'type_pancarte', 'lore')
+        col_r   = (60, 200, 220) if type_p == 'shop_dash' else (130, 70, 255)
+        col_u   = (255, 195, 50)
+        couleur = col_u if self.est_debloquee else col_r
+        nb      = 4 if not self.est_debloquee else 3
+
         for i in range(nb):
-            phase_i = self._phase + i * (2 * math.pi / nb)
-            px = sx + LARGEUR_PANCARTE // 2 + math.cos(phase_i) * (18 + i * 4)
-            py = sy + HAUTEUR_PANCARTE // 2 + math.sin(phase_i * 0.7) * 10 - i * 3
-            alpha = int(120 + 80 * math.sin(phase_i * 2))
-            r = max(1, int(2 + math.sin(phase_i) * 1.5))
-            couleur = (140, 80, 255, alpha) if not self.est_debloquee else (255, 200, 80, alpha)
-            p_surf = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
-            pygame.draw.circle(p_surf, couleur, (r + 1, r + 1), r)
-            surface.blit(p_surf, (int(px) - r - 1, int(py) - r - 1))
+            ph  = self._phase + i * (2 * math.pi / nb)
+            px  = sx + LARGEUR_PANCARTE // 2 + math.cos(ph) * (20 + i * 3)
+            py  = sy + HAUTEUR_PANCARTE // 2 + math.sin(ph * 0.7) * 9 - i * 4
+            a   = max(0, int(90 + 80 * math.sin(ph * 2)))
+            ridx = (i * 3) % len(_RUNES_FORMES)
+            # Mini rune (scale 5)
+            tmp = pygame.Surface((9, 11), pygame.SRCALPHA)
+            _dessiner_rune(tmp, _RUNES_FORMES[ridx], 0, 0, 5, (*couleur, a))
+            surface.blit(tmp, (int(px) - 4, int(py) - 5))
+
+    # ── Badge d'interaction ──────────────────────────────────────────────────
 
     def _dessiner_indicateur(self, surface, sx, sy, temps_ms, touche: str = 'F'):
-        """Badge [<touche>] au-dessus de la pancarte pour signaler l'interaction."""
-        f = pygame.font.Font(None, 28)
+        f  = pygame.font.Font(None, 26)
         tk = (touche or 'F').upper()
         if not self.est_debloquee:
-            label = f"[{tk}]  {COUT_AMES} âmes"
-            couleur = (160, 100, 255)
+            type_p = getattr(self, 'type_pancarte', 'lore')
+            cout   = COUT_DASH if type_p == 'shop_dash' else COUT_AMES
+            label  = f"[{tk}]  {cout} âmes"
+            coul   = (80, 210, 230) if type_p == 'shop_dash' else (160, 100, 255)
         else:
             label = f"[{tk}]  Lire"
-            couleur = (255, 200, 80)
+            coul  = (255, 200, 70)
 
-        s = f.render(label, True, couleur)
-        flottement = int(3 * math.sin(self._phase * 2))
-        bx = sx + LARGEUR_PANCARTE // 2 - s.get_width() // 2
-        by = sy - 22 + flottement
+        s = f.render(label, True, coul)
+        flot = int(3 * math.sin(self._phase * 2))
+        bx   = sx + LARGEUR_PANCARTE // 2 - s.get_width() // 2
+        by   = sy - 24 + flot
 
-        # Fond semi-transparent
-        bg = pygame.Surface((s.get_width() + 8, s.get_height() + 4), pygame.SRCALPHA)
-        bg.fill((10, 5, 25, 180))
-        pygame.draw.rect(bg, couleur, bg.get_rect(), width=1, border_radius=3)
-        surface.blit(bg, (bx - 4, by - 2))
-        surface.blit(s, (bx, by))
+        bg = pygame.Surface((s.get_width() + 10, s.get_height() + 6), pygame.SRCALPHA)
+        # Fond pierre sombre
+        pygame.draw.rect(bg, (22, 18, 35, 200), bg.get_rect(), border_radius=4)
+        pygame.draw.rect(bg, (*coul, 160), bg.get_rect(), 1, border_radius=4)
+        bg.blit(s, (5, 3))
+        surface.blit(bg, (bx - 5, by - 3))
 
 
 # ── Bulle de dialogue de lore ────────────────────────────────────────────────
 
 class BulleLore:
     """
-    Bulle de dialogue affichant le texte de lore.
-    Rendue directement sur l'écran (pas sur la surface virtuelle zoomée).
-    Se ferme avec Échap ou clic en dehors.
+    Panneau de traduction : affiche le message de l'Éclaireur
+    une fois l'inscription déchiffrée.
+    Style : tablette de pierre sombre avec texte doré gravé.
     """
 
-    LARGEUR = 620
-    HAUTEUR = 440
-    MARGE   = 32
+    LARGEUR = 640
+    HAUTEUR = 460
+    MARGE   = 34
 
     def __init__(self, largeur_ecran: int, hauteur_ecran: int):
-        self.lw = largeur_ecran
-        self.lh = hauteur_ecran
+        self.lw   = largeur_ecran
+        self.lh   = hauteur_ecran
         self.rect = pygame.Rect(
-            largeur_ecran // 2 - self.LARGEUR // 2,
-            hauteur_ecran // 2 - self.HAUTEUR // 2,
-            self.LARGEUR, self.HAUTEUR
+            largeur_ecran  // 2 - self.LARGEUR // 2,
+            hauteur_ecran  // 2 - self.HAUTEUR // 2,
+            self.LARGEUR, self.HAUTEUR,
         )
         self.visible    = False
         self._scroll    = 0
-        self._surf      = None   # Cache de la bulle
         self._temps_ouv = 0
 
-        self._font_texte = pygame.font.Font(None, 28)
-        self._font_titre = pygame.font.Font(None, 36)
-        self._font_fermer = pygame.font.Font(None, 26)
+        self._font_texte  = pygame.font.Font(None, 27)
+        self._font_titre  = pygame.font.Font(None, 34)
+        self._font_fermer = pygame.font.Font(None, 24)
 
-    def ouvrir(self):
+        # Surface de fond pré-construite (statique)
+        self._surf_fond   = None
+        self._construire_fond()
+
+    def _construire_fond(self):
+        W, H = self.LARGEUR, self.HAUTEUR
+        surf  = pygame.Surface((W, H), pygame.SRCALPHA)
+
+        # Gradient vertical sombre (granit profond)
+        for y in range(H):
+            t = y / H
+            r = int(24 + t * 14)
+            g = int(20 + t * 10)
+            b = int(32 + t * 18)
+            pygame.draw.line(surf, (r, g, b, 248), (0, y), (W, y))
+
+        # Grain de pierre
+        rng = random.Random(555)
+        for _ in range(500):
+            gx = rng.randint(0, W - 1)
+            gy = rng.randint(0, H - 1)
+            ga = rng.randint(6, 22)
+            surf.set_at((gx, gy), (90, 85, 105, ga))
+
+        # Bordure extérieure or-brun
+        pygame.draw.rect(surf, (115, 88, 22), pygame.Rect(0, 0, W, H), 3, border_radius=7)
+        # Bordure intérieure fine
+        pygame.draw.rect(surf, (75, 57, 12), pygame.Rect(6, 6, W - 12, H - 12), 1, border_radius=5)
+
+        # Coins ornés : petites runes gravées
+        for cx, cy in [(10, 10), (W - 22, 10), (10, H - 22), (W - 22, H - 22)]:
+            # Fond de coin
+            pygame.draw.rect(surf, (50, 45, 60), pygame.Rect(cx, cy, 12, 12))
+            pygame.draw.rect(surf, (100, 78, 18), pygame.Rect(cx, cy, 12, 12), 1)
+            # Mini rune
+            _dessiner_rune(surf, _RUNES_FORMES[5], cx + 1, cy, 8, (160, 125, 35))
+
+        # Séparateur horizontal au niveau du titre (y=56)
+        for px in range(self.MARGE, W - self.MARGE):
+            t = (px - self.MARGE) / max(W - self.MARGE * 2 - 1, 1)
+            fade = math.sin(t * math.pi)
+            a = int(180 * fade)
+            surf.set_at((px, 55), (115, 88, 22, a))
+            surf.set_at((px, 56), (55,  42, 10, a // 2))
+
+        # Petites runes décoratives le long du séparateur
+        for i, ridx in enumerate([2, 7, 5, 0, 7, 2]):
+            rx = self.MARGE + i * ((W - self.MARGE * 2) // 6) - 3
+            _dessiner_rune(surf, _RUNES_FORMES[ridx], rx, 47, 7, (130, 100, 28))
+
+        # Séparateur du bas (au-dessus du hint)
+        sep_bot = H - 28
+        for px in range(self.MARGE, W - self.MARGE):
+            t = (px - self.MARGE) / max(W - self.MARGE * 2 - 1, 1)
+            fade = math.sin(t * math.pi)
+            a = int(100 * fade)
+            surf.set_at((px, sep_bot), (115, 88, 22, a))
+
+        self._surf_fond = surf
+
+    def ouvrir(self, texte=None):
         self.visible    = True
         self._scroll    = 0
-        self._surf      = None
         self._temps_ouv = pygame.time.get_ticks()
+        self._texte     = texte if texte is not None else TEXTE_LORE
 
     def fermer(self):
         self.visible = False
 
     def gerer_event(self, event) -> bool:
-        """Retourne True si la bulle a consommé l'événement."""
         if not self.visible:
             return False
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self.fermer()
-            return True
+            self.fermer(); return True
         if event.type == pygame.MOUSEBUTTONDOWN:
             if not self.rect.collidepoint(event.pos):
-                self.fermer()
-                return True
+                self.fermer(); return True
         if event.type == pygame.MOUSEWHEEL:
             self._scroll = max(0, self._scroll - event.y * 18)
             return True
@@ -314,125 +498,105 @@ class BulleLore:
             return
 
         temps_ms = pygame.time.get_ticks()
+        elapsed  = temps_ms - self._temps_ouv
 
-        # Overlay sombre
-        overlay = pygame.Surface((self.lw, self.lh), pygame.SRCALPHA)
-        elapsed = temps_ms - self._temps_ouv
-        alpha_overlay = min(160, int(160 * elapsed / 300))
-        overlay.fill((0, 0, 0, alpha_overlay))
-        surface.blit(overlay, (0, 0))
+        # Overlay sombre (fondu)
+        ov = pygame.Surface((self.lw, self.lh), pygame.SRCALPHA)
+        ov.fill((0, 0, 0, min(185, int(185 * elapsed / 350))))
+        surface.blit(ov, (0, 0))
 
-        # ── Fond parchemin ───────────────────────────────────────────────
-        fond = pygame.Surface((self.LARGEUR, self.HAUTEUR), pygame.SRCALPHA)
+        # Ombre portée
+        sh = pygame.Surface((self.LARGEUR + 18, self.HAUTEUR + 18), pygame.SRCALPHA)
+        sh.fill((0, 0, 0, min(130, int(130 * elapsed / 350))))
+        surface.blit(sh, (self.rect.x - 4, self.rect.y + 12))
 
-        # Fond vieux parchemin
-        for y in range(self.HAUTEUR):
-            ratio = y / self.HAUTEUR
-            r = int(42 + ratio * 18)
-            g = int(28 + ratio * 12)
-            b = int(8  + ratio * 6)
-            pygame.draw.line(fond, (r, g, b, 240), (0, y), (self.LARGEUR, y))
-
-        # Bordure ornementale
-        pygame.draw.rect(fond, (120, 80, 30), pygame.Rect(0, 0, self.LARGEUR, self.HAUTEUR),
-                         width=3, border_radius=8)
-        pygame.draw.rect(fond, (80, 50, 15), pygame.Rect(4, 4, self.LARGEUR - 8, self.HAUTEUR - 8),
-                         width=1, border_radius=6)
-
-        # Coins ornés (petits carrés)
-        for cx, cy in [(8, 8), (self.LARGEUR - 18, 8),
-                       (8, self.HAUTEUR - 18), (self.LARGEUR - 18, self.HAUTEUR - 18)]:
-            pygame.draw.rect(fond, (160, 110, 40), pygame.Rect(cx, cy, 10, 10))
-            pygame.draw.rect(fond, (80, 50, 15), pygame.Rect(cx, cy, 10, 10), width=1)
-
-        # Séparateur titre
-        for px in range(self.MARGE, self.LARGEUR - self.MARGE):
-            ratio = (px - self.MARGE) / (self.LARGEUR - self.MARGE * 2)
-            dist = abs(ratio - 0.5) * 2
-            a = int(180 * (1 - dist ** 2))
-            fond.set_at((px, 52), (160, 110, 40, a))
-            fond.set_at((px, 53), (80, 50, 15, a // 2))
-
-        surface.blit(fond, self.rect.topleft)
+        # Fond tablette
+        surface.blit(self._surf_fond, self.rect.topleft)
 
         # ── Titre ────────────────────────────────────────────────────────
-        titre = self._font_titre.render("✦  Inscription ancienne  ✦", True, (220, 170, 60))
-        surface.blit(titre, titre.get_rect(center=(self.rect.centerx, self.rect.y + 30)))
+        titre = self._font_titre.render("✦   Inscription Traduite   ✦", True, (220, 178, 58))
+        surface.blit(titre, titre.get_rect(center=(self.rect.centerx, self.rect.y + 32)))
+
+        # Sous-titre attribution
+        f_sub = pygame.font.Font(None, 22)
+        sub   = f_sub.render("— Message gravé en Langue des Éclaireurs —", True, (120, 92, 28))
+        surface.blit(sub, sub.get_rect(center=(self.rect.centerx, self.rect.y + 49)))
 
         # ── Zone de texte scrollable ─────────────────────────────────────
-        zone_y = self.rect.y + 62
-        zone_h = self.HAUTEUR - 80
-        zone_rect = pygame.Rect(self.rect.x + self.MARGE, zone_y,
-                                self.LARGEUR - self.MARGE * 2, zone_h)
+        zone_y  = self.rect.y + 66
+        zone_h  = self.HAUTEUR - 92
+        zone_rect = pygame.Rect(
+            self.rect.x + self.MARGE, zone_y,
+            self.LARGEUR - self.MARGE * 2, zone_h,
+        )
 
-        # Clip pour ne pas dépasser
         clip_orig = surface.get_clip()
         surface.set_clip(zone_rect)
 
-        lh = self._font_texte.get_height() + 4
-        y_cursor = zone_y + 8 - self._scroll
-        for ligne in TEXTE_LORE:
+        lh       = self._font_texte.get_height() + 5
+        y_cursor = zone_y + 10 - self._scroll
+
+        texte = self._texte if hasattr(self, '_texte') else TEXTE_LORE
+        for ligne in texte:
             if ligne == "":
                 y_cursor += lh // 2
                 continue
-            # Couleur légèrement différente pour les lignes de citation
-            if ligne.startswith("  ") or ligne.startswith("«") or ligne.startswith("»"):
-                couleur = (200, 160, 80)
+            if ligne.startswith("  ") or ligne.startswith("«"):
+                couleur = (210, 178, 100)   # citation : or plus chaud
             elif ligne.startswith("—"):
-                couleur = (160, 120, 50)
-                # Italique simulé (décalage léger)
+                couleur = (175, 138, 62)    # attribution : or plus terne
                 y_cursor += 4
             else:
-                couleur = (220, 185, 100)
+                couleur = (238, 215, 150)   # corps : crème dorée
+
             s = self._font_texte.render(ligne, True, couleur)
-            surface.blit(s, (zone_rect.x + 4, y_cursor))
+            surface.blit(s, (zone_rect.x + 6, y_cursor))
             y_cursor += lh
 
         surface.set_clip(clip_orig)
 
-        # ── Indication fermeture ─────────────────────────────────────────
-        hint = self._font_fermer.render("[ Échap ] ou cliquer en dehors pour fermer", True, (120, 85, 30))
-        surface.blit(hint, hint.get_rect(center=(self.rect.centerx,
-                                                  self.rect.bottom - 14)))
+        # ── Hint fermeture ────────────────────────────────────────────────
+        hint = self._font_fermer.render(
+            "[ Échap ] ou cliquer en dehors pour fermer", True, (95, 72, 22))
+        surface.blit(hint, hint.get_rect(
+            center=(self.rect.centerx, self.rect.bottom - 14)))
 
 
 # ── Popup de paiement / confirmation ────────────────────────────────────────
 
 class PopupPaiement:
     """
-    Popup demandant la confirmation du paiement en âmes.
-    Affiche aussi les messages d'erreur (pas assez d'âmes).
+    Popup de confirmation du paiement en âmes (style pierre).
     """
 
-    LARGEUR = 380
-    HAUTEUR = 200
+    LARGEUR = 400
+    HAUTEUR = 210
 
     def __init__(self, largeur_ecran: int, hauteur_ecran: int):
-        self.lw = largeur_ecran
-        self.lh = hauteur_ecran
+        self.lw   = largeur_ecran
+        self.lh   = hauteur_ecran
         self.rect = pygame.Rect(
-            largeur_ecran // 2 - self.LARGEUR // 2,
-            hauteur_ecran // 2 - self.HAUTEUR // 2,
-            self.LARGEUR, self.HAUTEUR
+            largeur_ecran  // 2 - self.LARGEUR // 2,
+            hauteur_ecran  // 2 - self.HAUTEUR // 2,
+            self.LARGEUR, self.HAUTEUR,
         )
-        self.visible    = False
-        self.mode       = 'confirmer'   # 'confirmer' | 'pauvre' | 'debloquee'
-        self._callback  = None          # Appelé si confirmation
-        self._font      = pygame.font.Font(None, 30)
-        self._font_btn  = pygame.font.Font(None, 34)
-        self._temps_msg = 0             # Pour les messages temporaires
+        self.visible   = False
+        self.mode      = 'confirmer'
+        self._callback = None
+        self._font     = pygame.font.Font(None, 29)
+        self._font_btn = pygame.font.Font(None, 33)
+        self._font_sub = pygame.font.Font(None, 24)
+        self._temps_msg = 0
+        self._btn_oui   = pygame.Rect(0, 0, 118, 38)
+        self._btn_non   = pygame.Rect(0, 0, 118, 38)
 
-        # Rects des boutons (calculés dans dessiner)
-        self._btn_oui = pygame.Rect(0, 0, 110, 36)
-        self._btn_non = pygame.Rect(0, 0, 110, 36)
-
-    def ouvrir_confirmation(self, argent_joueur: int, callback):
-        self.mode = 'confirmer' if argent_joueur >= COUT_AMES else 'pauvre'
+    def ouvrir_confirmation(self, argent_joueur: int, callback, cout: int = COUT_AMES):
+        self.mode      = 'confirmer' if argent_joueur >= cout else 'pauvre'
         self._callback = callback
         self.visible   = True
+        self._cout     = cout
 
     def ouvrir_message(self, mode: str):
-        """Affiche un message temporaire ('pauvre' | 'debloquee')."""
         self.mode       = mode
         self._callback  = None
         self.visible    = True
@@ -441,28 +605,21 @@ class PopupPaiement:
     def gerer_event(self, event) -> bool:
         if not self.visible:
             return False
+        if self._temps_msg and pygame.time.get_ticks() - self._temps_msg > 2500:
+            self.visible = False; self._temps_msg = 0
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                self.visible = False
-                return True
+                self.visible = False; return True
             if event.key == pygame.K_RETURN and self.mode == 'confirmer':
-                self._confirmer()
-                return True
+                self._confirmer(); return True
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.mode == 'confirmer':
                 if self._btn_oui.collidepoint(event.pos):
-                    self._confirmer()
-                    return True
+                    self._confirmer(); return True
                 if self._btn_non.collidepoint(event.pos) or not self.rect.collidepoint(event.pos):
-                    self.visible = False
-                    return True
+                    self.visible = False; return True
             else:
-                self.visible = False
-                return True
-        # Auto-fermeture des messages temporaires après 2.5s
-        if self._temps_msg and pygame.time.get_ticks() - self._temps_msg > 2500:
-            self.visible    = False
-            self._temps_msg = 0
+                self.visible = False; return True
         return self.visible
 
     def _confirmer(self):
@@ -474,72 +631,80 @@ class PopupPaiement:
         if not self.visible:
             return
 
-        # Overlay léger
-        overlay = pygame.Surface((self.lw, self.lh), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 130))
-        surface.blit(overlay, (0, 0))
+        # Overlay
+        ov = pygame.Surface((self.lw, self.lh), pygame.SRCALPHA)
+        ov.fill((0, 0, 0, 140))
+        surface.blit(ov, (0, 0))
 
-        # Fond popup
+        # Fond popup pierre
         fond = pygame.Surface((self.LARGEUR, self.HAUTEUR), pygame.SRCALPHA)
-        fond.fill((20, 10, 40, 240))
-        pygame.draw.rect(fond, (140, 80, 255) if self.mode != 'pauvre' else (200, 50, 50),
-                         fond.get_rect(), width=2, border_radius=8)
+        for y in range(self.HAUTEUR):
+            t = y / self.HAUTEUR
+            r = int(26 + t * 10)
+            g = int(22 + t * 8)
+            b = int(36 + t * 14)
+            pygame.draw.line(fond, (r, g, b, 245), (0, y), (self.LARGEUR, y))
+
+        coul_bord = (200, 50, 50) if self.mode == 'pauvre' else (115, 88, 22)
+        pygame.draw.rect(fond, coul_bord, fond.get_rect(), 2, border_radius=8)
+        pygame.draw.rect(fond, (50, 38, 10), pygame.Rect(5, 5, self.LARGEUR - 10, self.HAUTEUR - 10),
+                         1, border_radius=6)
+
+        # Coins runiques
+        for cx, cy in [(8, 8), (self.LARGEUR - 20, 8)]:
+            _dessiner_rune(fond, _RUNES_FORMES[7], cx, cy, 8, (120, 92, 20))
+
         surface.blit(fond, self.rect.topleft)
 
         cx = self.rect.centerx
         cy = self.rect.centery
 
         if self.mode == 'confirmer':
-            # Titre
-            titre = getattr(self, '_titre_popup', "Pancarte mystérieuse")
-            t1 = self._font.render(titre, True, (200, 160, 255))
+            titre = getattr(self, '_titre_popup', "Stèle Mystérieuse")
+            t1 = self._font.render(titre, True, (215, 175, 58))
             surface.blit(t1, t1.get_rect(center=(cx, self.rect.y + 30)))
-            # Message
-            t2 = self._font.render(
-                getattr(self, '_message_popup', f"Payer {COUT_AMES} âmes pour révéler ce secret ?"), True, (200, 185, 230))
-            surface.blit(t2, t2.get_rect(center=(cx, cy - 10)))
-            # Sous-message
-            t3 = self._font.render(
-                "Cette connaissance est permanente.", True, (140, 120, 160))
-            surface.blit(t3, t3.get_rect(center=(cx, cy + 14)))
 
-            # Boutons
-            btn_y = self.rect.bottom - 56
-            self._btn_oui.center = (cx - 65, btn_y)
-            self._btn_non.center = (cx + 65, btn_y)
+            msg = getattr(self, '_message_popup', f"Payer {COUT_AMES} âmes pour déchiffrer ?")
+            t2 = self._font.render(msg, True, (200, 188, 150))
+            surface.blit(t2, t2.get_rect(center=(cx, cy - 12)))
 
-            # Oui
+            t3 = self._font_sub.render("L'écho des anciens coulera en vous.", True, (130, 110, 70))
+            surface.blit(t3, t3.get_rect(center=(cx, cy + 12)))
+
+            btn_y = self.rect.bottom - 54
+            self._btn_oui.center = (cx - 68, btn_y)
+            self._btn_non.center = (cx + 68, btn_y)
             mx, my = pygame.mouse.get_pos()
-            survol_oui = self._btn_oui.collidepoint(mx, my)
-            pygame.draw.rect(surface, (30, 15, 60) if not survol_oui else (50, 25, 100),
-                             self._btn_oui, border_radius=6)
-            pygame.draw.rect(surface, (140, 80, 255), self._btn_oui, width=1, border_radius=6)
-            s_oui = self._font_btn.render("Payer", True, (200, 160, 255))
-            surface.blit(s_oui, s_oui.get_rect(center=self._btn_oui.center))
 
-            # Non
-            survol_non = self._btn_non.collidepoint(mx, my)
-            pygame.draw.rect(surface, (30, 10, 10) if not survol_non else (55, 18, 18),
-                             self._btn_non, border_radius=6)
-            pygame.draw.rect(surface, (180, 50, 50), self._btn_non, width=1, border_radius=6)
-            s_non = self._font_btn.render("Renoncer", True, (220, 80, 80))
-            surface.blit(s_non, s_non.get_rect(center=self._btn_non.center))
+            # Bouton Payer
+            survol = self._btn_oui.collidepoint(mx, my)
+            pygame.draw.rect(surface, (35, 28, 8) if not survol else (60, 48, 12),
+                             self._btn_oui, border_radius=5)
+            pygame.draw.rect(surface, (140, 108, 28), self._btn_oui, 1, border_radius=5)
+            s = self._font_btn.render("Payer", True, (220, 180, 60))
+            surface.blit(s, s.get_rect(center=self._btn_oui.center))
 
-            # Hint clavier
-            hint = self._font.render("[Entrée] Confirmer  |  [Échap] Annuler", True, (80, 60, 100))
-            surface.blit(hint, hint.get_rect(center=(cx, self.rect.bottom - 16)))
+            # Bouton Renoncer
+            survol2 = self._btn_non.collidepoint(mx, my)
+            pygame.draw.rect(surface, (35, 12, 12) if not survol2 else (60, 20, 20),
+                             self._btn_non, border_radius=5)
+            pygame.draw.rect(surface, (180, 50, 50), self._btn_non, 1, border_radius=5)
+            s2 = self._font_btn.render("Renoncer", True, (220, 80, 80))
+            surface.blit(s2, s2.get_rect(center=self._btn_non.center))
+
+            hint = self._font_sub.render("[Entrée] Confirmer  |  [Échap] Annuler", True, (80, 65, 30))
+            surface.blit(hint, hint.get_rect(center=(cx, self.rect.bottom - 14)))
 
         elif self.mode == 'pauvre':
             t1 = self._font.render("⚠  Âmes insuffisantes", True, (220, 80, 80))
-            surface.blit(t1, t1.get_rect(center=(cx, cy - 25)))
-            t2 = self._font.render(
-                f"Il vous faut {COUT_AMES} âmes.", True, (180, 120, 120))
+            surface.blit(t1, t1.get_rect(center=(cx, cy - 22)))
+            t2 = self._font.render(f"Il vous faut {self._cout} âmes.", True, (180, 100, 100))
             surface.blit(t2, t2.get_rect(center=(cx, cy + 2)))
-            t3 = self._font.render("Continuez votre chemin...", True, (140, 90, 90))
-            surface.blit(t3, t3.get_rect(center=(cx, cy + 24)))
+            t3 = self._font_sub.render("Continuez votre chemin...", True, (130, 80, 80))
+            surface.blit(t3, t3.get_rect(center=(cx, cy + 22)))
 
         elif self.mode == 'debloquee':
-            t1 = self._font.render("✦  Secret révélé  ✦", True, (255, 200, 80))
-            surface.blit(t1, t1.get_rect(center=(cx, cy - 15)))
-            t2 = self._font.render("Interagissez à nouveau pour lire.", True, (200, 170, 100))
+            t1 = self._font.render("✦  Mémoire absorbée  ✦", True, (220, 178, 58))
+            surface.blit(t1, t1.get_rect(center=(cx, cy - 14)))
+            t2 = self._font_sub.render("Vous portez désormais le pas des Éclaireurs.", True, (175, 148, 80))
             surface.blit(t2, t2.get_rect(center=(cx, cy + 10)))

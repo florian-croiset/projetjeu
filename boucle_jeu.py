@@ -261,14 +261,16 @@ class BoucleJeuMixin:
 
                                 type_p = getattr(pancarte, 'type_pancarte', 'lore')
                                 if type_p == 'shop_dash':
-                                    self.popup_paiement._titre_popup = "Marchand de capacités"
-                                    self.popup_paiement._message_popup = f"Acheter le Dash — {COUT_DASH} âmes ?"
+                                    self.popup_paiement._titre_popup = "Fragment de Mémoire"
+                                    self.popup_paiement._message_popup = f"Absorber ce souvenir — {COUT_DASH} âmes ?"
                                 else:
                                     self.popup_paiement._titre_popup = "Pancarte mystérieuse"
                                     self.popup_paiement._message_popup = f"Payer {COUT_AMES} âmes pour révéler ce secret ?"
+                                cout = COUT_DASH if type_p == 'shop_dash' else COUT_AMES
                                 self.popup_paiement.ouvrir_confirmation(
                                     mon_joueur.argent,
-                                    _callback_paiement
+                                    _callback_paiement,
+                                    cout
                                 )
 
             if event.type == pygame.MOUSEBUTTONDOWN:
@@ -715,7 +717,12 @@ class BoucleJeuMixin:
             pancarte.set_etat(dp)
             if not etait_debloquee and dp['est_debloquee']:
                 if getattr(self, '_pancarte_active_id', None) == idx:
-                    self.bulle_lore.ouvrir()
+                    type_p = dp.get('type_pancarte', 'lore')
+                    if type_p == 'shop_dash':
+                        from core.pancarte_lore import TEXTE_LORE_DASH
+                        self.bulle_lore.ouvrir(TEXTE_LORE_DASH)
+                    else:
+                        self.bulle_lore.ouvrir()
                     self._pancarte_active_id = None
 
         # --- Portes ---
@@ -857,6 +864,8 @@ class BoucleJeuMixin:
                     'toggle_torche':  commandes_a_envoyer.get('toggle_torche', False),
                     'interagir':      commandes_a_envoyer.get('interagir', False),
                 }
+                if commandes_a_envoyer.get('interagir'):
+                    print(f"[DEBUG CLIENT] Envoi interagir=True via UDP")
                 self._udp_envoyer_inputs(commandes_a_envoyer, one_shot)
                 if time.monotonic() - self._dernier_keepalive_tcp > 5.0:
                     try:
