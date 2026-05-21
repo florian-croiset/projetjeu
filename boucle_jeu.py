@@ -1,6 +1,5 @@
 # boucle_jeu.py
 # Mixin pour la boucle de jeu en réseau (input, rendu monde, connexion).
-# MISE À JOUR : Rendu Porte interactive + Orbes de capacités + Pancartes Lore.
 
 from ui.tutoriel import Tutoriel
 from sauvegarde import gestion_parametres
@@ -36,7 +35,9 @@ from core.cle import Cle
 from core.porte import Porte
 from core.orbe_capacite import OrbeCapacite
 from core.potion import GestionnairePotions
-from core.pancarte_lore import PancarteLore, BulleLore, PopupPaiement, COUT_AMES, COUT_DASH   # NOUVEAU
+from core.pancarte_lore import PancarteLore, BulleLore, PopupPaiement, COUT_AMES, COUT_DASH
+# --- Journal et icône de quête ---
+from ui.quete import WidgetQuete, JournalQuete
 
 
 def _extraire_id_handshake(reponse):
@@ -140,7 +141,6 @@ class BoucleJeuMixin:
                 return random.choice(['slash2', 'slash3'])
         return 'attaque'
 
-    # APRÈS (corrigé) :
     def gerer_evenements_jeu(self):
         commandes = {
             'clavier':        {'gauche': False, 'droite': False,
@@ -159,13 +159,23 @@ class BoucleJeuMixin:
             if MODE_DEV and envoyer_logs.get_bouton().verifier_clic(event):
                 envoyer_logs.envoyer_maintenant()
 
-            # NOUVEAU — Laisser la bulle et la popup consommer les events en priorité
+            # Touche I → toggle journal de quête (priorité haute, avant les autres)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_i:
+                if hasattr(self, 'journal_quete') and self.journal_quete:
+                    self.journal_quete.toggle()
+                continue  # ne pas propager l'event plus loin
+
+            # Laisser la bulle et la popup consommer les events en priorité
             if self.bulle_lore and self.bulle_lore.visible:
                 if self.bulle_lore.gerer_event(event):
                     continue
             if self.popup_paiement and self.popup_paiement.visible:
                 if self.popup_paiement.gerer_event(event):
                     continue
+
+            # Si le journal est ouvert, bloquer tous les inputs de jeu
+            if hasattr(self, 'journal_quete') and self.journal_quete and self.journal_quete.ouvert:
+                continue
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
@@ -228,7 +238,7 @@ class BoucleJeuMixin:
                     else:
                         music.torche_boucle_stop()
 
-                # NOUVEAU — Touche interaction (F par défaut)
+                # Touche interaction (F par défaut)
                 if event.key == key('interagir'):
                     mon_joueur = self.joueurs_locaux.get(self.mon_id)
                     if mon_joueur and not self.bulle_lore.visible and not self.popup_paiement.visible:
@@ -242,26 +252,25 @@ class BoucleJeuMixin:
                         if pancarte_proche:
                             i, pancarte = pancarte_proche
                             if pancarte.est_debloquee:
-                                # Pancarte déjà payée → ouvrir directement la bulle de lore
                                 self.bulle_lore.ouvrir()
                             else:
-                                # Pancarte verrouillée → ouvrir la popup de paiement
                                 self._pancarte_active_id = i
 
                                 def _callback_paiement():
                                     self._achat_en_attente = self._pancarte_active_id
 
-
                                 type_p = getattr(pancarte, 'type_pancarte', 'lore')
                                 if type_p == 'shop_dash':
-                                    self.popup_paiement._titre_popup = "Marchand de capacités"
-                                    self.popup_paiement._message_popup = f"Acheter le Dash — {COUT_DASH} âmes ?"
+                                    self.popup_paiement._titre_popup = "Fragment de Mémoire"
+                                    self.popup_paiement._message_popup = f"Absorber ce souvenir — {COUT_DASH} âmes ?"
                                 else:
                                     self.popup_paiement._titre_popup = "Pancarte mystérieuse"
                                     self.popup_paiement._message_popup = f"Payer {COUT_AMES} âmes pour révéler ce secret ?"
+                                cout = COUT_DASH if type_p == 'shop_dash' else COUT_AMES
                                 self.popup_paiement.ouvrir_confirmation(
                                     mon_joueur.argent,
-                                    _callback_paiement
+                                    _callback_paiement,
+                                    cout
                                 )
 
             if event.type == pygame.MOUSEBUTTONDOWN:
@@ -305,7 +314,7 @@ class BoucleJeuMixin:
             commandes['echo']          = False
             commandes['echo_dir']      = False
             commandes['toggle_torche'] = False
-            commandes['interagir']     = False   # NOUVEAU
+            commandes['interagir']     = False
 
         if getattr(self, '_achat_en_attente', None) is not None:
             commandes['interagir'] = True
@@ -358,11 +367,9 @@ class BoucleJeuMixin:
         for orbe in self.orbes_capacite_locaux.values():
             if orbe.est_ramasse:
                 continue
-            # Animation de flottement déléguée au client (purement cosmétique).
             orbe.mettre_a_jour(ticks_render)
             if not camera_rect.colliderect(orbe.rect):
                 continue
-            # Ne pas afficher si le joueur a déjà cette capacité
             if orbe.capacite == 'double_saut' and getattr(mon_joueur, 'peut_double_saut', False):
                 continue
             if orbe.capacite == 'dash' and getattr(mon_joueur, 'peut_dash', False):
@@ -371,10 +378,9 @@ class BoucleJeuMixin:
                 continue
             orbe.dessiner(surface_virtuelle, camera_offset, ticks_render)
 
-        # NOUVEAU — Pancartes de lore
+        # --- Pancartes de lore ---
         touche_interagir = self.parametres.get('controles', {}).get('interagir', 'f')
         for pancarte in self.pancartes_lore_locales.values():
-            # Animation des particules déléguée au client.
             pancarte.mettre_a_jour(ticks_render)
             if camera_rect.colliderect(pancarte.rect):
                 pancarte.dessiner(surface_virtuelle, camera_offset, ticks_render,
@@ -438,7 +444,6 @@ class BoucleJeuMixin:
             if camera_rect.colliderect(ame.rect):
                 ame.dessiner(surface_virtuelle, camera_offset, temps_ms)
         for ame in self.ames_libres_locales.values():
-            # Animation de flottement déléguée au client.
             ame.mettre_a_jour(temps_ms)
             if camera_rect.colliderect(ame.rect):
                 ame.dessiner(surface_virtuelle, camera_offset, temps_ms)
@@ -447,9 +452,8 @@ class BoucleJeuMixin:
             if camera_rect.colliderect(ame.rect):
                 ame.dessiner(surface_virtuelle, camera_offset, temps_ms)
 
-        # --- Clé ---
+        # --- Clé (image clé, pas orbe) ---
         if self.cle_locale and not self.cle_locale.est_ramassee:
-            # Animation de flottement déléguée au client.
             self.cle_locale.mettre_a_jour(temps_ms)
             if camera_rect.colliderect(self.cle_locale.rect):
                 self.cle_locale.dessiner(surface_virtuelle, camera_offset, temps_ms)
@@ -492,7 +496,7 @@ class BoucleJeuMixin:
                                special_flags=pygame.BLEND_RGBA_MIN)
             surface_virtuelle.blit(obscurite, (0, 0))
 
-        # --- Distortion d'écho (effet local "goutte d'eau") ---
+        # --- Distortion d'écho ---
         if DISTORTION_ECHO_ACTIVE and getattr(self, '_distortions_echo', None):
             t_now_dist = pygame.time.get_ticks()
             self._distortions_echo = [
@@ -543,9 +547,6 @@ class BoucleJeuMixin:
         if getattr(self, '_fin_message_depuis', None) is not None:
             self._dessiner_message_fin(self.ecran)
 
-        # NOUVEAU — Rendu UI pancarte par-dessus tout (sur self.ecran, pas sur surface_virtuelle)
-        # La bulle et la popup sont dessinées dans boucle_jeu_reseau après display.flip
-
     # ==================================================================
     #  BOUCLE JEU RÉSEAU
     # ==================================================================
@@ -584,7 +585,7 @@ class BoucleJeuMixin:
 
     def _appliquer_etat_serveur(self, donnees_recues):
         """Applique l'état reçu du serveur aux entités locales."""
-        # --- Horloge serveur (pour interpolation en TCP ou fallback UDP) ---
+        # --- Horloge serveur ---
         t_serveur = donnees_recues.get('t')
         if t_serveur is not None:
             now_ms = int(time.monotonic() * 1000)
@@ -611,17 +612,16 @@ class BoucleJeuMixin:
             if dj['id'] not in self.joueurs_locaux:
                 self.joueurs_locaux[dj['id']] = Joueur(dj['x'], dj['y'], dj['id'])
             joueur = self.joueurs_locaux[dj['id']]
-            # Pour le joueur local en TCP : ne pas écraser la position 10 Hz
-            # (sinon saccadement). On la passera par le buffer d'interpolation
-            # juste après pour avoir un mouvement fluide à 60 fps.
             if not self.udp_actif and dj['id'] == self.mon_id:
                 joueur.set_etat_local(dj)
             else:
                 joueur.set_etat(dj)
-            # En mode TCP : alimenter le buffer d'interpolation pour TOUS les
-            # joueurs (y compris le local) afin de lisser le mouvement entre
-            # deux paquets 10 Hz. En UDP, les snapshots 30 Hz s'en chargent
-            # et un double push ici casserait la monotonie du buffer.
+            # Comptage des âmes récoltées (cumul sur les hausses d'argent)
+            if dj['id'] == self.mon_id:
+                argent_av = self._argent_joueur_precedent
+                if argent_av is not None and joueur.argent > argent_av:
+                    self._ames_recoltees_total += joueur.argent - argent_av
+                self._argent_joueur_precedent = joueur.argent
             if (not self.udp_actif
                     and t_serveur is not None
                     and hasattr(joueur, 'pousser_snapshot_interp')):
@@ -645,11 +645,15 @@ class BoucleJeuMixin:
                     pv_max=de.get('pv_max', 2))
             ennemi = self.ennemis_locaux[de['id']]
             ennemi.set_etat(de)
-            if (not self.udp_actif
-                    and t_serveur is not None
-                    and hasattr(ennemi, 'pousser_snapshot_interp')):
-                ennemi.pousser_snapshot_interp(t_serveur, de['x'], de['y'])
 
+            # Comptage kills : on check la donnée brute du serveur
+            if de.get('est_mort', False):
+                if not hasattr(self, '_ennemis_morts_comptes'):
+                    self._ennemis_morts_comptes = set()
+                if de['id'] not in self._ennemis_morts_comptes:
+                    self._ennemis_morts_comptes.add(de['id'])
+                    self._ennemis_tues_total = getattr(self, '_ennemis_tues_total', 0) + 1
+                    
         for ennemi_local in self.ennemis_locaux.values():
             for nom_son in ennemi_local.sons_a_jouer:
                 music.jouer_sfx(nom_son)
@@ -698,7 +702,12 @@ class BoucleJeuMixin:
                     do['x'], do['y'], do['capacite'])
             self.orbes_capacite_locaux[do['id']].set_etat(do)
 
-        # NOUVEAU — Pancartes lore
+        # Comptage des kills
+        if getattr(ennemi, 'est_mort', False) and not getattr(ennemi, '_mort_compte', False):
+            ennemi._mort_compte = True
+            self._ennemis_tues_total += 1
+
+        # --- Pancartes lore ---
         for dp in donnees_recues.get('pancartes_lore', []):
             idx = dp.get('id', 0)
             if idx not in self.pancartes_lore_locales:
@@ -706,10 +715,14 @@ class BoucleJeuMixin:
             pancarte = self.pancartes_lore_locales[idx]
             etait_debloquee = pancarte.est_debloquee
             pancarte.set_etat(dp)
-            # Si la pancarte vient d'être débloquée par CE joueur → ouvrir la bulle
             if not etait_debloquee and dp['est_debloquee']:
                 if getattr(self, '_pancarte_active_id', None) == idx:
-                    self.bulle_lore.ouvrir()
+                    type_p = dp.get('type_pancarte', 'lore')
+                    if type_p == 'shop_dash':
+                        from core.pancarte_lore import TEXTE_LORE_DASH
+                        self.bulle_lore.ouvrir(TEXTE_LORE_DASH)
+                    else:
+                        self.bulle_lore.ouvrir()
                     self._pancarte_active_id = None
 
         # --- Portes ---
@@ -723,7 +736,6 @@ class BoucleJeuMixin:
             porte = self.portes_locales[i]
             porte.set_etat(data_porte)
 
-            # Jouer le son d'ouverture si la porte commence à s'ouvrir
             etait_en_ouverture = self._portes_etaient_en_ouverture.get(i, False)
             if not etait_en_ouverture and porte.en_ouverture:
                 music.jouer_sfx('porte')
@@ -731,6 +743,22 @@ class BoucleJeuMixin:
                     self._fin_message_depuis = pygame.time.get_ticks()
             self._portes_etaient_en_ouverture[i] = porte.en_ouverture
 
+            # Mettre à jour le journal et l'icône dès qu'une porte s'ouvre ou est ouverte
+            if hasattr(self, 'widget_quete') and self.widget_quete:
+                self.widget_quete.mettre_a_jour(self.cle_locale, porte, self.boss_local)
+            if hasattr(self, 'journal_quete') and self.journal_quete:
+                self.journal_quete.mettre_a_jour(self.cle_locale, porte, self.boss_local)
+
+            if hasattr(self, 'widget_quete') and self.widget_quete:
+                self.widget_quete.mettre_a_jour(
+                    self.cle_locale, porte, self.boss_local,
+                    ennemis_tues=self._ennemis_tues_total,
+                    ames=self._ames_recoltees_total)
+            if hasattr(self, 'journal_quete') and self.journal_quete:
+                self.journal_quete.mettre_a_jour(
+                    self.cle_locale, porte, self.boss_local,
+                    ennemis_tues=self._ennemis_tues_total,
+                    ames=self._ames_recoltees_total)
         # --- Boss ---
         data_boss = donnees_recues.get('boss_room')
         if data_boss and not data_boss['boss_defeated']:
@@ -744,8 +772,6 @@ class BoucleJeuMixin:
             self.boss_local.set_etat(data_boss['boss'])
             etat_boss_actuel = data_boss['boss']['state']
             frame_actuelle   = data_boss['boss'].get('frame_index', 0)
-            # Joue le son au moment de l'impact (entrée dans la fenêtre active
-            # de frames du CLEAVE), pas au début de l'animation.
             if (etat_boss_actuel == 'CLEAVE'
                     and self._boss_frame_precedent < DemonSlimeBoss.CLEAVE_ACTIVE_FRAME_START
                     and frame_actuelle >= DemonSlimeBoss.CLEAVE_ACTIVE_FRAME_START):
@@ -780,14 +806,13 @@ class BoucleJeuMixin:
             return
         music.demarrer()
 
-        # --- Initialiser le thread réseau ---
         self._reseau_lock = threading.Lock()
         self._reseau_actif = True
         self._commandes_a_envoyer = {
             'clavier': {'gauche': False, 'droite': False,
                         'saut': False, 'attaque': False, 'dash': False},
             'echo': False,
-            'interagir': False,   # NOUVEAU
+            'interagir': False,
         }
         self._dernier_etat_serveur = None
         self._nouvel_etat_disponible = False
@@ -796,9 +821,6 @@ class BoucleJeuMixin:
         udp_actif = getattr(self, 'udp_actif', False)
         self._dernier_keepalive_tcp = time.monotonic()
 
-        # En mode UDP on ne lance PAS le thread TCP bloquant : le client tournera
-        # tout en non-bloquant dans la boucle Pygame. Le TCP reste ouvert
-        # uniquement pour un keepalive rare (évite le timeout côté serveur).
         thread_reseau = None
         if not udp_actif:
             thread_reseau = threading.Thread(target=self._thread_reseau, daemon=True)
@@ -814,7 +836,7 @@ class BoucleJeuMixin:
                 'clavier': {'gauche': False, 'droite': False,
                             'saut': False, 'attaque': False, 'dash': False},
                 'echo': False,
-                'interagir': False,   # NOUVEAU
+                'interagir': False,
             }
 
             if self.etat_jeu_interne == "JEU":
@@ -836,22 +858,21 @@ class BoucleJeuMixin:
                 break
 
             if udp_actif:
-                # 1. Envoi inputs via UDP.
                 one_shot = {
                     'echo':           commandes_a_envoyer.get('echo', False),
                     'echo_dir':       commandes_a_envoyer.get('echo_dir', False),
                     'toggle_torche':  commandes_a_envoyer.get('toggle_torche', False),
                     'interagir':      commandes_a_envoyer.get('interagir', False),
                 }
+                if commandes_a_envoyer.get('interagir'):
+                    print(f"[DEBUG CLIENT] Envoi interagir=True via UDP")
                 self._udp_envoyer_inputs(commandes_a_envoyer, one_shot)
-                # 2. Keepalive TCP toutes les 5 s pour que le serveur n'invalide pas le socket.
                 if time.monotonic() - self._dernier_keepalive_tcp > 5.0:
                     try:
                         send_complet(self.client_socket, {})
                     except Exception as e:
                         self._erreur_reseau = f"TCP keepalive: {e}"
                     self._dernier_keepalive_tcp = time.monotonic()
-                # 3. Pomper les paquets UDP entrants et appliquer.
                 self._udp_pomper_et_appliquer()
             else:
                 with self._reseau_lock:
@@ -875,7 +896,6 @@ class BoucleJeuMixin:
                 if donnees_recues:
                     self._appliquer_etat_serveur(donnees_recues)
 
-            # Interpolation joueurs distants + ennemis (TCP comme UDP)
             self._mettre_a_jour_interpolations(int(time.monotonic() * 1000))
 
             # Dessiner le monde
@@ -887,11 +907,21 @@ class BoucleJeuMixin:
             elif self.etat_jeu_interne == "LUMINOSITE_JEU":
                 self.dessiner_menu_luminosite()
 
-            # NOUVEAU — Rendu UI pancarte sur self.ecran (au-dessus du zoom)
+            # UI pancarte sur l'écran final (au-dessus du zoom)
             if self.bulle_lore and self.bulle_lore.visible:
                 self.bulle_lore.dessiner(self.ecran)
             if self.popup_paiement and self.popup_paiement.visible:
                 self.popup_paiement.dessiner(self.ecran)
+
+            # --- Journal de quête (parchemin plein écran, touche I) ---
+            if hasattr(self, 'journal_quete') and self.journal_quete:
+                self.journal_quete.mettre_a_jour(
+                    self.cle_locale,
+                    next(iter(self.portes_locales.values()), None),
+                    self.boss_local,
+                    ennemis_tues=getattr(self, '_ennemis_tues_total', 0),
+                    ames=getattr(self, '_ames_recoltees_total', 0),)
+                self.journal_quete.dessiner(self.ecran)
 
             pygame.display.flip()
             self.horloge.tick(FPS)
@@ -906,7 +936,6 @@ class BoucleJeuMixin:
         type_lancement  = "nouvelle" if est_nouvelle_partie else "charger"
         self._serveur_instance = None
 
-        # Réutiliser le relay s'il tourne déjà (il reste actif entre les parties)
         if getattr(self, '_relay_instance', None) and self._relay_instance._running:
             print(f"[CLIENT] Relay déjà actif sur le port {RELAY_PORT}, réutilisation")
         else:
@@ -948,7 +977,6 @@ class BoucleJeuMixin:
             self.etat_jeu = "MENU_PRINCIPAL"
 
     def _initier_udp_si_dispo(self, reponse_handshake, hote_tcp: str) -> bool:
-        """Tente un handshake UDP. Retourne True si l'UDP est actif, False si fallback TCP."""
         self.udp_actif      = False
         self.udp_endpoint   = None
         self.udp_conn       = None
@@ -961,8 +989,6 @@ class BoucleJeuMixin:
         if not token or not port_udp:
             return False
 
-        # Détermine l'IP locale que l'OS utiliserait pour atteindre le serveur,
-        # afin de binder uniquement cette interface (et non 0.0.0.0).
         try:
             _probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
@@ -984,7 +1010,6 @@ class BoucleJeuMixin:
                                      heartbeat_ms=UDP_HEARTBEAT_INTERVAL_MS,
                                      timeout_ms=UDP_CONNECTION_TIMEOUT_MS)
 
-        # Envoie le token au serveur UDP et attend HANDSHAKE_ACK.
         self.udp_conn.envoyer_control(UDP_P.TYPE_HANDSHAKE_UDP, {'token': token})
 
         deadline = time.monotonic() + UDP_HANDSHAKE_TIMEOUT_MS / 1000.0
@@ -1005,7 +1030,6 @@ class BoucleJeuMixin:
                 prochain_renvoi = time.monotonic() + intervalle_rtx
             time.sleep(0.02)
 
-        # Échec → on abandonne le socket UDP, fallback TCP.
         print(f"[CLIENT] UDP handshake échoué après {UDP_HANDSHAKE_TIMEOUT_MS} ms, bascule TCP")
         try:
             self.udp_endpoint.fermer()
@@ -1019,12 +1043,9 @@ class BoucleJeuMixin:
     def _udp_envoyer_inputs(self, commandes: dict, one_shot_commandes: dict):
         if not self.udp_actif or self.udp_conn is None:
             return
-        # Inclure pseudo et skin dans les continus
         payload_continus = dict(commandes.get('clavier', {}))
         payload_continus['pseudo'] = commandes.get('pseudo', '')
         payload_continus['skin']   = commandes.get('skin', 0)
-        # Cache du pickle : la majorité des frames le payload est identique
-        # (idle, ou même direction maintenue). Évite ~60 pickle.dumps/s.
         last = getattr(self, '_inputs_pickle_cache', None)
         if last is not None and last[0] == payload_continus:
             data_pickle = last[1]
@@ -1036,7 +1057,6 @@ class BoucleJeuMixin:
             self.udp_conn.envoyer_reliable(UDP_P.TYPE_INPUT_ONESHOT, one_shot_commandes)
 
     def _udp_pomper_et_appliquer(self):
-        """Drain l'UDP, applique snapshots (positions) + état discret (pickle)."""
         if not self.udp_actif or self.udp_conn is None or self.udp_endpoint is None:
             return
         for data, addr in self.udp_endpoint.pomper():
@@ -1059,9 +1079,7 @@ class BoucleJeuMixin:
                     self._appliquer_etat_serveur(payload)
 
     def _appliquer_snapshot_udp(self, snap: dict, now_ms: int):
-        """Applique positions struct : local → direct ; distants → buffer d'interp."""
         t_serveur = snap.get('t', 0)
-        # Offset d'horloge : on ramène le temps serveur à la monotonic client.
         self.udp_offset_serveur_ms = t_serveur - now_ms
 
         for jd in snap.get('joueurs', []):
@@ -1070,7 +1088,6 @@ class BoucleJeuMixin:
             if joueur is None:
                 continue
             if jid == self.mon_id:
-                # Joueur local : snapping direct (pas d'interp pour éviter le lag).
                 joueur.rect.x = int(jd['x'])
                 joueur.rect.y = int(jd['y'])
             else:
@@ -1084,7 +1101,6 @@ class BoucleJeuMixin:
             if hasattr(ennemi, 'pousser_snapshot_interp'):
                 ennemi.pousser_snapshot_interp(t_serveur, ed['x'], ed['y'])
 
-        # Boss : snap direct à 60 Hz (l'état discret 10 Hz fournit pv/state/flags)
         boss_data = snap.get('boss')
         if boss_data and self.boss_local is not None:
             self.boss_local.pos.x = boss_data['x']
@@ -1095,9 +1111,6 @@ class BoucleJeuMixin:
             return
         t_render = now_ms + self.udp_offset_serveur_ms - INTERP_DELAY_MS
         for jid, joueur in self.joueurs_locaux.items():
-            # En UDP, le joueur local est snappé directement (cf. _appliquer_snapshot_udp)
-            # à 30 Hz : pas besoin d'interp (et son buffer est vide de toute façon).
-            # En TCP, on l'interpole comme les autres pour lisser les ticks 10 Hz.
             if self.udp_actif and jid == self.mon_id:
                 continue
             if hasattr(joueur, 'mettre_a_jour_interp'):
@@ -1121,14 +1134,23 @@ class BoucleJeuMixin:
         self.ames_libres_locales    = {}
         self.ames_loot_locales      = {}
         self.orbes_capacite_locaux  = {}
-        self.pancartes_lore_locales = {}   # NOUVEAU
-        self.portes_locales         = {}   # id -> Porte
+        self.pancartes_lore_locales = {}
+        self.portes_locales         = {}
         self.cle_locale             = None
+        self._ennemis_tues_total   = 0
+        self._ennemis_morts_comptes = set() 
+        self._ames_recoltees_total = 0
+        self._argent_joueur_precedent = None
         self.potions                = GestionnairePotions()
-        # NOUVEAU — UI pancarte (taille dépend de l'écran courant)
-        self.bulle_lore         = BulleLore(self.largeur_ecran, self.hauteur_ecran)
-        self.popup_paiement     = PopupPaiement(self.largeur_ecran, self.hauteur_ecran)
-        self._pancarte_active_id = None   # Indice de la pancarte en cours de paiement
+        self.bulle_lore             = BulleLore(self.largeur_ecran, self.hauteur_ecran)
+        self.popup_paiement         = PopupPaiement(self.largeur_ecran, self.hauteur_ecran)
+        self._pancarte_active_id    = None
+        # --- Icône journal (widget HUD) + journal parchemin (touche I) ---
+        self.widget_quete  = WidgetQuete(self.police_bouton, self.police_petit)
+        self.journal_quete = JournalQuete(
+            self.largeur_ecran, self.hauteur_ecran,
+            self.police_titre, self.police_texte, self.police_petit,
+        )
         profil = self.parametres.get('profil', {})
         self._profil_pseudo = profil.get('pseudo', 'Joueur')
         self._profil_skin   = profil.get('skin', 0)
@@ -1167,11 +1189,11 @@ class BoucleJeuMixin:
             self.message_erreur_connexion = f"Connexion refusée : {hote}:{PORT_SERVEUR}\nLe serveur n'est pas démarré."
             self.client_socket = None
             return False
-        except socket.gaierror as e:
+        except socket.gaierror:
             self.message_erreur_connexion = f"Adresse invalide : '{hote}'"
             self.client_socket = None
             return False
-        except socket.error as e:
+        except socket.error:
             self.message_erreur_connexion = f"Impossible de se connecter\nau serveur : {hote}"
             self.client_socket = None
             return False
@@ -1198,9 +1220,6 @@ class BoucleJeuMixin:
             self.mon_id = _extraire_id_handshake(reponse)
             self.message_erreur_connexion = None
             self._finaliser_connexion()
-            # Le relay TCP ne transportera PAS l'UDP : on ne tente l'UDP
-            # que sur une connexion directe (host param fourni côté ConnexionUDP).
-            # Via relay, on reste en mode TCP.
             self.udp_actif = False
             return True
 
@@ -1219,7 +1238,6 @@ class BoucleJeuMixin:
 
     def nettoyer_connexion(self):
         pygame.mouse.set_visible(True)
-        # UDP
         endpoint_udp = getattr(self, 'udp_endpoint', None)
         if endpoint_udp is not None:
             try:
@@ -1247,8 +1265,6 @@ class BoucleJeuMixin:
                     srv.pathfinding.arreter()
             except Exception:
                 pass
-        # Le relay reste actif entre les parties pour éviter "Address already in use".
-        # Il est arrêté uniquement à la fermeture de l'app (voir arreter_relay_global).
         music.torche_boucle_stop()
         if hasattr(self, 'torche') and self.torche:
             self.torche.allumee = False
@@ -1262,18 +1278,24 @@ class BoucleJeuMixin:
         self.ames_libres_locales    = {}
         self.ames_loot_locales      = {}
         self.orbes_capacite_locaux  = {}
-        self.pancartes_lore_locales = {}   # NOUVEAU
-        self.portes_locales         = {}   # id -> Porte
+        self.pancartes_lore_locales = {}
+        self.portes_locales         = {}
         self.cle_locale             = None
+        self._ennemis_tues_total   = 0
+        self._ennemis_morts_comptes = set() 
+        self._ames_recoltees_total = 0
+        self._argent_joueur_precedent = None
         self.carte                  = None
         self.vis_map_locale         = None
         self.boss_local             = None
-        self._portes_etaient_en_ouverture  = {}
-        self._fin_message_depuis        = None
-        self._boss_etat_precedent       = None
-        self._boss_frame_precedent      = 0
-        self.etat_jeu_interne           = "JEU"
-        # NOUVEAU — reset UI pancarte
+        self._portes_etaient_en_ouverture = {}
+        self._fin_message_depuis          = None
+        self._boss_etat_precedent         = None
+        self._boss_frame_precedent        = 0
+        self.etat_jeu_interne             = "JEU"
         self.bulle_lore          = None
         self.popup_paiement      = None
         self._pancarte_active_id = None
+        # --- Reset journal et icône quête ---
+        self.widget_quete  = None
+        self.journal_quete = None

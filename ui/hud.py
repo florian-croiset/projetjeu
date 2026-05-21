@@ -111,6 +111,16 @@ class HudMixin:
         # Capacités débloquées
         self._dessiner_indicateurs_capacites(x0, y_cur, mon_joueur)
 
+        # Icône journal (haut gauche, en dessous de l'indicateur Echo et des capacités)
+        if hasattr(self, 'widget_quete') and self.widget_quete:
+            self.widget_quete.mettre_a_jour(
+                self.cle_locale,
+                next(iter(self.portes_locales.values()), None),
+                self.boss_local,
+                ennemis_tues=getattr(self, '_ennemis_tues_total', 0),
+                ames=getattr(self, '_ames_recoltees_total', 0))
+            self.widget_quete.dessiner(self.ecran, y_offset = y_cur + 56)
+
         if MODE_DEV:
             self._dessiner_debug_hud()
 
@@ -308,6 +318,32 @@ class HudMixin:
         lbl = self.police_texte.render("Clé", True, (255, 215, 0))
         self.ecran.blit(lbl, (x + 20, y + 1))
 
+
+    def _dessiner_message_fin(self, surface):
+        """Affiche le message de fin avec un fondu progressif."""
+        if self._fin_message_depuis is None:
+            return
+        elapsed = pygame.time.get_ticks() - self._fin_message_depuis
+        # Fondu d'apparition sur 1500 ms
+        alpha = min(255, int(255 * min(elapsed, 1500) / 1500))
+        sw, sh = surface.get_size()
+
+        taille_titre = max(48, sh // 14)
+        if (not hasattr(self, '_font_fin')
+                or getattr(self, '_font_fin_taille', None) != taille_titre):
+            self._font_fin = pygame.font.Font(None, taille_titre)
+            self._font_fin_taille = taille_titre
+
+        # Voile sombre pour faire ressortir le texte
+        overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, int(alpha * 0.5)))
+        surface.blit(overlay, (0, 0))
+
+        txt = self._font_fin.render("FIN merci d'avoir joué", True, (0, 212, 255))
+        txt.set_alpha(alpha)
+        rect = txt.get_rect(center=(sw // 2, sh // 2))
+        surface.blit(txt, rect)
+
     # ------------------------------------------------------------------
     #  DEBUG
     # ------------------------------------------------------------------
@@ -396,32 +432,6 @@ class HudMixin:
         pygame.draw.rect(self.ecran, (220, 180, 180), (bar_x, bar_y, bar_w, bar_h), 1)
         nom = self.police_petit.render("Demon Slime", True, (220, 180, 180))
         self.ecran.blit(nom, (bar_x, bar_y - 18))
-
-
-    def _dessiner_message_fin(self, surface):
-        """Affiche le message de fin avec un fondu progressif."""
-        if self._fin_message_depuis is None:
-            return
-        elapsed = pygame.time.get_ticks() - self._fin_message_depuis
-        # Fondu d'apparition sur 1500 ms
-        alpha = min(255, int(255 * min(elapsed, 1500) / 1500))
-        sw, sh = surface.get_size()
-
-        taille_titre = max(48, sh // 14)
-        if (not hasattr(self, '_font_fin')
-                or getattr(self, '_font_fin_taille', None) != taille_titre):
-            self._font_fin = pygame.font.Font(None, taille_titre)
-            self._font_fin_taille = taille_titre
-
-        # Voile sombre pour faire ressortir le texte
-        overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, int(alpha * 0.5)))
-        surface.blit(overlay, (0, 0))
-
-        txt = self._font_fin.render("FIN merci d'avoir joué", True, (0, 212, 255))
-        txt.set_alpha(alpha)
-        rect = txt.get_rect(center=(sw // 2, sh // 2))
-        surface.blit(txt, rect)
 
     def _dessiner_badge_torche(self, surface, camera_offset):
         """
