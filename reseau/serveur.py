@@ -191,12 +191,15 @@ class Serveur:
             self.ennemis[eid] = Ennemi(x=cfg['x'], y=cfg['y'], id=eid, pv_max=cfg['pv_max'])
 
     def creer_ames_libres(self):
-        positions = [
-            (680,  515), (747, 1123), (1021, 1251),
-            (1333,  995), (1510, 515), (2427, 163), (2851,  259),
-        ]
-        for x, y in positions:
-            ame = AmeLibre(x, y)
+        import json, os
+        chemin = os.path.join(os.path.dirname(__file__), '..', 'assets', 'ames.json')
+        try:
+            with open(chemin, 'r') as f:
+                configs = json.load(f)
+        except FileNotFoundError:
+            configs = []
+        for cfg in configs:
+            ame = AmeLibre(cfg['x'], cfg['y'])
             self.ames_libres[ame.id] = ame
 
     def creer_orbes_capacite(self):

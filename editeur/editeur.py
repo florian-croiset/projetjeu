@@ -19,6 +19,7 @@ from editeur import tmx_io, rendu
 from editeur.palette import Palette
 
 _CHEMIN_ENNEMIS = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'ennemis.json')
+_CHEMIN_AMES = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'ames.json')
 
 _COULEURS_ENNEMIS = {1: (255, 220, 0), 2: (255, 140, 0), 3: (220, 50, 50)}
 _LABELS_ENNEMIS = {
@@ -26,6 +27,7 @@ _LABELS_ENNEMIS = {
     2: ("Garde", "2 PV — équilibré"),
     3: ("Gardien", "3 PV — lent, résistant"),
 }
+_COULEUR_AME = (100, 200, 255)
 
 
 # ----------------------------------------------------------------------
@@ -79,10 +81,11 @@ class Editeur:
         self.message_temp = ""
         self.message_temp_fin = 0
 
-        # Mode ennemis
+        # Mode ennemis et âmes
         self.mode = 'tuiles'
         self.pv_ennemi_actif = 1
         self.donnees['ennemis'] = self._charger_ennemis()
+        self.donnees['ames'] = self._charger_ames()
 
         # Polices
         self.police_ui    = pygame.font.SysFont("Arial", 18)
@@ -128,7 +131,12 @@ class Editeur:
         return f"Couche : {nom}"
 
     def _libelle_mode(self):
-        return "Mode : Tuiles  [M]" if self.mode == 'tuiles' else "Mode : Ennemis  [M]"
+        if self.mode == 'tuiles':
+            return "Mode : Tuiles  [M]"
+        elif self.mode == 'ennemis':
+            return "Mode : Ennemis  [M]"
+        else:
+            return "Mode : Âmes  [M]"
 
     def _redimensionner(self, largeur, hauteur):
         self.largeur = largeur
@@ -225,8 +233,9 @@ class Editeur:
                 self.surbrillance_active = False
 
         elif event.type == pygame.MOUSEWHEEL:
-            # Si la palette consomme l'événement, on n'applique pas de zoom
-            if not self.palette.gerer_scroll(event):
+            if self.mode == 'tuiles' and self.palette.gerer_scroll(event):
+                pass  # palette a consommé le scroll
+            else:
                 self._zoomer(event.y, pygame.mouse.get_pos())
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -269,7 +278,7 @@ class Editeur:
                 self.en_peinture = True
                 self._peindre_a_position(event.pos)
 
-        else:  # mode 'ennemis'
+        elif self.mode == 'ennemis':
             if event.button == 1:
                 if self._selectionner_type_ennemi(event.pos):
                     return
@@ -278,6 +287,14 @@ class Editeur:
             elif event.button == 3:
                 if self.viewport.collidepoint(event.pos):
                     self._supprimer_ennemi(event.pos)
+
+        else:  # mode 'ames'
+            if event.button == 1:
+                if self.viewport.collidepoint(event.pos):
+                    self._placer_ame(event.pos)
+            elif event.button == 3:
+                if self.viewport.collidepoint(event.pos):
+                    self._supprimer_ame(event.pos)
 
     def _peindre_a_position(self, pos_ecran):
         """Convertit pos_ecran en case et écrit gid_actif dans la couche active."""
@@ -296,7 +313,8 @@ class Editeur:
     # Méthodes mode ennemis
     # ------------------------------------------------------------------
     def _basculer_mode(self):
-        self.mode = 'ennemis' if self.mode == 'tuiles' else 'tuiles'
+        cycle = {'tuiles': 'ennemis', 'ennemis': 'ames', 'ames': 'tuiles'}
+        self.mode = cycle[self.mode]
         self.en_peinture = False
         self.bouton_mode.texte = self._libelle_mode()
 
@@ -359,6 +377,49 @@ class Editeur:
         )
 
     # ------------------------------------------------------------------
+    # Méthodes mode âmes
+    # ------------------------------------------------------------------
+    def _charger_ames(self):
+        try:
+            with open(_CHEMIN_AMES, 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return []
+
+    def _sauvegarder_ames(self):
+        with open(_CHEMIN_AMES, 'w') as f:
+            json.dump(self.donnees['ames'], f, indent=2)
+
+    def _placer_ame(self, pos_ecran):
+        x_local = pos_ecran[0] - self.viewport.x
+        y_local = pos_ecran[1] - self.viewport.y
+        tx, ty = rendu.ecran_vers_case(
+            x_local, y_local, self.cam_x, self.cam_y, self.zoom, TAILLE_TUILE
+        )
+        if 0 <= tx < self.donnees['largeur'] and 0 <= ty < self.donnees['hauteur']:
+            x = tx * TAILLE_TUILE + TAILLE_TUILE // 2
+            y = ty * TAILLE_TUILE + TAILLE_TUILE // 2
+            self.donnees['ames'].append({'x': x, 'y': y})
+            self.modifie = True
+
+    def _supprimer_ame(self, pos_ecran):
+        x_local = pos_ecran[0] - self.viewport.x
+        y_local = pos_ecran[1] - self.viewport.y
+        xm = x_local / self.zoom + self.cam_x
+        ym = y_local / self.zoom + self.cam_y
+        seuil = TAILLE_TUILE
+        candidat = None
+        dist_min = float('inf')
+        for a in self.donnees['ames']:
+            d = math.hypot(a['x'] - xm, a['y'] - ym)
+            if d < dist_min:
+                dist_min = d
+                candidat = a
+        if candidat is not None and dist_min < seuil:
+            self.donnees['ames'].remove(candidat)
+            self.modifie = True
+
+    # ------------------------------------------------------------------
     def _zoomer(self, sens, pos_pivot):
         """Zoom centré sur la position de la souris."""
         if not self.viewport.collidepoint(pos_pivot):
@@ -394,6 +455,7 @@ class Editeur:
         try:
             tmx_io.sauvegarder_tmx(self.donnees)
             self._sauvegarder_ennemis()
+            self._sauvegarder_ames()
             self.modifie = False
             self._afficher_message("Sauvegardé !")
         except Exception as e:
@@ -467,20 +529,78 @@ class Editeur:
                 gid_apercu_surface=apercu_surf,
             )
 
-        # Ennemis (toujours visibles, quel que soit le mode)
+        # Ennemis et âmes (toujours visibles, quel que soit le mode)
+        self._dessiner_ames_editeur()
         self._dessiner_ennemis_editeur()
 
         # Palette + boutons
         if self.mode == 'tuiles':
             self.palette.dessiner(self.ecran, self.gid_actif)
             self.bouton_couche.dessiner(self.ecran)
-        else:
+        elif self.mode == 'ennemis':
             self._dessiner_palette_ennemis()
+        else:
+            self._dessiner_palette_ames()
         self.bouton_mode.dessiner(self.ecran)
         self.bouton_sauver.dessiner(self.ecran)
 
         # HUD info en haut à gauche du viewport
         self._dessiner_hud()
+
+    def _dessiner_ames_editeur(self):
+        self.ecran.set_clip(self.viewport)
+        for a in self.donnees['ames']:
+            sx = int((a['x'] - self.cam_x) * self.zoom) + self.viewport.x
+            sy = int((a['y'] - self.cam_y) * self.zoom) + self.viewport.y
+            if not (self.viewport.left - 20 <= sx <= self.viewport.right + 20
+                    and self.viewport.top - 20 <= sy <= self.viewport.bottom + 20):
+                continue
+            r = max(5, int(8 * self.zoom))
+            pygame.draw.circle(self.ecran, (0, 0, 0), (sx, sy), r + 2)
+            pygame.draw.circle(self.ecran, _COULEUR_AME, (sx, sy), r)
+            # croix blanche pour distinguer des ennemis
+            d = max(3, r - 2)
+            pygame.draw.line(self.ecran, (255, 255, 255), (sx - d, sy), (sx + d, sy), 1)
+            pygame.draw.line(self.ecran, (255, 255, 255), (sx, sy - d), (sx, sy + d), 1)
+        self.ecran.set_clip(None)
+
+    def _dessiner_palette_ames(self):
+        rect = pygame.Rect(
+            self.largeur - LARGEUR_PALETTE, 0,
+            LARGEUR_PALETTE, self.hauteur - 140,
+        )
+        fond = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        fond.fill(COULEUR_FOND_PANEL)
+        self.ecran.blit(fond, rect.topleft)
+
+        titre = self.police_titre.render("Âmes libres", True, COULEUR_CYAN)
+        self.ecran.blit(titre, (rect.x + 10, rect.y + 10))
+
+        # Bloc info unique
+        y_bloc = rect.y + 50
+        h_bloc = 80
+        fond_bloc = pygame.Surface((rect.width - 20, h_bloc), pygame.SRCALPHA)
+        fond_bloc.fill((20, 30, 50, 220))
+        self.ecran.blit(fond_bloc, (rect.x + 10, y_bloc))
+        pygame.draw.rect(self.ecran, COULEUR_CYAN,
+                         pygame.Rect(rect.x + 10, y_bloc, rect.width - 20, h_bloc), 2)
+
+        cx, cy = rect.x + 30, y_bloc + h_bloc // 2
+        pygame.draw.circle(self.ecran, (0, 0, 0), (cx, cy), 14)
+        pygame.draw.circle(self.ecran, _COULEUR_AME, (cx, cy), 12)
+        d = 7
+        pygame.draw.line(self.ecran, (255, 255, 255), (cx - d, cy), (cx + d, cy), 2)
+        pygame.draw.line(self.ecran, (255, 255, 255), (cx, cy - d), (cx, cy + d), 2)
+
+        s_nom = self.police_ui.render("Âme libre", True, _COULEUR_AME)
+        s_desc = self.police_petite.render("Valeur : 5 âmes", True, COULEUR_TEXTE_SOMBRE)
+        self.ecran.blit(s_nom, (rect.x + 50, y_bloc + h_bloc // 2 - 14))
+        self.ecran.blit(s_desc, (rect.x + 50, y_bloc + h_bloc // 2 + 4))
+
+        # Compteur
+        nb = len(self.donnees['ames'])
+        s_nb = self.police_petite.render(f"{nb} âme(s) placée(s)", True, COULEUR_TEXTE_SOMBRE)
+        self.ecran.blit(s_nb, (rect.x + 10, y_bloc + h_bloc + 12))
 
     def _dessiner_ennemis_editeur(self):
         self.ecran.set_clip(self.viewport)
@@ -568,13 +688,19 @@ class Editeur:
                 f"Tuile sélectionnée : gid {self.gid_actif}",
                 f"Tuile survolée : {tuile_info}",
             ]
-        else:
+        elif self.mode == 'ennemis':
             nom_type = _LABELS_ENNEMIS[self.pv_ennemi_actif][0]
             lignes = [
                 f"Map : {self.donnees['largeur']}x{self.donnees['hauteur']} tuiles",
                 f"Zoom : {int(self.zoom * 100)}%",
                 f"Mode : Ennemis ({len(self.donnees['ennemis'])} placés)",
                 f"Type actif : {nom_type} ({self.pv_ennemi_actif} PV)",
+            ]
+        else:
+            lignes = [
+                f"Map : {self.donnees['largeur']}x{self.donnees['hauteur']} tuiles",
+                f"Zoom : {int(self.zoom * 100)}%",
+                f"Mode : Âmes ({len(self.donnees['ames'])} placées)",
             ]
         if self.modifie:
             lignes.append("● MODIFIÉ (non sauvegardé)")
@@ -593,9 +719,9 @@ class Editeur:
 
         # Aide en bas
         if self.mode == 'tuiles':
-            aide = "ZQSD : déplacer  •  Molette : zoom  •  TAB : couche  •  A : surbrillance  •  M : mode ennemis  •  Ctrl+S : sauver  •  Échap : quitter"
+            aide = "ZQSD : déplacer  •  Molette : zoom  •  TAB : couche  •  A : surbrillance  •  M : mode suivant  •  Ctrl+S : sauver  •  Échap : quitter"
         else:
-            aide = "ZQSD : déplacer  •  Molette : zoom  •  Clic gauche : placer  •  Clic droit : supprimer  •  M : mode tuiles  •  Ctrl+S : sauver  •  Échap : quitter"
+            aide = "ZQSD : déplacer  •  Molette : zoom  •  Clic gauche : placer  •  Clic droit : supprimer  •  M : mode suivant  •  Ctrl+S : sauver  •  Échap : quitter"
         s = self.police_petite.render(aide, True, COULEUR_TEXTE_SOMBRE)
         self.ecran.blit(s, (10, self.hauteur - 22))
 
