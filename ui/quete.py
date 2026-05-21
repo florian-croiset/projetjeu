@@ -276,7 +276,7 @@ class IconeJournal:
             self._porte_vue = True
         _noter("porte", self._porte_vue)
 
-    def dessiner(self, ecran: pygame.Surface, y_offset: int, touche_journal=None):
+    def dessiner(self, ecran: pygame.Surface, y_offset: int, touche_journal=None, x_offset: int = 30):
         if touche_journal is not None:
             self.touche_journal = touche_journal
         nb_total     = len(ETAPES)
@@ -296,7 +296,7 @@ class IconeJournal:
             touche_journal=self.touche_journal,
         )
 
-        ecran.blit(surf, (30, y_offset))
+        ecran.blit(surf, (x_offset, y_offset))
         return hauteur
 
 

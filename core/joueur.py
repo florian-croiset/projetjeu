@@ -616,6 +616,7 @@ class Joueur:
             'peut_echo_dir':     self.peut_echo_dir,
             'echo_age_ms':       max(0, pygame.time.get_ticks() - self.dernier_echo_temps),
             'echo_dir_age_ms':   max(0, pygame.time.get_ticks() - self.dernier_echo_dir_temps),
+            'dash_age_ms':       max(0, pygame.time.get_ticks() - self.dernier_dash_temps),
             'degat_age_ms':      max(0, temps_actuel - self.dernier_degat_temps) if self.dernier_degat_temps > 0 else None,
             'sons':              sons,
             # Champs pour les animations côté client
@@ -653,6 +654,9 @@ class Joueur:
         age_dir = data.get('echo_dir_age_ms')
         if age_dir is not None:
             self.dernier_echo_dir_temps = pygame.time.get_ticks() - age_dir
+        age_dash = data.get('dash_age_ms')
+        if age_dash is not None:
+            self.dernier_dash_temps = pygame.time.get_ticks() - age_dash
         age_degat = data.get('degat_age_ms')
         if age_degat is not None:
             self.dernier_degat_temps = pygame.time.get_ticks() - age_degat
