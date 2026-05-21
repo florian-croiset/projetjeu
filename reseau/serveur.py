@@ -946,13 +946,9 @@ class Serveur:
                                     ame.temps_creation = temps_actuel
                                     ame.nb_visuels = ennemi.argent_drop
                                     self.ames_loot[ame.id] = ame
-                                    r = random.random()
-                                    if ennemi.pv_max >= 3 and r < 0.8:
-                                        self.potions.dropper(cx, cy, 'large')
-                                        print(f"[POTION] Drop large à ({cx}, {cy})")
-                                    elif r < 0.4:
-                                        self.potions.dropper(cx, cy, 'small')
-                                        print(f"[POTION] Drop small à ({cx}, {cy})")
+                                    if random.random() < 0.2:
+                                        taille = 'large' if ennemi.pv_max >= 3 else 'small'
+                                        self.potions.dropper(cx, cy, taille)
                         for id_ame, ame in list(self.ames_perdues.items()):
                             if ame.id_joueur == id_joueur:
                                 if joueur.rect_attaque.colliderect(ame.rect):

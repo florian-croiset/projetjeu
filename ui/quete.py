@@ -1,5 +1,5 @@
 # ui/quete.py
-# IconeJournal (haut gauche, remplace le widget HUD) + Journal de quête (parchemin, touche I).
+# IconeJournal (haut gauche, remplace le widget HUD) + Journal de quête.
 
 import pygame
 import math
@@ -65,6 +65,22 @@ _INK_FADE = (110,  85,  50)   # encre secondaire
 _INK_DONE = ( 55, 100,  45)   # encre verte (terminé)
 _INK_GREY = (145, 120,  75)   # encre grise (inactif)
 _INK_RED  = (130,  40,  25)   # encre rouge (accent)
+
+
+def _formatter_touche_journal(touche):
+    if not touche:
+        return "I"
+    texte = str(touche)
+    if texte.startswith("mouse_"):
+        return "M" + texte.split("_", 1)[1]
+    alias = {
+        "space": "ESPACE",
+        "return": "ENTREE",
+        "escape": "ECHAP",
+        "left shift": "LSHIFT",
+        "right shift": "RSHIFT",
+    }
+    return alias.get(texte.lower(), texte).upper()
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +191,8 @@ def _dessiner_icone_journal(surf: pygame.Surface, x: int, y: int,
                              police_label: pygame.font.Font,
                              police_hint: pygame.font.Font,
                              ticks: int,
-                             nb_completes: int, nb_total: int):
+                             nb_completes: int, nb_total: int,
+                             touche_journal="i"):
     W, H = 32, 36
     cx   = x + W // 2
 
@@ -221,7 +238,7 @@ def _dessiner_icone_journal(surf: pygame.Surface, x: int, y: int,
 
     hint_alpha = int(160 + 95 * math.sin(ticks / 400))
     hint_col   = (max(0, min(255, hint_alpha)),) * 3
-    hint_s = police_hint.render("[I]", True, hint_col)
+    hint_s = police_hint.render(f"[{_formatter_touche_journal(touche_journal)}]", True, hint_col)
     surf.blit(hint_s, (cx - hint_s.get_width() // 2, y_after_book))
     y_after_book += hint_s.get_height()
 
@@ -231,7 +248,7 @@ def _dessiner_icone_journal(surf: pygame.Surface, x: int, y: int,
 class IconeJournal:
     """
     Remplace WidgetQuete : affiche uniquement une petite icône de journal
-    avec le label 'QUÊTES' et '[I]' pour indiquer la touche d'ouverture.
+    avec le label 'QUÊTES' et la touche configurée pour indiquer l'ouverture.
     """
 
     def __init__(self, police_label: pygame.font.Font, police_hint: pygame.font.Font):
@@ -240,6 +257,7 @@ class IconeJournal:
         self._etat        = {e["id"]: False for e in ETAPES}
         self._ticks       = 0
         self._porte_vue   = False
+        self.touche_journal = "i"
 
     def mettre_a_jour(self, cle, porte, boss, ennemis_tues=0, ames=0):
         self._ticks = pygame.time.get_ticks()
@@ -258,7 +276,9 @@ class IconeJournal:
             self._porte_vue = True
         _noter("porte", self._porte_vue)
 
-    def dessiner(self, ecran: pygame.Surface, y_offset: int):
+    def dessiner(self, ecran: pygame.Surface, y_offset: int, touche_journal=None):
+        if touche_journal is not None:
+            self.touche_journal = touche_journal
         nb_total     = len(ETAPES)
         nb_completes = sum(1 for e in ETAPES if self._etat.get(e["id"]) is True)
 
@@ -273,6 +293,7 @@ class IconeJournal:
             ticks=self._ticks,
             nb_completes=nb_completes,
             nb_total=nb_total,
+            touche_journal=self.touche_journal,
         )
 
         ecran.blit(surf, (30, y_offset))
@@ -284,7 +305,7 @@ WidgetQuete = IconeJournal
 
 
 # ---------------------------------------------------------------------------
-#  Journal de quête — parchemin (touche I)
+#  Journal de quête — parchemin
 # ---------------------------------------------------------------------------
 
 class JournalQuete:
@@ -310,6 +331,7 @@ class JournalQuete:
         self._completion_ms = {}
         self._ticks         = 0
         self._porte_vue     = False
+        self.touche_journal = "i"
 
         # Compteurs de progression (pour affichage dans le journal)
         self._ennemis_tues = 0
@@ -371,7 +393,10 @@ class JournalQuete:
 
     # --- rendu ---
 
-    def dessiner(self, ecran):
+    def dessiner(self, ecran, touche_journal=None):
+        if touche_journal is not None and touche_journal != self.touche_journal:
+            self.touche_journal = touche_journal
+            self._etat_hash = -1
         if self._alpha <= 0:
             return
 
@@ -499,7 +524,8 @@ class JournalQuete:
                     surf.set_at((xi, sep_y), (*_INK_GREY, a))
 
         # ── Hint bas ──
-        hint = self._p_hint.render("[ I ]  Fermer le journal", True, _INK_GREY)
+        touche = _formatter_touche_journal(self.touche_journal)
+        hint = self._p_hint.render(f"[ {touche} ]  Fermer le journal", True, _INK_GREY)
         surf.blit(hint, hint.get_rect(centerx=cx, bottom=ph - pady // 2))
 
         return surf

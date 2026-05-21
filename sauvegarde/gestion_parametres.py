@@ -47,7 +47,8 @@ def creer_parametres_defaut():
             "dash": "c",
             "echo_dir": "y",
             "interagir": "f",   # Touche d'interaction (pancartes, portes, etc.)
-            "torche": "l"
+            "torche": "l",
+            "journal": "i"
         },
         "sons": {
             "volume_sfx": 0.8,

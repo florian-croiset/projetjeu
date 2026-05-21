@@ -158,11 +158,14 @@ class BoucleJeuMixin:
             if MODE_DEV and envoyer_logs.get_bouton().verifier_clic(event):
                 envoyer_logs.envoyer_maintenant()
 
-            # Touche I → toggle journal de quête (priorité haute, avant les autres)
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_i:
+            if event.type == pygame.KEYDOWN and event.key == self._codes_touches.get('journal'):
                 if hasattr(self, 'journal_quete') and self.journal_quete:
                     self.journal_quete.toggle()
-                continue  # ne pas propager l'event plus loin
+                continue
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == self._codes_souris.get('journal'):
+                if hasattr(self, 'journal_quete') and self.journal_quete:
+                    self.journal_quete.toggle()
+                continue
 
             # Laisser la bulle et la popup consommer les events en priorité
             if self.bulle_lore and self.bulle_lore.visible:
@@ -409,22 +412,6 @@ class BoucleJeuMixin:
 
             if proche:
                 ennemi.dessiner(surface_virtuelle, camera_offset)
-            elif flash_actif and not ennemi.est_mort:
-                ratio = 1.0 - (temps_depuis_flash / DUREE_FLASH_ECHO_ENNEMI)
-                off_x, off_y = camera_offset
-                cx = ennemi.rect.centerx - off_x
-                cy = ennemi.rect.centery - off_y
-                halo = self._flash_halo_surf
-                halo.fill((0, 0, 0, 0))
-                pygame.draw.circle(halo, (0, 212, 255, max(0, min(255, int(80 * ratio)))),
-                                   (30, 30), 30)
-                surface_virtuelle.blit(halo, (cx - 30, cy - 30))
-                e_size = (ennemi.rect.w, ennemi.rect.h)
-                if e_size not in self._flash_tmp_cache:
-                    self._flash_tmp_cache[e_size] = pygame.Surface(e_size, pygame.SRCALPHA)
-                tmp = self._flash_tmp_cache[e_size]
-                tmp.fill((0, 212, 255, max(0, min(255, int(255 * ratio)))))
-                surface_virtuelle.blit(tmp, (ennemi.rect.x - off_x, ennemi.rect.y - off_y))
 
         # --- Boss ---
         if self.boss_local and not getattr(self.boss_local, 'is_dead', False):
@@ -763,6 +750,23 @@ class BoucleJeuMixin:
                     self.cle_locale, porte, self.boss_local,
                     ennemis_tues=self._ennemis_tues_total,
                     ames=self._ames_recoltees_total)
+            # Récompense quête complète : bonus d'âmes unique à l'ouverture de la première porte
+            if (not getattr(self, '_recompense_fin_quete_donnee', False)
+                    and (porte.en_ouverture or porte.est_ouverte)
+                    and i == 0):
+                self._recompense_fin_quete_donnee = True
+                mon_j = self.joueurs_locaux.get(self.mon_id)
+                if mon_j:
+                    mon_j.argent += 100
+                    music.jouer_sfx('checkpoint')
+                if hasattr(self, 'notif_capacite') and self.notif_capacite:
+                    # Réutilise le système de notification pour afficher la récompense
+                    self.notif_capacite._queue.append({
+                        'capacite': '__fin__',
+                        'titre':    'Quêtes accomplies !',
+                        'sous':     '+100 âmes — merci d\'avoir joué',
+                        'touche':   '',
+                    })
         # --- Boss ---
         data_boss = donnees_recues.get('boss_room')
         if data_boss and not data_boss['boss_defeated']:
@@ -917,7 +921,7 @@ class BoucleJeuMixin:
             if self.popup_paiement and self.popup_paiement.visible:
                 self.popup_paiement.dessiner(self.ecran)
 
-            # --- Journal de quête (parchemin plein écran, touche I) ---
+            # --- Journal de quête (parchemin plein écran) ---
             if hasattr(self, 'journal_quete') and self.journal_quete:
                 self.journal_quete.mettre_a_jour(
                     self.cle_locale,
@@ -925,7 +929,8 @@ class BoucleJeuMixin:
                     self.boss_local,
                     ennemis_tues=getattr(self, '_ennemis_tues_total', 0),
                     ames=getattr(self, '_ames_recoltees_total', 0),)
-                self.journal_quete.dessiner(self.ecran)
+                touche_journal = self.parametres.get('controles', {}).get('journal', 'i')
+                self.journal_quete.dessiner(self.ecran, touche_journal=touche_journal)
 
             pygame.display.flip()
             self.horloge.tick(FPS)
@@ -1149,7 +1154,7 @@ class BoucleJeuMixin:
         self.bulle_lore             = BulleLore(self.largeur_ecran, self.hauteur_ecran)
         self.popup_paiement         = PopupPaiement(self.largeur_ecran, self.hauteur_ecran)
         self._pancarte_active_id    = None
-        # --- Icône journal (widget HUD) + journal parchemin (touche I) ---
+        # --- Icône journal (widget HUD) + journal parchemin ---
         self.widget_quete  = WidgetQuete(self.police_bouton, self.police_petit)
         self.journal_quete = JournalQuete(
             self.largeur_ecran, self.hauteur_ecran,
@@ -1304,3 +1309,4 @@ class BoucleJeuMixin:
         self.widget_quete  = None
         self.journal_quete = None
         self.notif_capacite = None
+        self._recompense_fin_quete_donnee = False

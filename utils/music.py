@@ -159,15 +159,19 @@ def demarrer():
 
 
 def pause():
-    """Pause temporaire (menu pause) — ne change pas _musique_activee."""
+    """Pause temporaire du mix de jeu."""
     if _musique_ok and _musique_jouee:
         pygame.mixer.music.pause()
+    if _channel_torche:
+        _channel_torche.pause()
 
 
 def reprendre():
-    """Reprend après une pause temporaire — seulement si activée."""
+    """Reprend le mix de jeu apres une pause temporaire."""
     if _musique_ok and _musique_jouee and _musique_activee:
         pygame.mixer.music.unpause()
+    if _channel_torche and _sfx_actifs:
+        _channel_torche.unpause()
 
 
 def toggle(activer: bool):

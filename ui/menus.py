@@ -136,7 +136,9 @@ class MenusMixin:
         self.btn_changer_attaque     = _p()
         self.btn_changer_dash        = _p()
         self.btn_changer_echo_dir    = _p()
-        self.btn_changer_interagir   = _p()   # NOUVEAU
+        self.btn_changer_interagir   = _p()
+        self.btn_changer_torche      = _p()
+        self.btn_changer_journal     = _p()
 
         lw = self._largeur_bouton()
         bh = self._hauteur_bouton()
@@ -167,7 +169,9 @@ class MenusMixin:
             self.btn_changer_saut, self.btn_changer_echo,
             self.btn_changer_attaque, self.btn_changer_dash,
             self.btn_changer_interagir,
-            self.btn_changer_skin,          # NOUVEAU
+            self.btn_changer_torche,
+            self.btn_changer_journal,
+            self.btn_changer_skin,
             self.btn_copier_ip_locale, self.btn_copier_ip_hamachi,
             self.btn_copier_code_room,
         ]
@@ -847,8 +851,12 @@ class MenusMixin:
                     self.touche_a_modifier = 'dash'
                 if self.btn_changer_echo_dir.verifier_clic(event):
                     self.touche_a_modifier = 'echo_dir'
-                if self.btn_changer_interagir.verifier_clic(event):   # NOUVEAU
+                if self.btn_changer_interagir.verifier_clic(event):
                     self.touche_a_modifier = 'interagir'
+                if self.btn_changer_torche.verifier_clic(event):
+                    self.touche_a_modifier = 'torche'
+                if self.btn_changer_journal.verifier_clic(event):
+                    self.touche_a_modifier = 'journal'
                 if self.btn_copier_ip_locale.verifier_clic(event):
                     ip = obtenir_ip_locale()
                     if self.copier_dans_presse_papier(ip):
@@ -1078,7 +1086,9 @@ class MenusMixin:
         ligne_controle(langue.get_texte("param_attaque"),  'attaque',   self.btn_changer_attaque)
         ligne_controle(langue.get_texte("param_dash"),     'dash',      self.btn_changer_dash)
         ligne_controle(langue.get_texte("param_echo_dir"), 'echo_dir',  self.btn_changer_echo_dir)
-        ligne_controle("Interagir (Pancarte)",  'interagir', self.btn_changer_interagir)   # NOUVEAU
+        ligne_controle("Interagir (Pancarte)",  'interagir', self.btn_changer_interagir)
+        ligne_controle("Torche",                'torche',    self.btn_changer_torche)
+        ligne_controle("Journal des quêtes",    'journal',   self.btn_changer_journal)
 
         section(langue.get_texte("param_section_reseau"))
 
