@@ -46,10 +46,9 @@ class Serveur:
         self.serveur_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
         try:
-            ip_serveur = obtenir_ip_locale()
-            self.serveur_socket.bind((ip_serveur, PORT_SERVEUR))
+            self.serveur_socket.bind(("0.0.0.0", PORT_SERVEUR))
             print(f"[SERVEUR] Demarre sur le port {PORT_SERVEUR}")
-            print(f"[SERVEUR] IP locale : {ip_serveur}")
+            print(f"[SERVEUR] IP locale : {obtenir_ip_locale()}")
         except OSError as e:
             print(f"[SERVEUR] ERREUR lors du bind: {e}")
             raise
@@ -891,6 +890,23 @@ class Serveur:
                                 del self.ames_loot[id_ame]
                             break
 
+                # 1c. Âmes perdues : absorption progressive au contact (1 âme / 50ms)
+                for id_joueur, joueur in list(self.joueurs.items()):
+                    for id_ame, ame in list(self.ames_perdues.items()):
+                        if ame.id_joueur != id_joueur:
+                            continue
+                        dx = joueur.rect.centerx - ame.rect.centerx
+                        dy = joueur.rect.centery - ame.rect.centery
+                        if dx*dx + dy*dy <= 64*64:
+                            dernier = getattr(ame, '_t_derniere_absorption', 0)
+                            if temps_actuel - dernier >= 50:
+                                joueur.argent    += 1
+                                ame.argent       -= 1
+                                ame._t_derniere_absorption = temps_actuel
+                                if ame.argent <= 0:
+                                    joueur.ame_perdue = None
+                                    del self.ames_perdues[id_ame]
+
                 # 2. Orbes de capacité : collecte (l'animation de flottement
                 # est purement cosmétique → exécutée côté client).
                 for id_joueur, joueur in list(self.joueurs.items()):
@@ -1015,12 +1031,6 @@ class Serveur:
                                     if random.random() < 0.2:
                                         taille = 'large' if ennemi.pv_max >= 3 else 'small'
                                         self.potions.dropper(cx, cy, taille)
-                        for id_ame, ame in list(self.ames_perdues.items()):
-                            if ame.id_joueur == id_joueur:
-                                if joueur.rect_attaque.colliderect(ame.rect):
-                                    joueur.argent  += ame.argent
-                                    joueur.ame_perdue = None
-                                    del self.ames_perdues[id_ame]
                         self.boss_room.recevoir_attaque_joueur(joueur.rect_attaque, DEGATS_JOUEUR)
 
                         # Leviers coop

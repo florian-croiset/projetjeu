@@ -56,7 +56,8 @@ class AmePerdue:
             'id': self.id,
             'x': self.rect.x,
             'y': self.rect.y,
-            'id_joueur': self.id_joueur
+            'id_joueur': self.id_joueur,
+            'argent': self.argent,
         }
 
     def set_etat(self, data):
@@ -64,9 +65,10 @@ class AmePerdue:
         self.rect.x = data['x']
         self.rect.y = data['y']
         self.id_joueur = data['id_joueur']
+        self.argent = data.get('argent', self.argent)
 
-    def dessiner(self, surface, camera_offset=(0, 0), temps_ms=None):
-        """Dessine le cristal perdu avec halo violet."""
+    def dessiner(self, surface, camera_offset=(0, 0), temps_ms=None, argent_max=None):
+        """Dessine le cristal perdu avec halo violet. Rétrécit selon l'argent restant."""
         off_x, off_y = camera_offset
         cx = self.rect.x + self.rect.width // 2 - off_x
         cy = self.rect.y + self.rect.height // 2 - off_y
@@ -76,21 +78,35 @@ class AmePerdue:
         pulse = 0.7 + 0.3 * math.sin(temps_ms / 600 + self.phase)
         r, g, b = self.couleur
 
-        # Halo violet — surface réutilisée, zéro allocation par frame
+        # Ratio de remplissage (1.0 = plein, 0.0 = vide)
+        if argent_max and argent_max > 0:
+            ratio = max(0.15, self.argent / argent_max)
+        else:
+            ratio = 1.0
+
+        # Halo violet
         if not hasattr(self, '_halo_surf'):
             self._halo_surf = pygame.Surface((60, 60), pygame.SRCALPHA)
         self._halo_surf.fill((0, 0, 0, 0))
         for rayon, alpha_base in [(26, 20), (18, 40), (11, 70)]:
-            a = int(alpha_base * pulse)
-            pygame.draw.ellipse(self._halo_surf, (r, g, b, a),
-                                pygame.Rect(30 - rayon, 30 - rayon, rayon * 2, rayon * 2))
+            a = int(alpha_base * pulse * ratio)
+            r_scaled = int(rayon * ratio)
+            if r_scaled > 0:
+                pygame.draw.ellipse(self._halo_surf, (r, g, b, a),
+                                    pygame.Rect(30 - r_scaled, 30 - r_scaled,
+                                                r_scaled * 2, r_scaled * 2))
         surface.blit(self._halo_surf, (cx - 30, cy - 30))
 
         if self.sprite:
-            alpha = int(160 + 95 * pulse)
-            self.sprite.set_alpha(alpha)
-            r_spr = self.sprite.get_rect(center=(cx, cy))
-            surface.blit(self.sprite, r_spr)
+            alpha = int((160 + 95 * pulse) * ratio)
+            scaled_w = max(4, int(16 * ratio))
+            scaled_h = max(6, int(24 * ratio))
+            sprite_scaled = pygame.transform.scale(self.sprite, (scaled_w, scaled_h))
+            sprite_scaled.set_alpha(alpha)
+            r_spr = sprite_scaled.get_rect(center=(cx, cy))
+            surface.blit(sprite_scaled, r_spr)
         else:
-            rect_visuel = pygame.Rect(cx - 8, cy - 12, 16, 24)
+            w = max(4, int(16 * ratio))
+            h = max(6, int(24 * ratio))
+            rect_visuel = pygame.Rect(cx - w // 2, cy - h // 2, w, h)
             pygame.draw.ellipse(surface, self.couleur, rect_visuel)

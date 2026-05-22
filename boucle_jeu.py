@@ -472,7 +472,8 @@ class BoucleJeuMixin:
         # --- Âmes (avec culling caméra) ---
         for ame in self.ames_perdues_locales.values():
             if camera_rect.colliderect(ame.rect):
-                ame.dessiner(surface_virtuelle, camera_offset, temps_ms)
+                ame.dessiner(surface_virtuelle, camera_offset, temps_ms,
+                             argent_max=getattr(ame, '_argent_max', None))
         for ame in self.ames_libres_locales.values():
             ame.mettre_a_jour(temps_ms)
             if camera_rect.colliderect(ame.rect):
@@ -712,8 +713,9 @@ class BoucleJeuMixin:
                 del self.ames_perdues_locales[id_local]
         for da in donnees_recues.get('ames_perdues', []):
             if da['id'] not in self.ames_perdues_locales:
-                self.ames_perdues_locales[da['id']] = AmePerdue(
-                    da['x'], da['y'], da['id_joueur'])
+                ame_new = AmePerdue(da['x'], da['y'], da['id_joueur'], da.get('argent', 0))
+                ame_new._argent_max = da.get('argent', 0)
+                self.ames_perdues_locales[da['id']] = ame_new
             self.ames_perdues_locales[da['id']].set_etat(da)
 
         # --- Âmes libres ---

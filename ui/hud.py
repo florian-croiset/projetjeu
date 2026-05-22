@@ -99,9 +99,20 @@ class HudMixin:
                 bd = d['boss']
                 self._dessiner_barre_boss(bd['hp'], bd['hp_max'])
 
-        # Argent
+        # Argent — compteur animé 1 par 1
+        cible = mon_joueur.argent
+        if not hasattr(self, '_argent_affiche'):
+            self._argent_affiche = cible
+            self._t_argent_ms = 0
+        now_hud = pygame.time.get_ticks()
+        if self._argent_affiche < cible:
+            if now_hud - self._t_argent_ms >= 50:
+                self._argent_affiche += 1
+                self._t_argent_ms = now_hud
+        else:
+            self._argent_affiche = cible  # sync si argent dépensé
         argent_surf = self.police_texte.render(
-            f"Âmes : {mon_joueur.argent}", True, COULEUR_VIOLET_CLAIR)
+            f"Âmes : {self._argent_affiche}", True, COULEUR_VIOLET_CLAIR)
         self.ecran.blit(argent_surf, (x0, y0 + hc + 10))
 
         # Clé
