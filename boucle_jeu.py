@@ -17,7 +17,6 @@ import random
 from parametres import *
 from utils import envoyer_logs, music
 from reseau import serveur
-from reseau.relay_server import demarrer_relay_thread
 from reseau.protocole import recv_complet, send_complet, obtenir_ip_locale
 from reseau import udp_protocole as UDP_P
 from reseau.udp_endpoint import UdpEndpoint
@@ -117,13 +116,6 @@ class BoucleJeuMixin:
             pygame.display.flip()
             self.horloge.tick(FPS)
 
-        relay = getattr(self, '_relay_instance', None)
-        if relay:
-            try:
-                relay.arreter()
-                print("[CLIENT] Relay embarqué arrêté")
-            except Exception as e:
-                print(f"[CLIENT] Erreur arrêt relay: {e}")
         pygame.quit()
         sys.exit()
 
@@ -1074,24 +1066,9 @@ class BoucleJeuMixin:
         type_lancement  = "nouvelle" if est_nouvelle_partie else "charger"
         self._serveur_instance = None
 
-        if getattr(self, '_relay_instance', None) and self._relay_instance._running:
-            print(f"[CLIENT] Relay déjà actif sur le port {RELAY_PORT}, réutilisation")
-        else:
-            self._relay_instance = None
-            try:
-                self._relay_instance = demarrer_relay_thread(RELAY_PORT)
-                print(f"[CLIENT] Relay auto-démarré sur le port {RELAY_PORT}")
-            except Exception as e:
-                print(f"[CLIENT] Impossible de démarrer le relay: {e}")
-                self._relay_instance = None
-
-        relay_host = obtenir_ip_locale() if self._relay_instance else ""
-        relay_port = RELAY_PORT
-
         def _demarrer_serveur():
             self._serveur_instance = serveur.creer_serveur(
-                id_slot, type_lancement,
-                relay_host=relay_host, relay_port=relay_port)
+                id_slot, type_lancement)
             self._serveur_instance.demarrer()
 
         thread_serveur = threading.Thread(target=_demarrer_serveur, daemon=True)
@@ -1104,13 +1081,6 @@ class BoucleJeuMixin:
                 break
         if connecte:
             self.etat_jeu = "EN_JEU"
-            if relay_host and self._serveur_instance:
-                for _ in range(40):
-                    if self._serveur_instance.code_room:
-                        self.code_room = self._serveur_instance.code_room
-                        print(f"[CLIENT] Code Room : {self.code_room}")
-                        break
-                    time.sleep(0.05)
         else:
             self.etat_jeu = "MENU_PRINCIPAL"
 

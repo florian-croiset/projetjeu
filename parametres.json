@@ -11,7 +11,7 @@
             1920,
             1080
         ],
-        "luminosite": 0.3,
+        "luminosite": 1.0,
         "display_index": 0
     },
     "controles": {
@@ -36,6 +36,6 @@
     },
     "profil": {
         "pseudo": "Spectre",
-        "skin": 2
+        "skin": 0
     }
 }
