@@ -33,6 +33,8 @@ from core.ame_libre import AmeLibre
 from core.ame_loot import AmeLoot
 from core.cle import Cle
 from core.porte import Porte
+from core.levier import Levier
+from core.mur_payant import MurPayant
 from core.orbe_capacite import OrbeCapacite
 from core.potion import GestionnairePotions
 from core.pancarte_lore import PancarteLore, BulleLore, PopupPaiement, NotificationCapacite, COUT_AMES, COUT_DASH
@@ -274,6 +276,13 @@ class BoucleJeuMixin:
                                     _callback_paiement,
                                     cout
                                 )
+                        elif (self.mur_payant_local
+                              and not self.mur_payant_debloque):
+                            mp = self.mur_payant_local
+                            dx = mon_joueur.rect.centerx - (mp.x + TAILLE_TUILE // 2)
+                            dy = mon_joueur.rect.centery - (mp.y + TAILLE_TUILE // 2)
+                            if dx*dx + dy*dy <= mp.PORTEE_INTERACTION ** 2:
+                                self._achat_en_attente = 'mur_payant'
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 ms = self._codes_souris.get
@@ -490,6 +499,15 @@ class BoucleJeuMixin:
         # --- Torche ---
         self.torche.mettre_a_jour(temps_ms)
         self.torche.dessiner(surface_virtuelle, camera_offset, temps_ms)
+
+        # --- Leviers ---
+        for levier in self.leviers_locaux.values():
+            levier.dessiner(surface_virtuelle, camera_offset, temps_ms)
+
+        # --- Mur payant ---
+        if self.mur_payant_local and not self.mur_payant_debloque:
+            self.mur_payant_local.dessiner(surface_virtuelle, camera_offset,
+                                           joueur_rect=mon_joueur.rect)
 
         if self.torche.allumee and mon_joueur:
             dx   = mon_joueur.rect.centerx - self.torche.x
@@ -771,6 +789,10 @@ class BoucleJeuMixin:
             self._portes_etaient_en_ouverture = {}
 
         data_portes = donnees_recues.get('portes', [])
+        ids_serveur = set(range(len(data_portes)))
+        for k in list(self.portes_locales.keys()):
+            if k not in ids_serveur:
+                del self.portes_locales[k]
         for i, data_porte in enumerate(data_portes):
             if i not in self.portes_locales:
                 self.portes_locales[i] = Porte(data_porte['x'], data_porte['y'])
@@ -851,12 +873,69 @@ class BoucleJeuMixin:
             if torche_serveur:
                 self.torche.particules = []
 
+        # --- Leviers / passage ---
+        for i, data in enumerate(donnees_recues.get('leviers', [])):
+            if i not in self.leviers_locaux:
+                self.leviers_locaux[i] = Levier(data['x'] // TAILLE_TUILE,
+                                                data['y'] // TAILLE_TUILE)
+            self.leviers_locaux[i].set_etat(data)
+
+        passage_serveur = donnees_recues.get('passage_ouvert', False)
+        if passage_serveur and not self.passage_ouvert:
+            self._ouvrir_passage_local()
+        self.passage_ouvert = passage_serveur
+
+        # Mur payant
+        data_mp = donnees_recues.get('mur_payant')
+        if data_mp is not None:
+            if self.mur_payant_local is None:
+                self.mur_payant_local = MurPayant(85, 10, 25, "25 ames pour acceder")
+            self.mur_payant_local.set_etat(data_mp)
+            if data_mp.get('debloque') and not self.mur_payant_debloque:
+                self._detruire_mur_payant_local()
+            self.mur_payant_debloque = data_mp.get('debloque', False)
+
+        # Mur clé
+        mur_cle_serveur = donnees_recues.get('mur_cle_detruit', False)
+        if mur_cle_serveur and not self.mur_cle_detruit:
+            self._detruire_mur_cle_local()
+        self.mur_cle_detruit = mur_cle_serveur
+
         # --- Potions ---
         if hasattr(self, 'potions') and self.potions is not None:
             self.potions.set_etat(donnees_recues.get('potions', []))
 
         # --- Données boss pour HUD ---
         self._derniere_data_boss = donnees_recues.get('boss_room')
+
+    _TUILES_PASSAGE    = [(68,49),(69,49),(70,49),(68,50),(69,50),(70,50)]
+    _TUILES_MUR_PAYANT = [(82,11),(83,11),(84,11),(85,11),(86,11),(87,11),(88,11),(89,11),(90,11)]
+    _TUILES_MUR_CLE    = [(93,18),(93,19),(93,20)]
+
+    def _effacer_tuiles_locales(self, tuiles):
+        """Supprime map_data et les GIDs du layer Wall.1 uniquement."""
+        if not self.carte:
+            return
+        layers_gids = getattr(self.carte, 'layers_gids', [])
+        layers_noms = getattr(self.carte, 'layers_noms', [])
+        for tx, ty in tuiles:
+            if 0 <= tx < self.carte.largeur_map and 0 <= ty < self.carte.hauteur_map:
+                self.carte.map_data[ty][tx] = 0
+                for i, layer in enumerate(layers_gids):
+                    if i < len(layers_noms) and layers_noms[i] == 'Wall.1':
+                        layer[ty][tx] = 0
+        self.carte._vis_map_dirty = True
+        if hasattr(self.carte, '_grille_collision'):
+            self.carte.construire_grille_collision()
+
+    def _detruire_mur_payant_local(self):
+        self._effacer_tuiles_locales(self._TUILES_MUR_PAYANT)
+
+    def _detruire_mur_cle_local(self):
+        self._effacer_tuiles_locales(self._TUILES_MUR_CLE)
+
+    def _ouvrir_passage_local(self):
+        self._effacer_tuiles_locales(self._TUILES_PASSAGE)
 
     def boucle_jeu_reseau(self):
         if not self.client_socket:
@@ -1200,9 +1279,14 @@ class BoucleJeuMixin:
         self.orbes_capacite_locaux  = {}
         self.pancartes_lore_locales = {}
         self.portes_locales         = {}
+        self.leviers_locaux         = {}
+        self.passage_ouvert         = False
+        self.mur_payant_local       = None
+        self.mur_payant_debloque    = False
+        self.mur_cle_detruit        = False
         self.cle_locale             = None
         self._ennemis_tues_total   = 0
-        self._ennemis_morts_comptes = set() 
+        self._ennemis_morts_comptes = set()
         self._ames_recoltees_total = 0
         self._argent_joueur_precedent = None
         self.potions                = GestionnairePotions()
@@ -1344,9 +1428,14 @@ class BoucleJeuMixin:
         self.orbes_capacite_locaux  = {}
         self.pancartes_lore_locales = {}
         self.portes_locales         = {}
+        self.leviers_locaux         = {}
+        self.passage_ouvert         = False
+        self.mur_payant_local       = None
+        self.mur_payant_debloque    = False
+        self.mur_cle_detruit        = False
         self.cle_locale             = None
         self._ennemis_tues_total   = 0
-        self._ennemis_morts_comptes = set() 
+        self._ennemis_morts_comptes = set()
         self._ames_recoltees_total = 0
         self._argent_joueur_precedent = None
         self.carte                  = None

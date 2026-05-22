@@ -25,6 +25,8 @@ from core.ame_libre import AmeLibre
 from core.ame_loot import AmeLoot
 from core.cle import Cle
 from core.porte import Porte
+from core.levier import Levier
+from core.mur_payant import MurPayant
 from core.potion import GestionnairePotions
 from core.orbe_capacite import OrbeCapacite
 from core.pancarte_lore import PancarteLore   # NOUVEAU
@@ -70,6 +72,12 @@ class Serveur:
         self.vis_needs_full      = {}
         self.cle                 = None
         self.portes              = {}  # id -> Porte
+        self.leviers             = {}
+        self.passage_ouvert      = False
+        self._leviers_touches_attaque = {}
+        self.mur_payant          = None
+        self.mur_payant_debloque = False
+        self.mur_cle_detruit     = False
         self.echos_en_cours      = []
         self.potions             = GestionnairePotions()
 
@@ -119,6 +127,8 @@ class Serveur:
         self.creer_orbes_capacite()
         self.creer_porte()
         self.creer_pancartes_lore()   # NOUVEAU
+        self.creer_leviers()
+        self.mur_payant = MurPayant(85, 10, 25, "25 ames pour acceder")
 
         self.boss_room = BossRoom(
             room_rect       = pygame.Rect(72*32, 13*32, (93-72)*32, (20-13)*32),
@@ -216,11 +226,51 @@ class Serveur:
     def creer_porte(self):
         portes_config = [
             (995, 960),      # Porte de sortie principale
-            (2940, 580),     # Nouvelle porte
         ]
         for i, (x, y) in enumerate(portes_config):
             self.portes[i] = Porte(x=x, y=y)
             print(f"[SERVEUR] Porte {i} créée à ({x}, {y})")
+
+    def creer_leviers(self):
+        configs = [(30, 14), (94, 53)]
+        for i, (tx, ty) in enumerate(configs):
+            self.leviers[i] = Levier(tx, ty)
+            print(f"[SERVEUR] Levier {i} créé à tuile ({tx}, {ty})")
+
+    TUILES_PASSAGE = [(68, 49), (69, 49), (70, 49), (68, 50), (69, 50), (70, 50)]
+
+    def _ouvrir_passage(self):
+        self.passage_ouvert = True
+        for tx, ty in self.TUILES_PASSAGE:
+            if (0 <= tx < self.carte_jeu.largeur_map
+                    and 0 <= ty < self.carte_jeu.hauteur_map
+                    and self.carte_jeu.map_data[ty][tx] == 1):
+                self.carte_jeu.map_data[ty][tx] = 0
+        self.carte_jeu.construire_grille_collision()
+        print("[SERVEUR] Passage secret ouvert !")
+
+    TUILES_MUR_PAYANT = [(82,11),(83,11),(84,11),(85,11),(86,11),(87,11),(88,11),(89,11),(90,11)]
+    TUILES_MUR_CLE    = [(93,18),(93,19),(93,20)]
+
+    def _detruire_mur_payant(self):
+        self.mur_payant_debloque = True
+        for tx, ty in self.TUILES_MUR_PAYANT:
+            if (0 <= tx < self.carte_jeu.largeur_map
+                    and 0 <= ty < self.carte_jeu.hauteur_map
+                    and self.carte_jeu.map_data[ty][tx] == 1):
+                self.carte_jeu.map_data[ty][tx] = 0
+        self.carte_jeu.construire_grille_collision()
+        print("[SERVEUR] Mur payant detruit !")
+
+    def _detruire_mur_cle(self):
+        self.mur_cle_detruit = True
+        for tx, ty in self.TUILES_MUR_CLE:
+            if (0 <= tx < self.carte_jeu.largeur_map
+                    and 0 <= ty < self.carte_jeu.hauteur_map
+                    and self.carte_jeu.map_data[ty][tx] == 1):
+                self.carte_jeu.map_data[ty][tx] = 0
+        self.carte_jeu.construire_grille_collision()
+        print("[SERVEUR] Mur cle detruit !")
 
     def creer_pancartes_lore(self):
         configs = [
@@ -398,6 +448,14 @@ class Serveur:
                                         resultat = pancarte.tenter_paiement(joueur)
                                         print(f"[DEBUG] resultat paiement={resultat}")
                                     break
+                            # Mur payant
+                            if self.mur_payant and not self.mur_payant_debloque:
+                                mp = self.mur_payant
+                                dx = joueur.rect.centerx - (mp.x + TAILLE_TUILE // 2)
+                                dy = joueur.rect.centery - (mp.y + TAILLE_TUILE // 2)
+                                if (dx*dx + dy*dy) <= MurPayant.PORTEE_INTERACTION ** 2:
+                                    if mp.tenter_paiement(joueur) == 'debloque':
+                                        self._detruire_mur_payant()
 
             except (socket.timeout, socket.error, ValueError):
                 pass
@@ -573,6 +631,14 @@ class Serveur:
                             resultat = pancarte.tenter_paiement(joueur)
                             print(f"[DEBUG] resultat={resultat}")
                         break
+                # Mur payant
+                if self.mur_payant and not self.mur_payant_debloque:
+                    mp = self.mur_payant
+                    dx = joueur.rect.centerx - (mp.x + TAILLE_TUILE // 2)
+                    dy = joueur.rect.centery - (mp.y + TAILLE_TUILE // 2)
+                    if (dx*dx + dy*dy) <= MurPayant.PORTEE_INTERACTION ** 2:
+                        if mp.tenter_paiement(joueur) == 'debloque':
+                            self._detruire_mur_payant()
 
     def _udp_ip_autorisee(self, ip: str, now_ms: int) -> bool:
         """Rate-limit des tentatives de handshake par IP (anti-spam / anti-DoS)."""
@@ -957,6 +1023,35 @@ class Serveur:
                                     del self.ames_perdues[id_ame]
                         self.boss_room.recevoir_attaque_joueur(joueur.rect_attaque, DEGATS_JOUEUR)
 
+                        # Leviers coop
+                        if not self.passage_ouvert:
+                            touches = self._leviers_touches_attaque.setdefault(id_joueur, set())
+                            for id_lev, levier in self.leviers.items():
+                                if id_lev not in touches and joueur.rect_attaque.colliderect(levier.rect):
+                                    touches.add(id_lev)
+                                    levier.activer(temps_actuel)
+                                    if all(l.active and temps_actuel - l.temps_activation <= DELAI_LEVIER_COOP
+                                           for l in self.leviers.values()):
+                                        self._ouvrir_passage()
+
+                        # Mur avec clé
+                        if joueur.have_key and not self.mur_cle_detruit:
+                            for tx, ty in self.TUILES_MUR_CLE:
+                                r = pygame.Rect(tx * TAILLE_TUILE, ty * TAILLE_TUILE,
+                                                TAILLE_TUILE, TAILLE_TUILE)
+                                if joueur.rect_attaque.colliderect(r):
+                                    self._detruire_mur_cle()
+                                    break
+
+                    if not joueur.est_en_attaque:
+                        self._leviers_touches_attaque.setdefault(id_joueur, set()).clear()
+
+                    # Expiration des leviers non validés
+                    if not self.passage_ouvert:
+                        for levier in self.leviers.values():
+                            if levier.active and temps_actuel - levier.temps_activation > DELAI_LEVIER_COOP:
+                                levier.reset()
+
                     # B. Dégâts reçus des ennemis — uniquement pendant la fenêtre active de l'attaque
                     for ennemi in self.ennemis.values():
                         if ennemi.est_mort or not ennemi.est_en_attaque:
@@ -1032,6 +1127,10 @@ class Serveur:
                                            for i, p in self.pancartes_lore.items()],
                         'cle':            self.cle.get_etat() if self.cle else None,
                         'portes':         [p.get_etat() for p in self.portes.values()],
+                        'leviers':        [l.get_etat() for l in self.leviers.values()],
+                        'passage_ouvert': self.passage_ouvert,
+                        'mur_payant':     self.mur_payant.get_etat() if self.mur_payant else None,
+                        'mur_cle_detruit': self.mur_cle_detruit,
                         'torche_allumee': self.torche_allumee,
                         'boss_room':      self.boss_room.get_etat(),
                         'potions':    self.potions.get_etat(),

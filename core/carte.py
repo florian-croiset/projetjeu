@@ -83,6 +83,7 @@ class Carte:
                                     int(float(obj.attrib['y'])))
 
             self.layers_gids = []
+            self.layers_noms = []
             for layer in root.findall('layer'):
                 data_el = layer.find('data')
                 if data_el is None:
@@ -92,6 +93,7 @@ class Carte:
                 for row_y in range(self.hauteur_map):
                     grille.append(valeurs[row_y * self.largeur_map:(row_y + 1) * self.largeur_map])
                 self.layers_gids.append(grille)
+                self.layers_noms.append(layer.attrib.get('name', ''))
 
             # Tilesets — charge TOUS les tilesets
             self.tilesets = []

@@ -139,6 +139,7 @@ NB_RAYONS_ECHO = 360
 COOLDOWN_ECHO = 2500            # Réduit : 2.5s entre chaque écho
 ECHO_DUREE_REVEAL = 600         # Durée révélation progressive (ms)
 DUREE_FADE_ECHO   = 40000       # Durée (ms) avant qu'une tuile révélée redevienne noire
+DELAI_LEVIER_COOP = 3000        # Fenêtre (ms) pour actionner les deux leviers simultanément
 
 # -- Paramètres de l'Écho Directionnel --
 PORTEE_ECHO_DIR = PORTEE_ECHO * 2   # 300px (portée double)
