@@ -11,7 +11,7 @@
             1920,
             1080
         ],
-        "luminosite": 0.3,
+        "luminosite": 1.0,
         "display_index": 0
     },
     "controles": {
@@ -21,7 +21,7 @@
         "echo": "e",
         "attaque": "k",
         "dash": "c",
-        "echo_dir": "y",
+        "echo_dir": "mouse_1",
         "interagir": "f",
         "torche": "l",
         "journal": "i"
