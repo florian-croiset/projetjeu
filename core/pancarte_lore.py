@@ -53,6 +53,38 @@ TEXTE_LORE_DASH = [
     "                      An 1 du Grand Silence",
 ]
 
+TEXTE_LETTRE_JONAS = [
+    "Papa,",
+    "",
+    "Si tu lis ces mots, c'est que tu es allé plus loin que je ne l'espérais.",
+    "Plus loin que moi.",
+    "",
+    "Je t'écris depuis les profondeurs, là où SOLARIS ne regarde plus.",
+    "Ils pensent que personne ne descend jusqu'ici. Ils ont tort.",
+    "",
+    "J'ai trouvé quelque chose. Une créature, immense, qui rôde dans les zones",
+    "les plus obscures des tunnels. Elle n'est pas comme les Nocturnes.",
+    "Elle est différente. Plus ancienne. Je ne sais pas si SOLARIS l'a créée",
+    "ou si elle existait avant eux — avant le Voile Noir, avant tout ça.",
+    "Mais une chose est certaine : elle garde quelque chose.",
+    "",
+    "Je n'ai pas pu aller plus loin. Pas seul.",
+    "",
+    "Papa, je ne t'ai jamais demandé de me suivre dans ce combat.",
+    "Je sais ce que ça t'a coûté. Mais si tu es là, si tu as trouvé ce message,",
+    "c'est que tu cherches encore. C'est que tu n'as pas abandonné.",
+    "",
+    "Alors ne t'arrête pas maintenant.",
+    "",
+    "Ce que SOLARIS nous a volé — le soleil, la liberté, les gens qu'on aimait —",
+    "tout ça est quelque part au bout de ces tunnels. Je le sens.",
+    "",
+    "Va jusqu'au bout. Pour nous deux.",
+    "Pour tous ceux qui n'ont plus la force de le faire.",
+    "",
+    "                    — Jonas",
+]
+
 COUT_AMES = 30
 COUT_DASH = 50
 LARGEUR_PANCARTE = 48
@@ -98,6 +130,16 @@ def _dessiner_rune(surf, formes, x, y, scale, couleur):
         pygame.draw.line(surf, couleur, (sx1, sy1), (sx2, sy2), ep)
 
 
+def _charger_sprite_parchemin():
+    try:
+        base = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(__file__))
+        img = pygame.image.load(os.path.join(base, 'assets', 'parchemin_64x64.png')).convert_alpha()
+        return img
+    except Exception as e:
+        print(f'[PANCARTE] Sprite parchemin non trouvé : {e}')
+        return None
+
+
 class PancarteLore:
     """
     Stèle de pierre gravée de runes incompréhensibles.
@@ -106,6 +148,7 @@ class PancarteLore:
     """
 
     PORTEE_INTERACTION = 80
+    _sprite_parchemin = None  # cache partagé entre toutes les instances
 
     def __init__(self, x: int, y: int):
         self.x = x
@@ -176,6 +219,12 @@ class PancarteLore:
         sx = self.x - off_x
         sy = self.y - off_y
 
+        type_p = getattr(self, 'type_pancarte', 'lore')
+
+        if type_p == 'lettre':
+            self._dessiner_lettre(surface, sx, sy, temps_ms, touche_interagir)
+            return
+
         # Halo ambiant
         self._dessiner_halo(surface, sx, sy)
 
@@ -189,6 +238,40 @@ class PancarteLore:
 
         # Particules runiques
         self._dessiner_particules(surface, sx, sy, temps_ms)
+
+        # Badge d'interaction
+        self._dessiner_indicateur(surface, sx, sy, temps_ms, touche_interagir)
+
+    def _dessiner_lettre(self, surface: pygame.Surface, sx: int, sy: int,
+                         temps_ms: int, touche_interagir: str):
+        # Chargement paresseux du sprite parchemin
+        if PancarteLore._sprite_parchemin is None:
+            PancarteLore._sprite_parchemin = _charger_sprite_parchemin()
+
+        # Halo chaud discret (blanc-beige pulsé)
+        pulse = 0.5 + 0.5 * math.sin(self._phase)
+        sz = 80
+        halo = pygame.Surface((sz, sz), pygame.SRCALPHA)
+        cx, cy = sz // 2, sz // 2
+        for r, a in [(32, 6), (22, 14), (12, 28)]:
+            pygame.draw.circle(halo, (240, 220, 160, int(a * pulse)), (cx, cy), r)
+        surface.blit(halo, (sx + LARGEUR_PANCARTE // 2 - cx,
+                            sy + HAUTEUR_PANCARTE // 2 - cy))
+
+        # Sprite parchemin centré sur le rect
+        img = PancarteLore._sprite_parchemin
+        if img is not None:
+            # Légère flottaison verticale
+            flot = int(3 * math.sin(self._phase))
+            iw, ih = img.get_size()
+            bx = sx + LARGEUR_PANCARTE // 2 - iw // 2
+            by = sy + HAUTEUR_PANCARTE // 2 - ih // 2 + flot
+            surface.blit(img, (bx, by))
+        else:
+            # Fallback : rectangle beige si l'image est manquante
+            pygame.draw.rect(surface, (210, 185, 130),
+                             pygame.Rect(sx, sy, LARGEUR_PANCARTE, HAUTEUR_PANCARTE),
+                             border_radius=4)
 
         # Badge d'interaction
         self._dessiner_indicateur(surface, sx, sy, temps_ms, touche_interagir)
@@ -471,11 +554,13 @@ class BulleLore:
 
         self._surf_fond = surf
 
-    def ouvrir(self, texte=None):
+    def ouvrir(self, texte=None, titre=None, sous_titre=None):
         self.visible    = True
         self._scroll    = 0
         self._temps_ouv = pygame.time.get_ticks()
         self._texte     = texte if texte is not None else TEXTE_LORE
+        self._titre_bulle    = titre if titre is not None else "✦   Inscription Traduite   ✦"
+        self._sous_titre_bulle = sous_titre if sous_titre is not None else "— Message gravé en Langue des Éclaireurs —"
 
     def fermer(self):
         self.visible = False
@@ -514,12 +599,14 @@ class BulleLore:
         surface.blit(self._surf_fond, self.rect.topleft)
 
         # ── Titre ────────────────────────────────────────────────────────
-        titre = self._font_titre.render("✦   Inscription Traduite   ✦", True, (220, 178, 58))
+        titre_txt = getattr(self, '_titre_bulle', "✦   Inscription Traduite   ✦")
+        titre = self._font_titre.render(titre_txt, True, (220, 178, 58))
         surface.blit(titre, titre.get_rect(center=(self.rect.centerx, self.rect.y + 32)))
 
         # Sous-titre attribution
         f_sub = pygame.font.Font(None, 22)
-        sub   = f_sub.render("— Message gravé en Langue des Éclaireurs —", True, (120, 92, 28))
+        sous_titre_txt = getattr(self, '_sous_titre_bulle', "— Message gravé en Langue des Éclaireurs —")
+        sub   = f_sub.render(sous_titre_txt, True, (120, 92, 28))
         surface.blit(sub, sub.get_rect(center=(self.rect.centerx, self.rect.y + 49)))
 
         # ── Zone de texte scrollable ─────────────────────────────────────

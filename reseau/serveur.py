@@ -276,10 +276,13 @@ class Serveur:
         configs = [
             (81 * 32, 39 * 32, 'lore'),
             (38 * 32, 49 * 32, 'shop_dash'),
+            (2983, 1382, 'lettre'),
         ]
         for i, (x, y, type_p) in enumerate(configs):
             p = PancarteLore(x, y)
             p.type_pancarte = type_p
+            if type_p == 'lettre':
+                p.est_debloquee = True
             self.pancartes_lore[i] = p
         print(f"[SERVEUR] {len(self.pancartes_lore)} pancarte(s) lore créées")
 
@@ -1043,8 +1046,9 @@ class Serveur:
                                 if id_lev not in touches and joueur.rect_attaque.colliderect(levier.rect):
                                     touches.add(id_lev)
                                     levier.activer(temps_actuel)
-                                    if all(l.active and temps_actuel - l.temps_activation <= DELAI_LEVIER_COOP
-                                           for l in self.leviers.values()):
+                                    cond = (any if MODE_DEV else all)
+                                    if cond(l.active and temps_actuel - l.temps_activation <= DELAI_LEVIER_COOP
+                                            for l in self.leviers.values()):
                                         self._ouvrir_passage()
 
                         # Mur avec clé

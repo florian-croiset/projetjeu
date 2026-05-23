@@ -36,7 +36,7 @@ from core.levier import Levier
 from core.mur_payant import MurPayant
 from core.orbe_capacite import OrbeCapacite
 from core.potion import GestionnairePotions
-from core.pancarte_lore import PancarteLore, BulleLore, PopupPaiement, NotificationCapacite, COUT_AMES, COUT_DASH
+from core.pancarte_lore import PancarteLore, BulleLore, PopupPaiement, NotificationCapacite, COUT_AMES, COUT_DASH, TEXTE_LETTRE_JONAS
 from ui.quete import WidgetQuete, JournalQuete
 
 
@@ -390,7 +390,18 @@ class BoucleJeuMixin:
                         if pancarte_proche:
                             i, pancarte = pancarte_proche
                             if pancarte.est_debloquee:
-                                self.bulle_lore.ouvrir()
+                                type_p = getattr(pancarte, 'type_pancarte', 'lore')
+                                if type_p == 'lettre':
+                                    self.bulle_lore.ouvrir(
+                                        TEXTE_LETTRE_JONAS,
+                                        titre="✦   Lettre de Jonas   ✦",
+                                        sous_titre="— Trouvée dans les profondeurs —",
+                                    )
+                                elif type_p == 'shop_dash':
+                                    from core.pancarte_lore import TEXTE_LORE_DASH
+                                    self.bulle_lore.ouvrir(TEXTE_LORE_DASH)
+                                else:
+                                    self.bulle_lore.ouvrir()
                             else:
                                 self._pancarte_active_id = i
 
