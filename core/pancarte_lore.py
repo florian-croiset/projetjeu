@@ -7,7 +7,7 @@ import math
 import os
 import sys
 import random
-from parametres import TAILLE_TUILE, COULEUR_TEXTE, COULEUR_FOND
+from parametres import TAILLE_TUILE, COULEUR_TEXTE, COULEUR_FOND, PV_JOUEUR_MAX
 
 
 # ── Texte de lore ──────────────────────────────────────────────────────────
@@ -87,6 +87,30 @@ TEXTE_LETTRE_JONAS = [
 
 COUT_AMES = 30
 COUT_DASH = 50
+COUT_UPGRADE_DEGATS   = 75
+COUT_UPGRADE_PV       = 20
+COUT_UPGRADE_ECHO_DIR = 10
+MAX_ACHATS_PV         = 5
+
+TEXTE_LEVIER = [
+    "Fragment de Mémoire — Secteur 7",
+    "",
+    "« Ils ont scellé ce couloir à deux reprises.",
+    "  Une serrure ne suffisait pas, disaient-ils.",
+    "  Deux mains, deux volontés, deux cœurs.",
+    "  Seulement alors, le passage s'ouvre.",
+    "",
+    "  J'ai vu les mécanismes de mes propres yeux.",
+    "  Deux bras de fer, aux extrémités opposées.",
+    "  Ni l'un avant l'autre.",
+    "  Ni l'un sans l'autre.",
+    "  Ensemble, et seulement ensemble.",
+    "",
+    "  Ils avaient peur de ce qui se trouve derrière.",
+    "  À raison. »",
+    "",
+    "— Inscription gravée par un ancien ouvrier de SOLARIS",
+]
 LARGEUR_PANCARTE = 48
 HAUTEUR_PANCARTE = 56
 
@@ -188,10 +212,13 @@ class PancarteLore:
 
     # ── Logique serveur ─────────────────────────────────────────────────────
 
-    def tenter_paiement(self, joueur) -> str:
+    def tenter_paiement(self, joueur, shop_item: str = None) -> str:
+        type_p = getattr(self, 'type_pancarte', 'lore')
+        if type_p == 'shop_upgrades':
+            return self._tenter_paiement_upgrade(joueur, shop_item or '')
         if self.est_debloquee:
             return 'deja_debloquee'
-        if getattr(self, 'type_pancarte', 'lore') == 'shop_dash':
+        if type_p == 'shop_dash':
             if joueur.argent < COUT_DASH:
                 return 'pauvre'
             if joueur.peut_dash:
@@ -207,6 +234,38 @@ class PancarteLore:
         self.est_debloquee = True
         joueur.sons_a_jouer.append('ame_perdue')
         return 'debloquee'
+
+    def _tenter_paiement_upgrade(self, joueur, shop_item: str) -> str:
+        if shop_item == 'degats':
+            if joueur.degats_bonus >= 1:
+                return 'deja_debloquee'
+            if joueur.argent < COUT_UPGRADE_DEGATS:
+                return 'pauvre'
+            joueur.argent -= COUT_UPGRADE_DEGATS
+            joueur.degats_bonus = 1
+            joueur.sons_a_jouer.append('ame_libre')
+            return 'debloquee'
+        elif shop_item == 'pv_max':
+            if joueur.pv_max_bonus >= MAX_ACHATS_PV:
+                return 'deja_debloquee'
+            if joueur.argent < COUT_UPGRADE_PV:
+                return 'pauvre'
+            joueur.argent -= COUT_UPGRADE_PV
+            joueur.pv_max_bonus += 1
+            joueur.pv_max = PV_JOUEUR_MAX + joueur.pv_max_bonus
+            joueur.pv = min(joueur.pv + 1, joueur.pv_max)
+            joueur.sons_a_jouer.append('ame_libre')
+            return 'debloquee'
+        elif shop_item == 'echo_dir':
+            if joueur.peut_echo_dir:
+                return 'deja_debloquee'
+            if joueur.argent < COUT_UPGRADE_ECHO_DIR:
+                return 'pauvre'
+            joueur.argent -= COUT_UPGRADE_ECHO_DIR
+            joueur.peut_echo_dir = True
+            joueur.sons_a_jouer.append('ame_libre')
+            return 'debloquee'
+        return 'erreur'
 
     def mettre_a_jour(self, temps_ms: int):
         self._phase = (temps_ms / 1200.0) % (2 * math.pi)
@@ -408,15 +467,23 @@ class PancarteLore:
         sz    = 64
         cx, cy = sz // 2, sz // 2
 
-        if self.est_debloquee:
+        type_p = getattr(self, 'type_pancarte', 'lore')
+        if type_p == 'shop_upgrades':
+            col = (60, 200, 100)
+            anneaux = ((26, 10), (18, 22), (10, 42))
+            etat = 'shop_upgrades'
+        elif self.est_debloquee:
             col = (255, 190, 50)
             anneaux = ((26, 8), (18, 18), (10, 35))
             etat = 'unlocked'
-        else:
-            type_p = getattr(self, 'type_pancarte', 'lore')
-            col = (60, 200, 220) if type_p == 'shop_dash' else (130, 70, 255)
+        elif type_p == 'shop_dash':
+            col = (60, 200, 220)
             anneaux = ((26, 10), (18, 22), (10, 42))
-            etat = type_p
+            etat = 'shop_dash'
+        else:
+            col = (130, 70, 255)
+            anneaux = ((26, 10), (18, 22), (10, 42))
+            etat = 'lore'
 
         cache = PancarteLore._halo_pancarte_cache
         cle = (col, sz, etat)
@@ -479,11 +546,14 @@ class PancarteLore:
         self._init_fonts()
         f  = self._font_indicateur
         tk = (touche or 'F').upper()
-        if not self.est_debloquee:
-            type_p = getattr(self, 'type_pancarte', 'lore')
-            cout   = COUT_DASH if type_p == 'shop_dash' else COUT_AMES
-            label  = f"[{tk}]  {cout} âmes"
-            coul   = (80, 210, 230) if type_p == 'shop_dash' else (160, 100, 255)
+        type_p = getattr(self, 'type_pancarte', 'lore')
+        if type_p == 'shop_upgrades':
+            label = f"[{tk}]  Améliorations"
+            coul  = (80, 220, 120)
+        elif not self.est_debloquee:
+            cout  = COUT_DASH if type_p == 'shop_dash' else COUT_AMES
+            label = f"[{tk}]  {cout} âmes"
+            coul  = (80, 210, 230) if type_p == 'shop_dash' else (160, 100, 255)
         else:
             label = f"[{tk}]  Lire"
             coul  = (255, 200, 70)
@@ -594,9 +664,27 @@ class BulleLore:
         self.visible    = True
         self._scroll    = 0
         self._temps_ouv = pygame.time.get_ticks()
+        self._pages         = None
+        self._page_actuelle = 0
         self._texte     = texte if texte is not None else TEXTE_LORE
         self._titre_bulle    = titre if titre is not None else "✦   Inscription Traduite   ✦"
         self._sous_titre_bulle = sous_titre if sous_titre is not None else "— Message gravé en Langue des Éclaireurs —"
+
+    def ouvrir_multi(self, pages: list):
+        """pages : liste de dicts avec clés 'texte', 'titre', 'sous_titre'"""
+        self.visible        = True
+        self._scroll        = 0
+        self._temps_ouv     = pygame.time.get_ticks()
+        self._pages         = pages
+        self._page_actuelle = 0
+        self._appliquer_page()
+
+    def _appliquer_page(self):
+        p = self._pages[self._page_actuelle]
+        self._texte            = p.get('texte') or TEXTE_LORE
+        self._titre_bulle      = p.get('titre', "✦   Inscription Traduite   ✦")
+        self._sous_titre_bulle = p.get('sous_titre', "")
+        self._scroll           = 0
 
     def fermer(self):
         self.visible = False
@@ -604,8 +692,21 @@ class BulleLore:
     def gerer_event(self, event) -> bool:
         if not self.visible:
             return False
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self.fermer(); return True
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.fermer(); return True
+            pages = getattr(self, '_pages', None)
+            if pages and len(pages) > 1:
+                if event.key == pygame.K_LEFT:
+                    if self._page_actuelle > 0:
+                        self._page_actuelle -= 1
+                        self._appliquer_page()
+                    return True
+                if event.key == pygame.K_RIGHT:
+                    if self._page_actuelle < len(pages) - 1:
+                        self._page_actuelle += 1
+                        self._appliquer_page()
+                    return True
         if event.type == pygame.MOUSEBUTTONDOWN:
             if not self.rect.collidepoint(event.pos):
                 self.fermer(); return True
@@ -677,6 +778,33 @@ class BulleLore:
             y_cursor += lh
 
         surface.set_clip(clip_orig)
+
+        # ── Navigation multi-pages ───────────────────────────────────────
+        pages = getattr(self, '_pages', None)
+        if pages and len(pages) > 1:
+            f_nav   = pygame.font.Font(None, 26)
+            btn_w, btn_h = 72, 24
+            cy_nav = self.rect.bottom - 30
+
+            # Bouton gauche  < Prec.
+            can_prev = self._page_actuelle > 0
+            r_prev = pygame.Rect(self.rect.centerx - 100 - btn_w // 2, cy_nav - btn_h // 2, btn_w, btn_h)
+            pygame.draw.rect(surface, (50, 38, 12) if can_prev else (25, 22, 15), r_prev, border_radius=4)
+            pygame.draw.rect(surface, (140, 108, 28) if can_prev else (55, 48, 28), r_prev, 1, border_radius=4)
+            s_prev = f_nav.render("< Prec.", True, (210, 168, 55) if can_prev else (80, 68, 35))
+            surface.blit(s_prev, s_prev.get_rect(center=r_prev.center))
+
+            # Compteur de page
+            s_cnt = f_nav.render(f"{self._page_actuelle + 1} / {len(pages)}", True, (175, 138, 55))
+            surface.blit(s_cnt, s_cnt.get_rect(center=(self.rect.centerx, cy_nav)))
+
+            # Bouton droit  Suiv. >
+            can_next = self._page_actuelle < len(pages) - 1
+            r_next = pygame.Rect(self.rect.centerx + 100 - btn_w // 2, cy_nav - btn_h // 2, btn_w, btn_h)
+            pygame.draw.rect(surface, (50, 38, 12) if can_next else (25, 22, 15), r_next, border_radius=4)
+            pygame.draw.rect(surface, (140, 108, 28) if can_next else (55, 48, 28), r_next, 1, border_radius=4)
+            s_next = f_nav.render("Suiv. >", True, (210, 168, 55) if can_next else (80, 68, 35))
+            surface.blit(s_next, s_next.get_rect(center=r_next.center))
 
         # ── Hint fermeture ────────────────────────────────────────────────
         hint = self._font_fermer.render(
@@ -832,6 +960,168 @@ class PopupPaiement:
             t2 = self._font_sub.render("Vous portez désormais le pas des Éclaireurs.", True, (175, 148, 80))
             surface.blit(t2, t2.get_rect(center=(cx, cy + 10)))
 
+
+
+# ── Shop d'améliorations ────────────────────────────────────────────────────
+
+class PopupShopUpgrades:
+    """Popup shop à trois items. Navigation et achat au clavier (1 / 2 / 3)."""
+
+    LARGEUR = 500
+    HAUTEUR = 320
+
+    def __init__(self, largeur_ecran: int, hauteur_ecran: int):
+        self.lw = largeur_ecran
+        self.lh = hauteur_ecran
+        self.rect = pygame.Rect(
+            largeur_ecran  // 2 - self.LARGEUR // 2,
+            hauteur_ecran  // 2 - self.HAUTEUR // 2,
+            self.LARGEUR, self.HAUTEUR,
+        )
+        self.visible       = False
+        self._callback     = None
+        self._argent       = 0
+        self._degats_bonus = 0
+        self._pv_max_bonus = 0
+        self._echo_dir     = False
+        self._font_titre = pygame.font.Font(None, 32)
+        self._font       = pygame.font.Font(None, 27)
+        self._font_small = pygame.font.Font(None, 22)
+
+    def ouvrir(self, argent: int, degats_bonus: int, pv_max_bonus: int,
+               echo_dir: bool, callback):
+        self.visible       = True
+        self._argent       = argent
+        self._degats_bonus = degats_bonus
+        self._pv_max_bonus = pv_max_bonus
+        self._echo_dir     = echo_dir
+        self._callback     = callback
+
+    def fermer(self):
+        self.visible = False
+
+    def _acheter(self, item: str):
+        ok = False
+        if item == 'degats':
+            ok = self._degats_bonus < 1 and self._argent >= COUT_UPGRADE_DEGATS
+        elif item == 'pv_max':
+            ok = self._pv_max_bonus < MAX_ACHATS_PV and self._argent >= COUT_UPGRADE_PV
+        elif item == 'echo_dir':
+            ok = not self._echo_dir and self._argent >= COUT_UPGRADE_ECHO_DIR
+        if ok and self._callback:
+            self._callback(item)
+            self.fermer()
+
+    def gerer_event(self, event) -> bool:
+        if not self.visible:
+            return False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.fermer(); return True
+            if event.key in (pygame.K_1, pygame.K_KP1):
+                self._acheter('degats'); return True
+            if event.key in (pygame.K_2, pygame.K_KP2):
+                self._acheter('pv_max'); return True
+            if event.key in (pygame.K_3, pygame.K_KP3):
+                self._acheter('echo_dir'); return True
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if not self.rect.collidepoint(event.pos):
+                self.fermer(); return True
+        return self.visible
+
+    def dessiner(self, surface: pygame.Surface):
+        if not self.visible:
+            return
+
+        # Overlay
+        ov = pygame.Surface((self.lw, self.lh), pygame.SRCALPHA)
+        ov.fill((0, 0, 0, 150))
+        surface.blit(ov, (0, 0))
+
+        # Fond pierre
+        fond = pygame.Surface((self.LARGEUR, self.HAUTEUR), pygame.SRCALPHA)
+        for fy in range(self.HAUTEUR):
+            t = fy / self.HAUTEUR
+            r, g, b = int(22 + t * 12), int(18 + t * 10), int(30 + t * 15)
+            pygame.draw.line(fond, (r, g, b, 248), (0, fy), (self.LARGEUR, fy))
+        pygame.draw.rect(fond, (80, 200, 100), fond.get_rect(), 2, border_radius=8)
+        pygame.draw.rect(fond, (40, 100, 55),
+                         pygame.Rect(5, 5, self.LARGEUR - 10, self.HAUTEUR - 10),
+                         1, border_radius=6)
+        surface.blit(fond, self.rect.topleft)
+
+        cx = self.rect.centerx
+
+        # Titre
+        titre = self._font_titre.render("✦  Forgeron de l'Écho  ✦", True, (80, 220, 120))
+        surface.blit(titre, titre.get_rect(center=(cx, self.rect.y + 26)))
+        pygame.draw.line(surface, (40, 120, 60),
+                         (self.rect.x + 20, self.rect.y + 46),
+                         (self.rect.right - 20, self.rect.y + 46))
+
+        def _dessiner_ligne(y_base, touche, label, sous_label, dispo, achete_txt):
+            # Badge touche
+            badge_rect = pygame.Rect(self.rect.x + 16, y_base, 32, 32)
+            badge_col  = (30, 100, 50) if dispo else (40, 40, 40)
+            badge_brd  = (80, 200, 100) if dispo else (60, 60, 60)
+            pygame.draw.rect(surface, badge_col, badge_rect, border_radius=5)
+            pygame.draw.rect(surface, badge_brd, badge_rect, 1, border_radius=5)
+            tk_s = self._font.render(touche, True, (80, 220, 120) if dispo else (70, 70, 70))
+            surface.blit(tk_s, tk_s.get_rect(center=badge_rect.center))
+            # Texte
+            col_label = (200, 200, 200) if dispo else (90, 90, 90)
+            col_sous  = (130, 130, 130) if dispo else (70, 70, 70)
+            surface.blit(self._font.render(label, True, col_label),
+                         (self.rect.x + 58, y_base + 1))
+            surface.blit(self._font_small.render(sous_label, True, col_sous),
+                         (self.rect.x + 58, y_base + 22))
+            # Statut à droite
+            col_stat = (120, 120, 120) if not dispo else (80, 220, 120)
+            s_stat = self._font_small.render(achete_txt, True, col_stat)
+            surface.blit(s_stat, s_stat.get_rect(midright=(self.rect.right - 16, y_base + 16)))
+
+        # Ligne 1 — Force de frappe
+        dispo1 = self._degats_bonus < 1 and self._argent >= COUT_UPGRADE_DEGATS
+        achete1_txt = "Acheté" if self._degats_bonus >= 1 else ("Acheter [1]" if dispo1 else "Trop pauvre")
+        _dessiner_ligne(self.rect.y + 62, "1",
+                        "Force de frappe doublée",
+                        f"{COUT_UPGRADE_DEGATS} âmes  —  une seule fois",
+                        dispo1, achete1_txt)
+
+        pygame.draw.line(surface, (35, 55, 40),
+                         (self.rect.x + 16, self.rect.y + 138),
+                         (self.rect.right - 16, self.rect.y + 138))
+
+        # Ligne 2 — PV max
+        dispo2 = self._pv_max_bonus < MAX_ACHATS_PV and self._argent >= COUT_UPGRADE_PV
+        if self._pv_max_bonus >= MAX_ACHATS_PV:
+            achete2_txt = "Max atteint"
+        elif dispo2:
+            achete2_txt = "Acheter [2]"
+        else:
+            achete2_txt = "Trop pauvre"
+        _dessiner_ligne(self.rect.y + 152, "2",
+                        "PV Maximum +1",
+                        f"{COUT_UPGRADE_PV} âmes  —  {self._pv_max_bonus}/{MAX_ACHATS_PV} acheté(s)",
+                        dispo2, achete2_txt)
+
+        pygame.draw.line(surface, (35, 55, 40),
+                         (self.rect.x + 16, self.rect.y + 228),
+                         (self.rect.right - 16, self.rect.y + 228))
+
+        # Ligne 3 — Echo directionnel
+        dispo3 = not self._echo_dir and self._argent >= COUT_UPGRADE_ECHO_DIR
+        achete3_txt = "Acheté" if self._echo_dir else ("Acheter [3]" if dispo3 else "Trop pauvre")
+        _dessiner_ligne(self.rect.y + 242, "3",
+                        "Écho Directionnel",
+                        f"{COUT_UPGRADE_ECHO_DIR} âmes  —  une seule fois",
+                        dispo3, achete3_txt)
+
+        # Hint fermeture
+        hint = self._font_small.render(
+            "Appuyer sur 1 / 2 / 3 pour acheter  —  [ Échap ] pour fermer",
+            True, (60, 90, 65))
+        surface.blit(hint, hint.get_rect(center=(cx, self.rect.bottom - 12)))
 
 
 # ── Notification de capacité débloquée ──────────────────────────────────────

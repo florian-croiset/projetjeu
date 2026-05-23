@@ -36,7 +36,9 @@ from core.levier import Levier
 from core.mur_payant import MurPayant
 from core.orbe_capacite import OrbeCapacite
 from core.potion import GestionnairePotions
-from core.pancarte_lore import PancarteLore, BulleLore, PopupPaiement, NotificationCapacite, COUT_AMES, COUT_DASH, TEXTE_LETTRE_JONAS
+from core.pancarte_lore import (PancarteLore, BulleLore, PopupPaiement, PopupShopUpgrades,
+                                NotificationCapacite, COUT_AMES, COUT_DASH,
+                                TEXTE_LETTRE_JONAS, TEXTE_LEVIER)
 from ui.quete import WidgetQuete, JournalQuete
 
 
@@ -310,6 +312,9 @@ class BoucleJeuMixin:
             if self.popup_paiement and self.popup_paiement.visible:
                 if self.popup_paiement.gerer_event(event):
                     continue
+            if self.popup_shop_upgrades and self.popup_shop_upgrades.visible:
+                if self.popup_shop_upgrades.gerer_event(event):
+                    continue
 
             # Si le journal est ouvert, bloquer tous les inputs de jeu
             if hasattr(self, 'journal_quete') and self.journal_quete and self.journal_quete.ouvert:
@@ -389,8 +394,18 @@ class BoucleJeuMixin:
                                 break
                         if pancarte_proche:
                             i, pancarte = pancarte_proche
-                            if pancarte.est_debloquee:
-                                type_p = getattr(pancarte, 'type_pancarte', 'lore')
+                            type_p = getattr(pancarte, 'type_pancarte', 'lore')
+                            if type_p == 'shop_upgrades':
+                                degats_bonus = getattr(mon_joueur, 'degats_bonus', 0)
+                                pv_max_bonus = getattr(mon_joueur, 'pv_max_bonus', 0)
+                                echo_dir     = getattr(mon_joueur, 'peut_echo_dir', False)
+                                def _callback_shop(item):
+                                    self._achat_en_attente = True
+                                    self._shop_item_en_attente = item
+                                self.popup_shop_upgrades.ouvrir(
+                                    mon_joueur.argent, degats_bonus, pv_max_bonus,
+                                    echo_dir, _callback_shop)
+                            elif pancarte.est_debloquee:
                                 if type_p == 'lettre':
                                     self.bulle_lore.ouvrir(
                                         TEXTE_LETTRE_JONAS,
@@ -400,6 +415,16 @@ class BoucleJeuMixin:
                                 elif type_p == 'shop_dash':
                                     from core.pancarte_lore import TEXTE_LORE_DASH
                                     self.bulle_lore.ouvrir(TEXTE_LORE_DASH)
+                                elif type_p == 'lore_levier':
+                                    from core.pancarte_lore import TEXTE_LORE
+                                    self.bulle_lore.ouvrir_multi([
+                                        {'texte': TEXTE_LEVIER,
+                                         'titre': "✦   Fragment de Mémoire   ✦",
+                                         'sous_titre': "— Secteur 7 —"},
+                                        {'texte': TEXTE_LORE,
+                                         'titre': "✦   Inscription Traduite   ✦",
+                                         'sous_titre': "— Message gravé en Langue des Éclaireurs —"},
+                                    ])
                                 else:
                                     self.bulle_lore.ouvrir()
                             else:
@@ -408,7 +433,6 @@ class BoucleJeuMixin:
                                 def _callback_paiement():
                                     self._achat_en_attente = self._pancarte_active_id
 
-                                type_p = getattr(pancarte, 'type_pancarte', 'lore')
                                 if type_p == 'shop_dash':
                                     self.popup_paiement._titre_popup = "Fragment de Mémoire"
                                     self.popup_paiement._message_popup = f"Absorber ce souvenir — {COUT_DASH} âmes ?"
@@ -474,7 +498,9 @@ class BoucleJeuMixin:
 
         if getattr(self, '_achat_en_attente', None) is not None:
             commandes['interagir'] = True
-            self._achat_en_attente = None
+            commandes['shop_item'] = getattr(self, '_shop_item_en_attente', None)
+            self._achat_en_attente    = None
+            self._shop_item_en_attente = None
 
         commandes['pseudo'] = getattr(self, '_profil_pseudo', '')
         commandes['skin']   = getattr(self, '_profil_skin', 0)
@@ -923,6 +949,16 @@ class BoucleJeuMixin:
                         if self.notif_capacite:
                             touche = self.parametres.get('controles', {}).get('dash', 'LSHIFT')
                             self.notif_capacite.notifier('dash', touche)
+                    elif type_p == 'lore_levier':
+                        from core.pancarte_lore import TEXTE_LORE
+                        self.bulle_lore.ouvrir_multi([
+                            {'texte': TEXTE_LEVIER,
+                             'titre': "✦   Fragment de Mémoire   ✦",
+                             'sous_titre': "— Secteur 7 —"},
+                            {'texte': TEXTE_LORE,
+                             'titre': "✦   Inscription Traduite   ✦",
+                             'sous_titre': "— Message gravé en Langue des Éclaireurs —"},
+                        ])
                     else:
                         self.bulle_lore.ouvrir()
                     self._pancarte_active_id = None
@@ -1141,6 +1177,7 @@ class BoucleJeuMixin:
                     'echo_dir':       commandes_a_envoyer.get('echo_dir', False),
                     'toggle_torche':  commandes_a_envoyer.get('toggle_torche', False),
                     'interagir':      commandes_a_envoyer.get('interagir', False),
+                    'shop_item':      commandes_a_envoyer.get('shop_item', None),
                 }
                 if commandes_a_envoyer.get('interagir'):
                     print(f"[DEBUG CLIENT] Envoi interagir=True via UDP")
@@ -1190,6 +1227,8 @@ class BoucleJeuMixin:
                 self.bulle_lore.dessiner(self.ecran)
             if self.popup_paiement and self.popup_paiement.visible:
                 self.popup_paiement.dessiner(self.ecran)
+            if self.popup_shop_upgrades and self.popup_shop_upgrades.visible:
+                self.popup_shop_upgrades.dessiner(self.ecran)
 
             # --- Journal de quête (parchemin plein écran) ---
             if hasattr(self, 'journal_quete') and self.journal_quete:
@@ -1421,7 +1460,9 @@ class BoucleJeuMixin:
         self.potions                = GestionnairePotions()
         self.bulle_lore             = BulleLore(self.largeur_ecran, self.hauteur_ecran)
         self.popup_paiement         = PopupPaiement(self.largeur_ecran, self.hauteur_ecran)
+        self.popup_shop_upgrades    = PopupShopUpgrades(self.largeur_ecran, self.hauteur_ecran)
         self._pancarte_active_id    = None
+        self._shop_item_en_attente  = None
         # --- Icône journal (widget HUD) + journal parchemin ---
         self.widget_quete  = WidgetQuete(self.police_bouton, self.police_petit)
         self.journal_quete = JournalQuete(
@@ -1578,9 +1619,11 @@ class BoucleJeuMixin:
         self._boss_etat_precedent         = None
         self._boss_frame_precedent        = 0
         self.etat_jeu_interne             = "JEU"
-        self.bulle_lore          = None
-        self.popup_paiement      = None
-        self._pancarte_active_id = None
+        self.bulle_lore             = None
+        self.popup_paiement         = None
+        self.popup_shop_upgrades    = None
+        self._pancarte_active_id    = None
+        self._shop_item_en_attente  = None
         # --- Reset journal et icône quête ---
         self.widget_quete  = None
         self.journal_quete = None

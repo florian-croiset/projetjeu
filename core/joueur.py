@@ -92,6 +92,8 @@ class Joueur:
         self.pv = PV_JOUEUR_MAX
         self.pv_max = PV_JOUEUR_MAX
         self.argent = ARGENT_DEPART
+        self.degats_bonus  = 0   # 0 ou 1 (force de frappe doublée)
+        self.pv_max_bonus  = 0   # 0-5 (PV max supplémentaires)
         self.dernier_degat_temps = 0
         self.est_en_degat = False
 
@@ -622,8 +624,10 @@ class Joueur:
             'sur_le_sol':        self.sur_le_sol,
             'en_mouvement':      self.en_mouvement,
             'est_en_degat':      est_en_degat,
-            'pseudo': self.pseudo,
-            'skin':   self.skin,
+            'pseudo':       self.pseudo,
+            'skin':         self.skin,
+            'degats_bonus': self.degats_bonus,
+            'pv_max_bonus': self.pv_max_bonus,
         }
 
     def set_etat(self, data):
@@ -660,8 +664,10 @@ class Joueur:
         if age_degat is not None:
             self.dernier_degat_temps = pygame.time.get_ticks() - age_degat
         # Champs animation
-        self.sur_le_sol  = data.get('sur_le_sol', self.sur_le_sol)
+        self.sur_le_sol   = data.get('sur_le_sol', self.sur_le_sol)
         self.en_mouvement = data.get('en_mouvement', self.en_mouvement)
+        self.degats_bonus = data.get('degats_bonus', 0)
+        self.pv_max_bonus = data.get('pv_max_bonus', 0)
         self.est_en_degat = data.get('est_en_degat', False)
 
         etat_attaque = data.get('attaque')
