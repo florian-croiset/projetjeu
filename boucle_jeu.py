@@ -1060,6 +1060,7 @@ class BoucleJeuMixin:
         passage_serveur = donnees_recues.get('passage_ouvert', False)
         if passage_serveur and not self.passage_ouvert:
             self._ouvrir_passage_local()
+            music.jouer_sfx('grillage_ouverture')
         self.passage_ouvert = passage_serveur
 
         # Mur payant
@@ -1070,12 +1071,14 @@ class BoucleJeuMixin:
             self.mur_payant_local.set_etat(data_mp)
             if data_mp.get('debloque') and not self.mur_payant_debloque:
                 self._detruire_mur_payant_local()
+                music.jouer_sfx('ouverture_grille_boss')
             self.mur_payant_debloque = data_mp.get('debloque', False)
 
         # Mur clé
         mur_cle_serveur = donnees_recues.get('mur_cle_detruit', False)
         if mur_cle_serveur and not self.mur_cle_detruit:
             self._detruire_mur_cle_local()
+            music.jouer_sfx('cassure_grille_boss')
         self.mur_cle_detruit = mur_cle_serveur
 
         # --- Potions ---

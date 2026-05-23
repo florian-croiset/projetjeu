@@ -54,8 +54,11 @@ _LISTE_SFX = {
     'echo':           'echo',
     'echo_dir':       'echo_dir',
     'cle':            'cle',
-    'torche_boucle':  'torche_boucle', # DONE
-    'checkpoint':     'checkpoint',
+    'torche_boucle':       'torche_boucle', # DONE
+    'checkpoint':          'checkpoint',
+    'grillage_ouverture':  'grillage_ouverture',
+    'ouverture_grille_boss': 'ouverture_grille_boss',
+    'cassure_grille_boss': 'cassure_grille_boss',
 }
 
 _EXTENSIONS = ['.mp3', '.ogg', '.wav']
