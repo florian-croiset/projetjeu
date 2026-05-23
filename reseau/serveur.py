@@ -274,14 +274,15 @@ class Serveur:
 
     def creer_pancartes_lore(self):
         configs = [
-            (81 * 32, 39 * 32, 'lore'),
-            (38 * 32, 49 * 32, 'shop_dash'),
+            (81 * 32, 39 * 32, 'lore_levier'),
+            (29 * 32, 48 * 32, 'shop_dash'),
             (2983, 1382, 'lettre'),
+            (33 * 32, 31 * 32, 'shop_upgrades'),
         ]
         for i, (x, y, type_p) in enumerate(configs):
             p = PancarteLore(x, y)
             p.type_pancarte = type_p
-            if type_p == 'lettre':
+            if type_p in ('lettre', 'shop_upgrades'):
                 p.est_debloquee = True
             self.pancartes_lore[i] = p
         print(f"[SERVEUR] {len(self.pancartes_lore)} pancarte(s) lore créées")
@@ -441,14 +442,16 @@ class Serveur:
                         # NOUVEAU — Interaction pancarte lore
                         if commandes.get('interagir'):
                             joueur = self.joueurs[id_joueur]
+                            shop_item = commandes.get('shop_item', None)
                             for i, pancarte in self.pancartes_lore.items():
                                 dx = joueur.rect.centerx - pancarte.rect.centerx
                                 dy = joueur.rect.centery - pancarte.rect.centery
                                 dist = (dx**2 + dy**2) ** 0.5
                                 print(f"[DEBUG] pancarte {i} dist={dist:.0f} debloquee={pancarte.est_debloquee} argent={joueur.argent}")
                                 if dist <= PancarteLore.PORTEE_INTERACTION:
-                                    if not pancarte.est_debloquee:
-                                        resultat = pancarte.tenter_paiement(joueur)
+                                    type_p = getattr(pancarte, 'type_pancarte', 'lore')
+                                    if not pancarte.est_debloquee or type_p == 'shop_upgrades':
+                                        resultat = pancarte.tenter_paiement(joueur, shop_item=shop_item)
                                         print(f"[DEBUG] resultat paiement={resultat}")
                                     break
                             # Mur payant
@@ -624,14 +627,16 @@ class Serveur:
                         self.donnees_partie["ameliorations"]["echo_dir"]    = joueur_ckpt.peut_echo_dir
                         gestion_sauvegarde.sauvegarder_partie(self.id_slot, self.donnees_partie)
             if payload.get('interagir'):
+                shop_item = payload.get('shop_item', None)
                 for i, pancarte in self.pancartes_lore.items():
                     dx = joueur.rect.centerx - pancarte.rect.centerx
                     dy = joueur.rect.centery - pancarte.rect.centery
                     dist = (dx**2 + dy**2) ** 0.5
                     print(f"[DEBUG] pancarte {i} type={pancarte.type_pancarte} dist={dist:.0f} debloquee={pancarte.est_debloquee} argent={joueur.argent}")
                     if dist <= PancarteLore.PORTEE_INTERACTION:
-                        if not pancarte.est_debloquee:
-                            resultat = pancarte.tenter_paiement(joueur)
+                        type_p = getattr(pancarte, 'type_pancarte', 'lore')
+                        if not pancarte.est_debloquee or type_p == 'shop_upgrades':
+                            resultat = pancarte.tenter_paiement(joueur, shop_item=shop_item)
                             print(f"[DEBUG] resultat={resultat}")
                         break
                 # Mur payant
@@ -1027,7 +1032,8 @@ class Serveur:
                                     and id_ennemi not in joueur.ennemis_touches
                                     and joueur.rect_attaque.colliderect(ennemi.rect)):
                                 joueur.ennemis_touches.add(id_ennemi)
-                                mort = ennemi.prendre_degat(DEGATS_JOUEUR, temps_actuel)
+                                degats = DEGATS_JOUEUR * (2 if joueur.degats_bonus >= 1 else 1)
+                                mort = ennemi.prendre_degat(degats, temps_actuel)
                                 if mort:
                                     cx, cy = ennemi.rect.centerx, ennemi.rect.centery
                                     ame = AmeLoot(cx, cy, valeur=ennemi.argent_drop)
@@ -1037,7 +1043,8 @@ class Serveur:
                                     if random.random() < 0.2:
                                         taille = 'large' if ennemi.pv_max >= 3 else 'small'
                                         self.potions.dropper(cx, cy, taille)
-                        self.boss_room.recevoir_attaque_joueur(joueur.rect_attaque, DEGATS_JOUEUR)
+                        degats_boss = DEGATS_JOUEUR * (2 if joueur.degats_bonus >= 1 else 1)
+                        self.boss_room.recevoir_attaque_joueur(joueur.rect_attaque, degats_boss)
 
                         # Leviers coop
                         if not self.passage_ouvert:
@@ -1046,9 +1053,8 @@ class Serveur:
                                 if id_lev not in touches and joueur.rect_attaque.colliderect(levier.rect):
                                     touches.add(id_lev)
                                     levier.activer(temps_actuel)
-                                    cond = (any if MODE_DEV else all)
-                                    if cond(l.active and temps_actuel - l.temps_activation <= DELAI_LEVIER_COOP
-                                            for l in self.leviers.values()):
+                                    if all(l.active and temps_actuel - l.temps_activation <= DELAI_LEVIER_COOP
+                                           for l in self.leviers.values()):
                                         self._ouvrir_passage()
 
                         # Mur avec clé
