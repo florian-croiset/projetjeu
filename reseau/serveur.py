@@ -46,9 +46,10 @@ class Serveur:
         self.serveur_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
         try:
-            self.serveur_socket.bind(("0.0.0.0", PORT_SERVEUR))
+            ip_serveur = obtenir_ip_locale()
+            self.serveur_socket.bind((ip_serveur, PORT_SERVEUR))
             print(f"[SERVEUR] Demarre sur le port {PORT_SERVEUR}")
-            print(f"[SERVEUR] IP locale : {obtenir_ip_locale()}")
+            print(f"[SERVEUR] IP locale : {ip_serveur}")
         except OSError as e:
             print(f"[SERVEUR] ERREUR lors du bind: {e}")
             raise
@@ -892,6 +893,8 @@ class Serveur:
 
                 # 1c. Âmes perdues : absorption progressive au contact (1 âme / 50ms)
                 for id_joueur, joueur in list(self.joueurs.items()):
+                    if joueur.temps_mort is not None:
+                        continue
                     for id_ame, ame in list(self.ames_perdues.items()):
                         if ame.id_joueur != id_joueur:
                             continue
@@ -1081,8 +1084,8 @@ class Serveur:
                             if joueur.ame_perdue and joueur.ame_perdue.id in self.ames_perdues:
                                 del self.ames_perdues[joueur.ame_perdue.id]
 
-                            # Si en combat du boss, l'âme se crée au point de réapparition
-                            if self.boss_room.fight_started:
+                            # Si en combat du boss (et boss encore vivant), l'âme se crée au point de réapparition
+                            if self.boss_room.fight_started and not self.boss_room.boss_defeated:
                                 x_ame, y_ame = 2555, 294
                                 self.boss_room.reset_boss()
                             else:

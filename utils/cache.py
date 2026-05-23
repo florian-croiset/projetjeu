@@ -140,19 +140,18 @@ def label_bg(largeur: int, hauteur: int, alpha: int = 120) -> pygame.Surface:
 def creer_textes_echo_hud(font_label_small: pygame.font.Font,
                           font_label_medium: pygame.font.Font,
                           font_echo_icon: pygame.font.Font) -> dict:
-    """Renvoie un dict contenant les 4 surfaces statiques du widget Echo.
+    """Renvoie un dict contenant les surfaces statiques du widget Echo.
 
     Clés du dict retourné :
       - 'echo_label'  : « ECHO » (petit, gris)
       - 'echo_pret'   : « PRÊT » (moyen, cyan)
-      - 'e_pret'      : « E » (icône, cyan)
-      - 'e_attente'   : « E » (icône, grisé)
+
+    Les icônes de touche (e_pret / e_attente) sont rendues dynamiquement
+    via render_text() dans le HUD pour refléter les liaisons de touches.
     """
     return {
         'echo_label': font_label_small.render("ECHO", True, (100, 85, 130)),
         'echo_pret':  font_label_medium.render("PRÊT", True, COULEUR_CYAN),
-        'e_pret':     font_echo_icon.render("E", True, COULEUR_CYAN),
-        'e_attente':  font_echo_icon.render("E", True, (100, 80, 140)),
     }
 
 

@@ -16,6 +16,25 @@ class HudMixin:
     """Méthodes d'affichage du HUD en jeu."""
 
     # ------------------------------------------------------------------
+    #  UTILITAIRES
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _format_touche_hud(key: str) -> str:
+        """Convertit un nom de touche en label court pour les cercles HUD."""
+        _MAP = {
+            'space': 'SP', 'mouse_1': 'M1', 'mouse_2': 'M2', 'mouse_3': 'M3',
+            'left': '←', 'right': '→', 'up': '↑', 'down': '↓',
+            'return': 'RT', 'backspace': 'BS', 'tab': 'TB',
+            'escape': 'EC', 'lshift': 'SH', 'rshift': 'SH',
+            'lctrl': 'CT', 'rctrl': 'CT', 'lalt': 'AL', 'ralt': 'AL',
+        }
+        k = key.lower()
+        if k in _MAP:
+            return _MAP[k]
+        return key[0].upper() if key else '?'
+
+    # ------------------------------------------------------------------
     #  CACHE HUD (fonts + surfaces réutilisables)
     # ------------------------------------------------------------------
 
@@ -217,8 +236,11 @@ class HudMixin:
             flash_alpha = min(255, int(180 * (1.0 - elapsed / 200)))
             pygame.draw.circle(surf_c, (255, 255, 255, flash_alpha), (scx, scy), rayon - 4)
 
-        # Icône centrale "E" (touche d'activation) — pré-rendue dans le cache
-        icone_e = self._txt_echo['e_pret'] if pret else self._txt_echo['e_attente']
+        # Icône centrale : touche d'activation lue depuis les paramètres
+        _key_echo = self.parametres.get('controles', {}).get('echo', 'e')
+        _label_echo = self._format_touche_hud(_key_echo)
+        couleur_icone = COULEUR_CYAN if pret else (100, 80, 140)
+        icone_e = render_text(self._font_echo_icon, _label_echo, couleur_icone)
         surf_c.blit(icone_e, icone_e.get_rect(center=(scx, scy)))
 
         self.ecran.blit(surf_c, (cx_cercle - rayon - 1, cy_cercle - rayon - 1))
@@ -333,9 +355,10 @@ class HudMixin:
 
         # Mini-cooldown dash
         if getattr(joueur, 'peut_dash', False):
+            _dash_key = self.parametres.get('controles', {}).get('dash', 'c')
             y_cur = self._dessiner_mini_cooldown(
                 x, y_cur,
-                touche_label='C',
+                touche_label=self._format_touche_hud(_dash_key),
                 titre='DASH',
                 couleur_pastille=(180, 80, 255),
                 dernier_temps=getattr(joueur, 'dernier_dash_temps', 0),
@@ -346,9 +369,10 @@ class HudMixin:
 
         # Mini-cooldown écho directionnel
         if getattr(joueur, 'peut_echo_dir', False):
+            _echo_dir_key = self.parametres.get('controles', {}).get('echo_dir', 'y')
             y_cur = self._dessiner_mini_cooldown(
                 x, y_cur,
-                touche_label='Y',
+                touche_label=self._format_touche_hud(_echo_dir_key),
                 titre='ÉCH.DIR',
                 couleur_pastille=(0, 200, 180),
                 dernier_temps=getattr(joueur, 'dernier_echo_dir_temps', 0),
