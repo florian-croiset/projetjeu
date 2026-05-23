@@ -149,6 +149,12 @@ class PancarteLore:
 
     PORTEE_INTERACTION = 80
     _sprite_parchemin = None  # cache partagé entre toutes les instances
+    # (rune_idx, couleur_rgb) -> Surface pré-rendue
+    _runes_particules_cache: "dict[tuple[int, tuple[int, int, int]], pygame.Surface]" = {}
+    # (couleur_rgb, taille, état) -> Surface base à alpha max
+    _halo_pancarte_cache: "dict[tuple[tuple[int, int, int], int, str], pygame.Surface]" = {}
+    # taille -> Surface SRCALPHA scratch réutilisable
+    _halo_scratch: "dict[int, pygame.Surface]" = {}
 
     def __init__(self, x: int, y: int):
         self.x = x
@@ -159,6 +165,8 @@ class PancarteLore:
         self._font_lore  = None
         self._font_titre = None
         self._font_ui    = None
+        self._font_indicateur = None
+        self._font_star_stele = None
         self._surf_cache = None
         self._surf_etat  = None
 
@@ -211,6 +219,8 @@ class PancarteLore:
         self._font_lore  = pygame.font.Font(None, 28)
         self._font_titre = pygame.font.Font(None, 34)
         self._font_ui    = pygame.font.Font(None, 28)
+        self._font_indicateur = pygame.font.Font(None, 26)
+        self._font_star_stele = pygame.font.Font(None, 30)
 
     def dessiner(self, surface: pygame.Surface, camera_offset=(0, 0),
                  temps_ms: int = 0, touche_interagir: str = 'F'):
@@ -248,14 +258,20 @@ class PancarteLore:
         if PancarteLore._sprite_parchemin is None:
             PancarteLore._sprite_parchemin = _charger_sprite_parchemin()
 
-        # Halo chaud discret (blanc-beige pulsé)
+        # Halo chaud discret (blanc-beige pulsé) — base mise en cache
         pulse = 0.5 + 0.5 * math.sin(self._phase)
         sz = 80
-        halo = pygame.Surface((sz, sz), pygame.SRCALPHA)
         cx, cy = sz // 2, sz // 2
-        for r, a in [(32, 6), (22, 14), (12, 28)]:
-            pygame.draw.circle(halo, (240, 220, 160, int(a * pulse)), (cx, cy), r)
-        surface.blit(halo, (sx + LARGEUR_PANCARTE // 2 - cx,
+        col = (240, 220, 160)
+        cle = (col, sz, 'lettre')
+        base = PancarteLore._halo_pancarte_cache.get(cle)
+        if base is None:
+            base = pygame.Surface((sz, sz), pygame.SRCALPHA)
+            for r, a in [(32, 6), (22, 14), (12, 28)]:
+                pygame.draw.circle(base, (*col, a), (cx, cy), r)
+            PancarteLore._halo_pancarte_cache[cle] = base
+        base.set_alpha(int(pulse * 255))
+        surface.blit(base, (sx + LARGEUR_PANCARTE // 2 - cx,
                             sy + HAUTEUR_PANCARTE // 2 - cy))
 
         # Sprite parchemin centré sur le rect
@@ -379,8 +395,8 @@ class PancarteLore:
                 _dessiner_rune(surf, f, rx, ry, 6, (185, 145, 40))
 
             # Étoile centrale
-            f_star = pygame.font.Font(None, 30)
-            star   = f_star.render("✦", True, (255, 200, 55))
+            self._init_fonts()
+            star   = self._font_star_stele.render("✦", True, (255, 200, 55))
             surf.blit(star, star.get_rect(center=(cx_s, cy_s)))
 
         return surf
@@ -390,32 +406,46 @@ class PancarteLore:
     def _dessiner_halo(self, surface, sx, sy):
         pulse = 0.5 + 0.5 * math.sin(self._phase)
         sz    = 64
-        halo  = pygame.Surface((sz, sz), pygame.SRCALPHA)
         cx, cy = sz // 2, sz // 2
 
         if self.est_debloquee:
             col = (255, 190, 50)
-            for r, a in [(26, 8), (18, 18), (10, 35)]:
-                pygame.draw.circle(halo, (*col, int(a * pulse)),
-                                   (cx, cy + 10), r)
+            anneaux = ((26, 8), (18, 18), (10, 35))
+            etat = 'unlocked'
         else:
             type_p = getattr(self, 'type_pancarte', 'lore')
             col = (60, 200, 220) if type_p == 'shop_dash' else (130, 70, 255)
-            for r, a in [(26, 10), (18, 22), (10, 42)]:
-                pygame.draw.circle(halo, (*col, int(a * pulse)),
-                                   (cx, cy + 10), r)
+            anneaux = ((26, 10), (18, 22), (10, 42))
+            etat = type_p
 
-        # Particules de lumière montantes sur le halo
+        cache = PancarteLore._halo_pancarte_cache
+        cle = (col, sz, etat)
+        base = cache.get(cle)
+        if base is None:
+            base = pygame.Surface((sz, sz), pygame.SRCALPHA)
+            for r, a in anneaux:
+                pygame.draw.circle(base, (*col, a), (cx, cy + 10), r)
+            cache[cle] = base
+
+        scratch = PancarteLore._halo_scratch.get(sz)
+        if scratch is None:
+            scratch = pygame.Surface((sz, sz), pygame.SRCALPHA)
+            PancarteLore._halo_scratch[sz] = scratch
+        scratch.fill((0, 0, 0, 0))
+        base.set_alpha(int(pulse * 255))
+        scratch.blit(base, (0, 0))
+
+        # Particules de lumière montantes (mouvement dépendant du temps, dessinées sur scratch SRCALPHA)
         for i in range(3):
             ph  = self._phase + i * 2.1
             hpx = int(cx + math.cos(ph * 0.8) * 9)
             hpy = int(cy + 4 - (i * 6) - (math.sin(ph) * 4))
             ha  = max(0, int(70 * math.sin(ph + 1.5)))
-            if 0 <= hpx < sz and 0 <= hpy < sz:
-                pygame.draw.circle(halo, (*col, ha), (hpx, hpy), 2)
+            if ha > 0 and 0 <= hpx < sz and 0 <= hpy < sz:
+                pygame.draw.circle(scratch, (*col, ha), (hpx, hpy), 2)
 
-        surface.blit(halo, (sx + LARGEUR_PANCARTE // 2 - cx,
-                            sy + HAUTEUR_PANCARTE // 2 - cy))
+        surface.blit(scratch, (sx + LARGEUR_PANCARTE // 2 - cx,
+                               sy + HAUTEUR_PANCARTE // 2 - cy))
 
     # ── Particules runiques flottantes ───────────────────────────────────────
 
@@ -427,21 +457,27 @@ class PancarteLore:
         couleur = col_u if self.est_debloquee else col_r
         nb      = 4 if not self.est_debloquee else 3
 
+        cache = PancarteLore._runes_particules_cache
         for i in range(nb):
             ph  = self._phase + i * (2 * math.pi / nb)
             px  = sx + LARGEUR_PANCARTE // 2 + math.cos(ph) * (20 + i * 3)
             py  = sy + HAUTEUR_PANCARTE // 2 + math.sin(ph * 0.7) * 9 - i * 4
             a   = max(0, int(90 + 80 * math.sin(ph * 2)))
             ridx = (i * 3) % len(_RUNES_FORMES)
-            # Mini rune (scale 5)
-            tmp = pygame.Surface((9, 11), pygame.SRCALPHA)
-            _dessiner_rune(tmp, _RUNES_FORMES[ridx], 0, 0, 5, (*couleur, a))
+            cle = (ridx, couleur)
+            tmp = cache.get(cle)
+            if tmp is None:
+                tmp = pygame.Surface((9, 11), pygame.SRCALPHA)
+                _dessiner_rune(tmp, _RUNES_FORMES[ridx], 0, 0, 5, (*couleur, 255))
+                cache[cle] = tmp
+            tmp.set_alpha(a)
             surface.blit(tmp, (int(px) - 4, int(py) - 5))
 
     # ── Badge d'interaction ──────────────────────────────────────────────────
 
     def _dessiner_indicateur(self, surface, sx, sy, temps_ms, touche: str = 'F'):
-        f  = pygame.font.Font(None, 26)
+        self._init_fonts()
+        f  = self._font_indicateur
         tk = (touche or 'F').upper()
         if not self.est_debloquee:
             type_p = getattr(self, 'type_pancarte', 'lore')

@@ -324,7 +324,11 @@ class MenusMixin:
             btn.dessiner(self.ecran)
 
         # --- Version ---
-        police_bas = pygame.font.Font(None, max(22, self._scale(26)))
+        taille_bas = max(22, self._scale(26))
+        if getattr(self, '_police_bas_taille', None) != taille_bas:
+            self._police_bas = pygame.font.Font(None, taille_bas)
+            self._police_bas_taille = taille_bas
+        police_bas = self._police_bas
         ver = police_bas.render("v1.4 — Beta", True, COULEUR_TEXTE_SOMBRE)
         self.ecran.blit(ver, (self.largeur_ecran - ver.get_width() - 20,
                             self.hauteur_ecran - ver.get_height() - 12))
@@ -763,8 +767,11 @@ class MenusMixin:
 
     def dessiner_menu_parametres(self):
         self._dessiner_fond_menu2()
-        police_titre_params = pygame.font.Font(None, max(48, self.hauteur_ecran // 14))
-        dessiner_titre_neon(self.ecran, police_titre_params,
+        taille_titre_params = max(48, self.hauteur_ecran // 14)
+        if getattr(self, '_police_titre_params_taille', None) != taille_titre_params:
+            self._police_titre_params = pygame.font.Font(None, taille_titre_params)
+            self._police_titre_params_taille = taille_titre_params
+        dessiner_titre_neon(self.ecran, self._police_titre_params,
                             langue.get_texte("param_titre"),
                             self.cx, self.hauteur_ecran // 14)
 
