@@ -214,7 +214,7 @@ class Serveur:
 
     def creer_orbes_capacite(self):
         configs = [
-            (419,  1190, 'double_saut'),
+            (21 * 32, 61 * 32, 'double_saut'),
             #(2920, 1126, 'dash'),
         ]
         for x, y, capacite in configs:
@@ -224,7 +224,7 @@ class Serveur:
 
     def creer_porte(self):
         portes_config = [
-            (995, 960),      # Porte de sortie principale
+            (85 * 32, 65 * 32),      # Porte de sortie principale
         ]
         for i, (x, y) in enumerate(portes_config):
             self.portes[i] = Porte(x=x, y=y)
@@ -273,8 +273,8 @@ class Serveur:
 
     def creer_pancartes_lore(self):
         configs = [
-            (800,  1200, 'lore'),
-            (1500,  500, 'shop_dash'),
+            (81 * 32, 39 * 32, 'lore'),
+            (38 * 32, 49 * 32, 'shop_dash'),
         ]
         for i, (x, y, type_p) in enumerate(configs):
             p = PancarteLore(x, y)

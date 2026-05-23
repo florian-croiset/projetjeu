@@ -1382,6 +1382,7 @@ class BoucleJeuMixin:
             dossier_script = os.path.dirname(os.path.abspath(__file__))
         chemin_map = os.path.join(dossier_script, "assets/MapS2.tmx")
         self.carte                  = Carte(chemin_map)
+        Porte.charger_assets(os.path.join(dossier_script, "assets", "porte_sheet.png"))
         self.vis_map_locale         = self.carte.creer_carte_visibilite_vierge()
         self.echo_fade_times        = {}
         map_w = self.carte.largeur_map * TAILLE_TUILE

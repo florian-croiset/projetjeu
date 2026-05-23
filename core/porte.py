@@ -1,207 +1,130 @@
 # core/porte.py
-# Porte interactive : ne s'ouvre qu'avec la clé.
-# Bloque le passage physiquement tant qu'elle est fermée.
-# Côté serveur : collision solide. Côté client : rendu animé.
+# Porte sprite — 3 frames : fermée / entrouverte / ouverte.
+# Spritesheet horizontale : porte_sheet.png (3 × 507×653 px).
 
 import pygame
-import math
-import os
-import sys
-from parametres import TAILLE_TUILE, COULEUR_CYAN, COULEUR_CYAN_SOMBRE, COULEUR_TEXTE_SOMBRE
-from utils.cache import get_font_defaut, render_text
+from parametres import TAILLE_TUILE
+
+
+# ── Timings ──────────────────────────────────────────────────────────
+_DUREE_AJAR   = 400   # ms entre fermée → entrouverte
+_DUREE_OUVRIR = 400   # ms entre entrouverte → ouverte
+
+# ── Frames dans la spritesheet ───────────────────────────────────────
+_FRAME_FERMEE      = 0
+_FRAME_ENTROUVERTE = 1
+_FRAME_OUVERTE     = 2
+
+_SHEET_FRAME_W = 507
+_SHEET_FRAME_H = 653
 
 
 class Porte:
     """
-    Porte qui bloque le passage jusqu'à ce qu'un joueur portant la clé
-    interagisse avec elle (contact direct).
+    Porte sprite 3 états.
 
-    Dimensions : 2 tuiles de large × 3 tuiles de haut (64×96 px).
+    Dimensions affichées : 2 tuiles × 3 tuiles (64×96 px).
+    Seule la frame 0 bloque le joueur ; dès la frame 1 le passage est libre.
     """
 
-    LARGEUR  = TAILLE_TUILE * 2   # 64 px
-    HAUTEUR  = TAILLE_TUILE * 3   # 96 px
+    LARGEUR = TAILLE_TUILE * 2   # 64
+    HAUTEUR = TAILLE_TUILE * 3   # 96
 
-    # Durée de l'animation d'ouverture en ms
-    DUREE_OUVERTURE = 800
+    # Cache de classe partagé — chargé une seule fois
+    _frames: list[pygame.Surface] | None = None
+
+    # ── Chargement ────────────────────────────────────────────────────
+
+    @classmethod
+    def charger_assets(cls, chemin: str = "assets/porte_sheet.png"):
+        if cls._frames is not None:
+            return
+        sheet = pygame.image.load(chemin).convert_alpha()
+        frame_w = sheet.get_width() // 3
+        frame_h = sheet.get_height()
+        cls._frames = []
+        for i in range(3):
+            rect  = pygame.Rect(i * frame_w, 0, frame_w, frame_h)
+            frame = sheet.subsurface(rect)
+            frame = pygame.transform.scale(frame, (cls.LARGEUR, cls.HAUTEUR))
+            cls._frames.append(frame)
+
+    # ── Init ──────────────────────────────────────────────────────────
 
     def __init__(self, x: int, y: int):
-        """
-        x, y : coin supérieur gauche en pixels (coordonnées monde).
-        """
         self.x = x
         self.y = y
-
-        # Hitbox physique (utilisée pour la collision serveur)
         self.rect = pygame.Rect(x, y, self.LARGEUR, self.HAUTEUR)
 
-        self.est_ouverte    = False
-        self.en_ouverture   = False   # animation en cours
-        self._debut_ouverture = 0     # timestamp ms
+        self.est_ouverte   = False
+        self.en_ouverture  = False
+        self._frame_courante = _FRAME_FERMEE
+        self._t_transition   = 0   # timestamp du début de la transition en cours
 
-        # Offset vertical de la vantail pour l'animation (0 = fermé, HAUTEUR = ouvert)
-        self._offset_anim = 0
-
-        # Phase pour la lueur de la serrure
-        self._phase_lueur = 0.0
-
-    # ------------------------------------------------------------------
-    #  LOGIQUE SERVEUR
-    # ------------------------------------------------------------------
+    # ── Logique ───────────────────────────────────────────────────────
 
     def tenter_ouverture(self, joueur) -> bool:
-        """
-        Appelé par le serveur quand un joueur est en contact avec la porte.
-        Retourne True si la porte vient de s'ouvrir.
-        """
         if self.est_ouverte or self.en_ouverture:
             return False
         if not joueur.have_key:
             return False
-
-        self.en_ouverture     = True
-        self._debut_ouverture = pygame.time.get_ticks()
-        print(f"[PORTE] Ouverture déclenchée par joueur {joueur.id}")
+        self.en_ouverture    = True
+        self._t_transition   = pygame.time.get_ticks()
+        self._frame_courante = _FRAME_FERMEE
         return True
 
     def mettre_a_jour(self, temps_ms: int):
-        """Mise à jour de l'état (animation d'ouverture). Appelé chaque tick serveur."""
-        if self.en_ouverture:
-            elapsed = temps_ms - self._debut_ouverture
-            ratio   = min(1.0, elapsed / self.DUREE_OUVERTURE)
-            self._offset_anim = int(ratio * self.HAUTEUR)
+        if not self.en_ouverture:
+            return
 
-            if ratio >= 1.0:
-                # Ouverture terminée → supprimer la hitbox physique
-                self.en_ouverture = False
-                self.est_ouverte  = True
-                self.rect.height  = 0   # plus de collision
+        elapsed = temps_ms - self._t_transition
+
+        if self._frame_courante == _FRAME_FERMEE:
+            if elapsed >= _DUREE_AJAR:
+                self._frame_courante = _FRAME_ENTROUVERTE
+                self._t_transition   = temps_ms
+
+        elif self._frame_courante == _FRAME_ENTROUVERTE:
+            if elapsed >= _DUREE_OUVRIR:
+                self._frame_courante = _FRAME_OUVERTE
+                self.en_ouverture    = False
+                self.est_ouverte     = True
+                self.rect.width      = 0
+                self.rect.height     = 0
 
     @property
     def rect_collision(self) -> pygame.Rect:
-        """Rect utilisé pour les collisions physiques (vide si ouverte)."""
-        if self.est_ouverte:
+        # Dès la frame entrouverte le joueur peut passer
+        if self._frame_courante >= _FRAME_ENTROUVERTE:
             return pygame.Rect(self.x, self.y, 0, 0)
-        if self.en_ouverture:
-            # La partie non encore montée reste solide
-            hauteur_restante = self.HAUTEUR - self._offset_anim
-            return pygame.Rect(self.x, self.y + self._offset_anim,
-                               self.LARGEUR, hauteur_restante)
         return pygame.Rect(self.x, self.y, self.LARGEUR, self.HAUTEUR)
 
-    # ------------------------------------------------------------------
-    #  RÉSEAU
-    # ------------------------------------------------------------------
+    # ── Réseau ────────────────────────────────────────────────────────
 
     def get_etat(self) -> dict:
         return {
-            'x':            self.x,
-            'y':            self.y,
-            'est_ouverte':  self.est_ouverte,
+            'x': self.x, 'y': self.y,
+            'est_ouverte': self.est_ouverte,
             'en_ouverture': self.en_ouverture,
-            'offset_anim':  self._offset_anim,
+            'frame': self._frame_courante,
         }
 
     def set_etat(self, data: dict):
-        self.x             = data['x']
-        self.y             = data['y']
-        self.est_ouverte   = data['est_ouverte']
-        self.en_ouverture  = data['en_ouverture']
-        self._offset_anim  = data['offset_anim']
+        self.x               = data['x']
+        self.y               = data['y']
+        self.est_ouverte     = data['est_ouverte']
+        self.en_ouverture    = data['en_ouverture']
+        self._frame_courante = data['frame']
 
-    # ------------------------------------------------------------------
-    #  RENDU CLIENT
-    # ------------------------------------------------------------------
+    # ── Rendu ─────────────────────────────────────────────────────────
 
-    def dessiner(self, surface: pygame.Surface, camera_offset=(0, 0), temps_ms: int = 0):
-        """Dessine la porte avec animation et lueur."""
+    def dessiner(self, surface: pygame.Surface,
+                 camera_offset=(0, 0), temps_ms: int = 0):
+        if self._frames is None:
+            return   # assets non chargés
+
         off_x, off_y = camera_offset
         sx = self.x - off_x
         sy = self.y - off_y
 
-        if self.est_ouverte and not self.en_ouverture:
-            # Porte complètement ouverte : juste un petit halo résiduel au sol
-            if not hasattr(self, '_halo_sol_surf'):
-                self._halo_sol_surf = pygame.Surface(
-                    (self.LARGEUR + 16, 12), pygame.SRCALPHA)
-            self._halo_sol_surf.fill((0, 0, 0, 0))
-            t = temps_ms / 1200
-            a = int(30 + 20 * math.sin(t))
-            pygame.draw.ellipse(self._halo_sol_surf, (0, 212, 255, a),
-                                pygame.Rect(0, 0, self.LARGEUR + 16, 12))
-            surface.blit(self._halo_sol_surf, (sx - 8, sy + self.HAUTEUR - 6))
-            return
-
-        # --- Cadre de la porte (toujours dessiné) ---
-        epaisseur_cadre = 6
-        couleur_cadre   = (60, 40, 120)
-        couleur_bord    = (100, 60, 180)
-
-        # Montants gauche et droit
-        pygame.draw.rect(surface, couleur_cadre,
-                         pygame.Rect(sx, sy, epaisseur_cadre, self.HAUTEUR))
-        pygame.draw.rect(surface, couleur_cadre,
-                         pygame.Rect(sx + self.LARGEUR - epaisseur_cadre, sy,
-                                     epaisseur_cadre, self.HAUTEUR))
-        # Linteau
-        pygame.draw.rect(surface, couleur_cadre,
-                         pygame.Rect(sx, sy, self.LARGEUR, epaisseur_cadre))
-
-        # --- Vantail (la partie qui monte) ---
-        vantail_y  = sy - self._offset_anim
-        vantail_h  = self.HAUTEUR - self._offset_anim
-        if vantail_h > 0:
-            vantail_rect = pygame.Rect(sx + epaisseur_cadre, vantail_y,
-                                       self.LARGEUR - epaisseur_cadre * 2, vantail_h)
-            # Fond du vantail
-            pygame.draw.rect(surface, (30, 15, 60), vantail_rect, border_radius=3)
-
-            # Détails — deux panneaux
-            marge = 6
-            w_panneau = vantail_rect.width // 2 - marge * 2
-            for col in range(2):
-                px = vantail_rect.x + marge + col * (w_panneau + marge * 2)
-                py = vantail_rect.y + marge
-                ph = min(vantail_rect.height - marge * 2, 36)
-                if ph > 4:
-                    pygame.draw.rect(surface, (50, 25, 90),
-                                     pygame.Rect(px, py, w_panneau, ph),
-                                     border_radius=2)
-                    pygame.draw.rect(surface, (80, 40, 140),
-                                     pygame.Rect(px, py, w_panneau, ph),
-                                     width=1, border_radius=2)
-
-            # Serrure (si fermée et non en cours d'ouverture)
-            if not self.en_ouverture:
-                self._dessiner_serrure(surface, sx + self.LARGEUR // 2,
-                                       sy + self.HAUTEUR // 2, temps_ms)
-
-        # --- Bords lumineux du cadre ---
-        pygame.draw.rect(surface, couleur_bord,
-                         pygame.Rect(sx, sy, epaisseur_cadre, self.HAUTEUR), width=1)
-        pygame.draw.rect(surface, couleur_bord,
-                         pygame.Rect(sx + self.LARGEUR - epaisseur_cadre, sy,
-                                     epaisseur_cadre, self.HAUTEUR), width=1)
-        pygame.draw.rect(surface, couleur_bord,
-                         pygame.Rect(sx, sy, self.LARGEUR, epaisseur_cadre), width=1)
-
-    def _dessiner_serrure(self, surface, cx, cy, temps_ms):
-        """Petite serrure avec lueur pulsante."""
-        pulse = 0.5 + 0.5 * math.sin(temps_ms / 800)
-
-        # Halo doré (surface réutilisée)
-        if not hasattr(self, '_halo_serrure_surf'):
-            self._halo_serrure_surf = pygame.Surface((32, 32), pygame.SRCALPHA)
-        self._halo_serrure_surf.fill((0, 0, 0, 0))
-        a = int(80 * pulse)
-        pygame.draw.circle(self._halo_serrure_surf, (255, 200, 50, a), (16, 16), 14)
-        surface.blit(self._halo_serrure_surf, (cx - 16, cy - 16))
-
-        # Corps de la serrure (trou de serrure stylisé)
-        pygame.draw.circle(surface, (200, 160, 40), (cx, cy - 2), 5)
-        pygame.draw.rect(surface, (200, 160, 40),
-                         pygame.Rect(cx - 3, cy + 2, 6, 7), border_radius=1)
-
-        # Indicateur "Clé requise" (font + texte mémoïsés)
-        txt = render_text(get_font_defaut(24), "🔑", (255, 215, 0))
-        surface.blit(txt, (cx - txt.get_width() // 2, cy + 12))
+        surface.blit(self._frames[self._frame_courante], (sx, sy))

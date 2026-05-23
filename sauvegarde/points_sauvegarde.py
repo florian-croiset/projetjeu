@@ -8,13 +8,14 @@ from parametres import TAILLE_TUILE
 NOMS_CHECKPOINTS = {
     "10_46": "Point de Départ",
     "1_12": "Entrée de la Grotte",
+    "80_10": "Salle du Boss",
     # Ajoutez d'autres noms ici si vous connaissez les coordonnées tuiles (x_y)
 }
 
 def get_point_depart():
     """Renvoie l'ID et les coordonnées du tout premier point de spawn."""
-    id_depart = "32_12"
-    coords = (32 * TAILLE_TUILE, 12 * TAILLE_TUILE)
+    id_depart = "42_22"
+    coords = (42 * TAILLE_TUILE, 22 * TAILLE_TUILE)
     return id_depart, coords
 
 def get_coords_par_id(id_point):
