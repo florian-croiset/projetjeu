@@ -71,10 +71,9 @@ SPRITES_JOUEURS = [
 _SKINS = {
     0: ('p1', 0),   # animations p1 + sprite_perso1
     1: ('p2', 1),   # animations p2 + sprite_perso2
-    2: ('p1', 2),   # animations p1 + sprite_perso3
 }
 NB_SKINS = len(_SKINS)
-_NOMS_SKINS = {0: "Éclaireur", 1: "Spectre", 2: "Rôdeur"}
+_NOMS_SKINS = {0: "Éclaireur", 1: "Spectre"}
 
 class Joueur:
     def __init__(self, x, y, id, couleur=COULEUR_JOUEUR):
