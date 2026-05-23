@@ -31,17 +31,10 @@ class MenusMixin:
         bh = self._hauteur_bouton()
         esp = self._espacement_bouton() + bh
 
-        nb_boutons = 5
-        hauteur_groupe = nb_boutons * esp - self._espacement_bouton()
-        y_start = self.cy - hauteur_groupe // 2 + self.hauteur_ecran // 10
-
-        def _btn(i, texte, style="normal"):
-            y = y_start + i * esp
-            return Bouton(cx - lw // 2, y, lw, bh, texte, self.police_bouton, style=style)
-
         nb_boutons = 6
         hauteur_groupe = nb_boutons * esp - self._espacement_bouton()
-        y_start = self.cy - hauteur_groupe // 2 + self.hauteur_ecran // 10
+        # Groupe de boutons centré verticalement dans la moitié basse
+        y_start = int(self.hauteur_ecran * 0.67) - hauteur_groupe // 2
 
         def _btn(i, texte, style="normal"):
             y = y_start + i * esp
@@ -56,8 +49,8 @@ class MenusMixin:
 
         self.boutons_menu_principal = [
             self.btn_nouvelle_partie, self.btn_continuer,
-            self.btn_rejoindre, self.btn_tutoriel,
-            self.btn_parametres, self.btn_quitter
+            self.btn_rejoindre, self.btn_parametres,
+            self.btn_tutoriel, self.btn_quitter
         ]
         self.btn_copier_ip_locale = Bouton(0, 0, self._scale(300), self._scale(36), "", self.police_petit)
 
@@ -308,37 +301,60 @@ class MenusMixin:
                     webbrowser.open("https://florian-croiset.github.io/jeusite/")
 
     def dessiner_menu_principal(self):
-        t = self.temps_anim
-        dessiner_fond_echo(self.ecran, self.largeur_ecran, self.hauteur_ecran, t)
+        # --- Fond : image PNG illustrée ---
+        if not hasattr(self, '_fond_menu_cache') or self._fond_menu_cache is None:
+            import os
+            racine = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            chemin = os.path.join(racine, "assets", "background_menu.png")
+            try:
+                img = pygame.image.load(chemin).convert()
+                self._fond_menu_cache = pygame.transform.smoothscale(
+                    img, (self.largeur_ecran, self.hauteur_ecran))
+            except Exception:
+                # Fallback : fond procédural si l'image est absente
+                self._fond_menu_cache = None
 
-        cy_titre = max(80, self.hauteur_ecran // 7)
-        police_grand_titre = pygame.font.Font(None, max(96, self.hauteur_ecran // 7))
-        dessiner_titre_neon(self.ecran, police_grand_titre,
-                            langue.get_texte("titre_jeu"),
-                            self.cx, cy_titre)
+        if self._fond_menu_cache is not None:
+            self.ecran.blit(self._fond_menu_cache, (0, 0))
+        else:
+            self._dessiner_fond_menu2()
 
-        sub = self.police_petit.render("par la Team Nightberry", True, COULEUR_TEXTE_SOMBRE)
-        self.ecran.blit(sub, sub.get_rect(center=(self.cx, cy_titre + police_grand_titre.get_height() // 2 + 20)))
-
-        marge = self.largeur_ecran // 6
-        dessiner_separateur_neon(self.ecran,
-                                marge, cy_titre + police_grand_titre.get_height() // 2 + 50,
-                                self.largeur_ecran - marge)
-
+        # --- Boutons ---
         for btn in self.boutons_menu_principal:
             btn.dessiner(self.ecran)
 
-        ver = self.police_petit.render("v1.4 — Beta", True, COULEUR_TEXTE_SOMBRE)
+        # --- Version ---
+        police_bas = pygame.font.Font(None, max(22, self._scale(26)))
+        ver = police_bas.render("v1.4 — Beta", True, COULEUR_TEXTE_SOMBRE)
         self.ecran.blit(ver, (self.largeur_ecran - ver.get_width() - 20,
                             self.hauteur_ecran - ver.get_height() - 12))
 
+        # --- Lien site ---
         lien_texte = "https://florian-croiset.github.io/jeusite/"
         pos_souris = pygame.mouse.get_pos()
-        lien_surf = self.police_petit.render(lien_texte, True, COULEUR_CYAN_SOMBRE)
+        lien_surf = police_bas.render(lien_texte, True, COULEUR_CYAN)
         lien_rect = lien_surf.get_rect(bottomleft=(20, self.hauteur_ecran - 12))
         if lien_rect.collidepoint(pos_souris):
-            lien_surf = self.police_petit.render(lien_texte, True, COULEUR_CYAN)
+            lien_surf = police_bas.render(lien_texte, True, COULEUR_CYAN)
         self.ecran.blit(lien_surf, lien_rect)
+    
+    def _dessiner_fond_menu2(self):
+        """Fond pixel-art grotte pour les sous-menus."""
+        if not hasattr(self, '_fond_menu2_cache') or self._fond_menu2_cache is None:
+            import os
+            racine = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            chemin = os.path.join(racine, "assets", "background_menu2.png")
+            try:
+                img = pygame.image.load(chemin).convert()
+                self._fond_menu2_cache = pygame.transform.smoothscale(
+                    img, (self.largeur_ecran, self.hauteur_ecran))
+            except Exception:
+                self._fond_menu2_cache = None
+
+        if self._fond_menu2_cache is not None:
+            self.ecran.blit(self._fond_menu2_cache, (0, 0))
+        else:
+            dessiner_fond_echo(self.ecran, self.largeur_ecran, self.hauteur_ecran, self.temps_anim)
 
     # ==================================================================
     #  GESTION + DESSIN — MENU REJOINDRE
@@ -423,8 +439,7 @@ class MenusMixin:
                     self.input_ip_curseur_pos = pos + 1
 
     def dessiner_menu_rejoindre(self):
-        dessiner_fond_echo(self.ecran, self.largeur_ecran, self.hauteur_ecran,
-                        self.temps_anim)
+        self._dessiner_fond_menu2()
         dessiner_titre_neon(self.ecran, self.police_titre,
                             langue.get_texte("rejoindre_titre"),
                             self.cx, self.hauteur_ecran // 7)
@@ -525,8 +540,7 @@ class MenusMixin:
                             self.lancer_partie_locale(id_slot, est_nouvelle_partie=False)
 
     def dessiner_menu_slots(self):
-        dessiner_fond_echo(self.ecran, self.largeur_ecran, self.hauteur_ecran,
-                        self.temps_anim)
+        self._dessiner_fond_menu2()
         titre_cle = ("slots_titre_nouvelle"
                     if self.etat_jeu == "MENU_NOUVELLE_PARTIE"
                     else "slots_titre_continuer")
@@ -748,8 +762,7 @@ class MenusMixin:
             btn.verifier_survol(pos_souris)
 
     def dessiner_menu_parametres(self):
-        dessiner_fond_echo(self.ecran, self.largeur_ecran, self.hauteur_ecran,
-                        self.temps_anim)
+        self._dessiner_fond_menu2()
         police_titre_params = pygame.font.Font(None, max(48, self.hauteur_ecran // 14))
         dessiner_titre_neon(self.ecran, police_titre_params,
                             langue.get_texte("param_titre"),
@@ -983,8 +996,7 @@ class MenusMixin:
             return img
         except Exception:
             fond = pygame.Surface((self.largeur_ecran, self.hauteur_ecran))
-            dessiner_fond_echo(fond, self.largeur_ecran, self.hauteur_ecran,
-                               self.temps_anim)
+            self._dessiner_fond_menu2()
             self._apercu_luminosite_cache = fond
             return fond
 
@@ -1029,13 +1041,7 @@ class MenusMixin:
         self.btn_retour_luminosite.verifier_survol(pos_souris)
 
     def dessiner_menu_luminosite(self):
-        fond = self._fond_luminosite
-        if fond is None:
-            fond = self._charger_apercu_luminosite()
-        if fond.get_size() != (self.largeur_ecran, self.hauteur_ecran):
-            fond = pygame.transform.smoothscale(
-                fond, (self.largeur_ecran, self.hauteur_ecran))
-        self.ecran.blit(fond, (0, 0))
+        self._dessiner_fond_menu2()
 
         overlay = pygame.Surface(
             (self.largeur_ecran, self.hauteur_ecran), pygame.SRCALPHA)
