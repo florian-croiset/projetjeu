@@ -14,7 +14,7 @@ from ui.bouton import Bouton
 from ui.slider import Slider
 from ui.effets_visuels import dessiner_fond_echo, dessiner_titre_neon, dessiner_separateur_neon, dessiner_panneau
 from sauvegarde import gestion_parametres, gestion_sauvegarde
-from reseau.protocole import obtenir_ip_locale, obtenir_ip_vpn
+from reseau.protocole import obtenir_ip_locale
 from core.joueur import _NOMS_SKINS, NB_SKINS
 
 
@@ -91,7 +91,6 @@ class MenusMixin:
             return Bouton(col_droite, 0, lw_param, bh_param, texte, self.police_petit)
 
         self.btn_copier_ip_locale    = _p()
-        self.btn_copier_ip_hamachi   = _p()
         self.btn_changer_langue      = _p()
         self.btn_toggle_plein_ecran  = _p()
         self.btn_changer_ecran       = _p()
@@ -151,14 +150,12 @@ class MenusMixin:
             self.btn_changer_torche,
             self.btn_changer_journal,
             self.btn_changer_skin,
-            self.btn_copier_ip_locale, self.btn_copier_ip_hamachi,
         ]
         self.boutons_menu_params_fixes = [
             self.btn_appliquer_params, self.btn_retour_params
         ]
 
         self._ip_locale_cache = None
-        self._ip_vpn_cache    = None
         if not hasattr(self, '_feedback_copie'):
             self._feedback_copie = {}
 
@@ -290,7 +287,6 @@ class MenusMixin:
                 self.parametres_temp = copy.deepcopy(self.parametres)
                 self.etat_jeu_precedent = "MENU_PRINCIPAL"
                 self._ip_locale_cache = obtenir_ip_locale()
-                self._ip_vpn_cache    = obtenir_ip_vpn()
                 self.etat_jeu = "MENU_PARAMETRES"
             if self.btn_quitter.verifier_clic(event):
                 self.etat_jeu = "QUITTER"
@@ -739,11 +735,6 @@ class MenusMixin:
                     ip = obtenir_ip_locale()
                     if self.copier_dans_presse_papier(ip):
                         self._feedback_copie['ip_locale'] = pygame.time.get_ticks()
-                if self.btn_copier_ip_hamachi.verifier_clic(event):
-                    ip = obtenir_ip_vpn()
-                    if ip != "Non connecté":
-                        if self.copier_dans_presse_papier(ip):
-                            self._feedback_copie['ip_hamachi'] = pygame.time.get_ticks()
                 # Clic sur la zone pseudo
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     self.input_pseudo_actif = self.input_pseudo_rect.collidepoint(event.pos)
@@ -974,9 +965,6 @@ class MenusMixin:
         ligne_ip("IP Locale (LAN) :",
                 _label_copie('ip_locale', self._ip_locale_cache or '...'),
                 self.btn_copier_ip_locale)
-        ligne_ip("IP VPN (Tailscale/Hamachi) :",
-                _label_copie('ip_hamachi', self._ip_vpn_cache or '...'),
-                self.btn_copier_ip_hamachi)
 
         aide = render_text(self.police_petit,
             "Cliquez pour copier dans le presse-papiers", COULEUR_TEXTE_SOMBRE)
@@ -1107,7 +1095,6 @@ class MenusMixin:
                 self.etat_jeu_precedent = "EN_JEU"
                 self.parametres_temp = copy.deepcopy(self.parametres)
                 self._ip_locale_cache = obtenir_ip_locale()
-                self._ip_vpn_cache    = obtenir_ip_vpn()
                 self.etat_jeu_interne = "PARAMETRES_JEU"
             if self.btn_pause_quitter.verifier_clic(event):
                 self.etat_jeu = "MENU_PRINCIPAL"
