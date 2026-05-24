@@ -57,151 +57,28 @@ class BoucleJeuMixin:
     #  SÉQUENCE DE FIN
     # ====================================================================
 
-    #  ↓ Modifie ces chemins selon tes assets
-    FIN_ENDING_IMAGE  = os.path.join(
+    FIN_ENDING_IMAGE = os.path.join(
         sys._MEIPASS if getattr(sys, 'frozen', False)
         else os.path.dirname(os.path.abspath(__file__)),
         "assets", "ending.png")
-    FIN_TEASER_IMAGE  = os.path.join(
+    FIN_TEASER_IMAGE = os.path.join(
         sys._MEIPASS if getattr(sys, 'frozen', False)
         else os.path.dirname(os.path.abspath(__file__)),
         "assets", "teaser_echo2.png")
-
-    def jouer_sequence_fin(self):
-        """Cinématique de fin : fade noir → image fin → fade → teaser Echo II → menu."""
-
-        FADE_LONG_MS    = 1500   # fondu initial (jeu → noir)
-        FADE_COURT_MS   = 1000   # fondu entre les deux images
-        FADEIN_MS       = 800    # fade-in de chaque image
-        LOCK_MS         = 3000   # délai avant de pouvoir appuyer
-
-        lw, lh = self.largeur_ecran, self.hauteur_ecran
-        can_proceed = [False]    # flag mutable pour la closure
-
-        # ── helpers ────────────────────────────────────────────────────
-
-        def _charger_image(chemin):
-            try:
-                img = pygame.image.load(chemin).convert()
-                ratio = min(lw / img.get_width(), lh / img.get_height())
-                nw, nh = int(img.get_width() * ratio), int(img.get_height() * ratio)
-                img = pygame.transform.scale(img, (nw, nh))
-                return img, (lw - nw) // 2, (lh - nh) // 2
-            except Exception:
-                # Fallback si l'image est manquante
-                surf = pygame.Surface((lw, lh))
-                surf.fill((15, 15, 30))
-                return surf, 0, 0
-
-        def _pomper_quit():
-            """Pompe les events, quitte proprement sur QUIT, renvoie True si on doit sortir."""
-            for ev in pygame.event.get():
-                if ev.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-            return False
-
-        def _fade_vers_noir(duree_ms, snapshot=None):
-            """Fondu progressif de `snapshot` (ou écran actuel) vers le noir."""
-            debut = pygame.time.get_ticks()
-            overlay = pygame.Surface((lw, lh), pygame.SRCALPHA)
-            while True:
-                elapsed = pygame.time.get_ticks() - debut
-                t = min(elapsed / duree_ms, 1.0)
-                self.ecran.fill((0, 0, 0))
-                if snapshot:
-                    self.ecran.blit(snapshot, (0, 0))
-                overlay.fill((0, 0, 0, int(255 * t)))
-                self.ecran.blit(overlay, (0, 0))
-                pygame.display.flip()
-                _pomper_quit()
-                self.horloge.tick(FPS)
-                if elapsed >= duree_ms:
-                    break
-
-        def _afficher_ecran(image, ix, iy):
-            """Fade-in image, attend 3 s de lock puis n'importe quelle touche."""
-
-            # --- Fade-in ---
-            debut_fi = pygame.time.get_ticks()
-            while True:
-                elapsed = pygame.time.get_ticks() - debut_fi
-                t = min(elapsed / FADEIN_MS, 1.0)
-                self.ecran.fill((0, 0, 0))
-                tmp = image.copy()
-                tmp.set_alpha(int(255 * t))
-                self.ecran.blit(tmp, (ix, iy))
-                pygame.display.flip()
-                _pomper_quit()
-                self.horloge.tick(FPS)
-                if elapsed >= FADEIN_MS:
-                    break
-
-            # --- Attente + touche ---
-            can_proceed[0] = False
-            debut_lock = pygame.time.get_ticks()
-            pygame.event.clear()
-
-            while True:
-                now = pygame.time.get_ticks()
-                if not can_proceed[0] and now - debut_lock >= LOCK_MS:
-                    can_proceed[0] = True
-
-                self.ecran.fill((0, 0, 0))
-                self.ecran.blit(image, (ix, iy))
-
-                if can_proceed[0] and (now // 600) % 2 == 0:
-                    surf_hint = self.police_texte.render(
-                        "Appuyez sur une touche pour continuer...", True, (180, 180, 180))
-                    self.ecran.blit(surf_hint,
-                                    surf_hint.get_rect(centerx=lw // 2, bottom=lh - 28))
-
-                pygame.display.flip()
-                self.horloge.tick(FPS)
-
-                for ev in pygame.event.get():
-                    if ev.type == pygame.QUIT:
-                        pygame.quit()
-                        sys.exit()
-                    if can_proceed[0] and ev.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
-                        return   # l'appelant continue
-
-        # ── Séquence ───────────────────────────────────────────────────
-
-        # 1. Capture du dernier frame de jeu + fade to black
-        snapshot_jeu = self.ecran.copy()
-        _fade_vers_noir(FADE_LONG_MS, snapshot=snapshot_jeu)
-        pygame.time.wait(200)
-
-        # Musique de fond pour le ending et le teaser
-        from utils import music
-        music.demarrer()
-
-        # 2. Écran de fin
-        img1, x1, y1 = _charger_image(self.FIN_ENDING_IMAGE)
-        _afficher_ecran(img1, x1, y1)
-
-        # 3. Transition noire
-        snapshot_fin = self.ecran.copy()
-        _fade_vers_noir(FADE_COURT_MS, snapshot=snapshot_fin)
-        pygame.time.wait(200)
-
-        # 4. Teaser Echo II
-        img2, x2, y2 = _charger_image(self.FIN_TEASER_IMAGE)
-        _afficher_ecran(img2, x2, y2)
-
-        # 5. Fade final + retour menu
-        snapshot_teaser = self.ecran.copy()
-        _fade_vers_noir(FADE_COURT_MS, snapshot=snapshot_teaser)
-
-        # Arrêt musique
-        music.arreter()
-
-        # ── Nettoyage et retour au menu ─────────────────────────────
-        self.etat_jeu = "MENU_PRINCIPAL"
-        self.nettoyer_connexion()
-        self.actualiser_langues_widgets()
-
+    FIN_CRISTAL_FRAMES = [
+        os.path.join(
+            sys._MEIPASS if getattr(sys, 'frozen', False)
+            else os.path.dirname(os.path.abspath(__file__)),
+            "assets", nom)
+        for nom in [
+            "Destruction_Solaris_1_-_Instabilité.png",
+            "Destruction_Solaris_2_-_Fissures.png",
+            "Destruction_Solaris_3_-_Explosion.png",
+            "Destruction_Solaris_4_-_Aftermath.png",
+            "Destruction_Solaris_5_-_Noir.png",
+        ]
+    ]
+    
     # ==================================================================
     #  BOUCLE PRINCIPALE DE L'APPLICATION
     # ==================================================================
@@ -1639,3 +1516,6 @@ class BoucleJeuMixin:
         self.notif_capacite = None
         self._recompense_fin_quete_donnee = False
         self._sequence_fin_declenchee = False
+
+from sequence_fin_cristal import jouer_sequence_fin as _jouer_sequence_fin
+BoucleJeuMixin.jouer_sequence_fin = _jouer_sequence_fin

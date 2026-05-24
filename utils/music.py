@@ -59,6 +59,7 @@ _LISTE_SFX = {
     'grillage_ouverture':  'grillage_ouverture',
     'ouverture_grille_boss': 'ouverture_grille_boss',
     'cassure_grille_boss': 'cassure_grille_boss',
+    'explosion':          'explosion',
 }
 
 _EXTENSIONS = ['.mp3', '.ogg', '.wav']
