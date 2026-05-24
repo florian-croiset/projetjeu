@@ -74,15 +74,9 @@ _CONFIG_PAR_PV = {
     2: {'vitesse': VITESSE_ENNEMI,
         'largeur': TAILLE_TUILE - 8,  'hauteur': TAILLE_TUILE - 4,
         'argent': ARGENT_PAR_ENNEMI,  'sprite': 'e2'},
-    3: {'vitesse': 2.0,
-        'largeur': TAILLE_TUILE - 12, 'hauteur': TAILLE_TUILE - 8,
-        'argent': 24,                 'sprite': 'e1'},
-    6: {'vitesse': VITESSE_ENNEMI,
-        'largeur': TAILLE_TUILE - 8,  'hauteur': TAILLE_TUILE - 4,
-        'argent': ARGENT_PAR_ENNEMI,  'sprite': 'e2'},
-    9: {'vitesse': 1.0,
+    3: {'vitesse': 1.0,
         'largeur': TAILLE_TUILE,      'hauteur': TAILLE_TUILE + 8,
-        'argent': 45,                 'sprite': 'e3'},
+        'argent': 15,                 'sprite': 'e3'},
 }
 
 # Couleurs de la barre de vie selon le ratio restant
@@ -97,9 +91,7 @@ _COULEUR_COEUR_VIDE = (55,  25,  25)
 _COULEUR_FALLBACK_PAR_PV = {
     1: (210, 90, 90),
     2: COULEUR_ENNEMI,
-    3: (210, 90, 90),
-    6: COULEUR_ENNEMI,
-    9: (140, 25, 25),
+    3: (140, 25, 25),
 }
 
 # -----------------------------------------------------------------------
