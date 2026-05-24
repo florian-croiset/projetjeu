@@ -1082,7 +1082,7 @@ class PopupShopUpgrades:
 
         # Ligne 1 — Force de frappe
         dispo1 = self._degats_bonus < 1 and self._argent >= COUT_UPGRADE_DEGATS
-        achete1_txt = "Acheté" if self._degats_bonus >= 1 else ("Acheter [1]" if dispo1 else "Trop pauvre")
+        achete1_txt = "Acheté" if self._degats_bonus >= 1 else ("Acheter [1]" if dispo1 else "Fonds insuffisants")
         _dessiner_ligne(self.rect.y + 62, "1",
                         "Force de frappe doublée",
                         f"{COUT_UPGRADE_DEGATS} âmes  —  une seule fois",
@@ -1099,7 +1099,7 @@ class PopupShopUpgrades:
         elif dispo2:
             achete2_txt = "Acheter [2]"
         else:
-            achete2_txt = "Trop pauvre"
+            achete2_txt = "Fonds insuffisants"
         _dessiner_ligne(self.rect.y + 152, "2",
                         "PV Maximum +1",
                         f"{COUT_UPGRADE_PV} âmes  —  {self._pv_max_bonus}/{MAX_ACHATS_PV} acheté(s)",
@@ -1111,7 +1111,7 @@ class PopupShopUpgrades:
 
         # Ligne 3 — Echo directionnel
         dispo3 = not self._echo_dir and self._argent >= COUT_UPGRADE_ECHO_DIR
-        achete3_txt = "Acheté" if self._echo_dir else ("Acheter [3]" if dispo3 else "Trop pauvre")
+        achete3_txt = "Acheté" if self._echo_dir else ("Acheter [3]" if dispo3 else "Fonds insuffisants")
         _dessiner_ligne(self.rect.y + 242, "3",
                         "Écho Directionnel",
                         f"{COUT_UPGRADE_ECHO_DIR} âmes  —  une seule fois",
