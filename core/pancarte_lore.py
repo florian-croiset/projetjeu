@@ -1155,6 +1155,8 @@ class NotificationCapacite:
         labels = {
             'dash':        ("Pas de l'Éclaireur absorbé", "Le souffle des anciens vous porte — Dash"),
             'double_saut': ("Mémoire du bond retrouvée",  "L'élan des Éclaireurs vous habite — Double Saut"),
+            'cle':         ("Clé des profondeurs trouvée", "Une porte vous attend quelque part — Clé"),
+            'echo_dir':    ("Écho Directionnel débloqué",  "Votre voix perce l'obscurité — Écho Directionnel"),
         }
         titre, sous = labels.get(capacite, ("Capacité débloquée", capacite))
         self._queue.append({

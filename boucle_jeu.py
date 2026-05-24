@@ -717,10 +717,15 @@ class BoucleJeuMixin:
             if dj['id'] not in self.joueurs_locaux:
                 self.joueurs_locaux[dj['id']] = Joueur(dj['x'], dj['y'], dj['id'])
             joueur = self.joueurs_locaux[dj['id']]
+            etait_echo_dir = getattr(joueur, 'peut_echo_dir', False)
             if not self.udp_actif and dj['id'] == self.mon_id:
                 joueur.set_etat_local(dj)
             else:
                 joueur.set_etat(dj)
+            if dj['id'] == self.mon_id and not etait_echo_dir and joueur.peut_echo_dir:
+                if hasattr(self, 'notif_capacite') and self.notif_capacite:
+                    touche = self.parametres.get('controles', {}).get('echo_dir', 'E')
+                    self.notif_capacite.notifier('echo_dir', touche)
             # Comptage des âmes récoltées (cumul sur les hausses d'argent)
             if dj['id'] == self.mon_id:
                 argent_av = self._argent_joueur_precedent
@@ -924,7 +929,11 @@ class BoucleJeuMixin:
         if data_cle:
             if self.cle_locale is None:
                 self.cle_locale = Cle(data_cle['x'], data_cle['y'])
+            etait_ramassee = self.cle_locale.est_ramassee
             self.cle_locale.set_etat(data_cle)
+            if not etait_ramassee and self.cle_locale.est_ramassee:
+                if hasattr(self, 'notif_capacite') and self.notif_capacite:
+                    self.notif_capacite.notifier('cle', '')
 
         # --- Torche ---
         torche_serveur = donnees_recues.get('torche_allumee', False)
