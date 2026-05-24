@@ -85,7 +85,7 @@ TEXTE_LETTRE_JONAS = [
     "                    — Jonas",
 ]
 
-COUT_AMES = 30
+COUT_AMES = 0
 COUT_DASH = 50
 COUT_UPGRADE_DEGATS   = 75
 COUT_UPGRADE_PV       = 20
@@ -228,9 +228,6 @@ class PancarteLore:
             self.est_debloquee = True
             joueur.sons_a_jouer.append('ame_libre')
             return 'debloquee'
-        if joueur.argent < COUT_AMES:
-            return 'pauvre'
-        joueur.argent -= COUT_AMES
         self.est_debloquee = True
         joueur.sons_a_jouer.append('ame_perdue')
         return 'debloquee'
@@ -551,8 +548,10 @@ class PancarteLore:
             label = f"[{tk}]  Améliorations"
             coul  = (80, 220, 120)
         elif not self.est_debloquee:
-            cout  = COUT_DASH if type_p == 'shop_dash' else COUT_AMES
-            label = f"[{tk}]  {cout} âmes"
+            if type_p == 'shop_dash':
+                label = f"[{tk}]  {COUT_DASH} âmes"
+            else:
+                label = f"[{tk}]  Lire"
             coul  = (80, 210, 230) if type_p == 'shop_dash' else (160, 100, 255)
         else:
             label = f"[{tk}]  Lire"
@@ -1082,7 +1081,7 @@ class PopupShopUpgrades:
 
         # Ligne 1 — Force de frappe
         dispo1 = self._degats_bonus < 1 and self._argent >= COUT_UPGRADE_DEGATS
-        achete1_txt = "Acheté" if self._degats_bonus >= 1 else ("Acheter [1]" if dispo1 else "Trop pauvre")
+        achete1_txt = "Acheté" if self._degats_bonus >= 1 else ("Acheter [1]" if dispo1 else "Fonds insuffisants")
         _dessiner_ligne(self.rect.y + 62, "1",
                         "Force de frappe doublée",
                         f"{COUT_UPGRADE_DEGATS} âmes  —  une seule fois",
@@ -1099,7 +1098,7 @@ class PopupShopUpgrades:
         elif dispo2:
             achete2_txt = "Acheter [2]"
         else:
-            achete2_txt = "Trop pauvre"
+            achete2_txt = "Fonds insuffisants"
         _dessiner_ligne(self.rect.y + 152, "2",
                         "PV Maximum +1",
                         f"{COUT_UPGRADE_PV} âmes  —  {self._pv_max_bonus}/{MAX_ACHATS_PV} acheté(s)",
@@ -1111,7 +1110,7 @@ class PopupShopUpgrades:
 
         # Ligne 3 — Echo directionnel
         dispo3 = not self._echo_dir and self._argent >= COUT_UPGRADE_ECHO_DIR
-        achete3_txt = "Acheté" if self._echo_dir else ("Acheter [3]" if dispo3 else "Trop pauvre")
+        achete3_txt = "Acheté" if self._echo_dir else ("Acheter [3]" if dispo3 else "Fonds insuffisants")
         _dessiner_ligne(self.rect.y + 242, "3",
                         "Écho Directionnel",
                         f"{COUT_UPGRADE_ECHO_DIR} âmes  —  une seule fois",
