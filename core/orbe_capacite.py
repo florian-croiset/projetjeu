@@ -82,7 +82,7 @@ class OrbeCapacite:
             return False
 
         # Coût en âmes
-        cout = 50 if self.capacite == 'dash' else 30
+        cout = 50
         if joueur.argent < cout:
             return False
 
@@ -179,7 +179,7 @@ class OrbeCapacite:
         surface.blit(nom_surf, nom_rect)
 
         # Prix en âmes
-        cout = 50 if self.capacite == 'dash' else 30
+        cout = 50
         prix_surf = render_text(police_nom, f"{cout} âmes", (200, 160, 255))
         prix_rect = prix_surf.get_rect(center=(cx, cy - self.RAYON - 22))
         surface.blit(label_bg(prix_rect.width + 8, prix_rect.height + 4),
