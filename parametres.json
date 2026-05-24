@@ -1,6 +1,6 @@
 {
     "jouabilite": {
-        "langue": "en",
+        "langue": "fr",
         "sensibilite_souris": 0.5
     },
     "video": {
@@ -11,7 +11,7 @@
             1920,
             1080
         ],
-        "luminosite": 1.0,
+        "luminosite": 0.3,
         "display_index": 0
     },
     "controles": {
@@ -35,7 +35,7 @@
         "tutoriel_vu": true
     },
     "profil": {
-        "pseudo": "Spectre",
+        "pseudo": "Ravn",
         "skin": 0
     }
 }

@@ -431,7 +431,10 @@ class Tutoriel:
                       "Dash  ·  si débloqué")
         y = _ligne_kv(self.ecran, self.police_texte, self.police_texte, x, y,
                       f"[ {self._touche('echo')} ]",
-                      "Écho — révèle l'environnement")
+                      "Écho radial — révèle l'environnement")
+        y = _ligne_kv(self.ecran, self.police_texte, self.police_texte, x, y,
+                      f"[ {self._touche('echo_dir')} ]",
+                      "Écho directionnel  ·  si débloqué")
         y = _ligne_kv(self.ecran, self.police_texte, self.police_texte, x, y,
                       f"[ {self._touche('attaque')} ]",
                       "Attaque de mêlée")
@@ -479,14 +482,16 @@ class Tutoriel:
                        "  ÉCHOLOCALISATION", x, y, self.CYAN, self.CYAN, 25, 80)
         y = _texte_wrap(self.ecran, self.police_texte,
                         "Le monde est dans le noir absolu.\n"
-                        "Active l'écho pour révéler murs et\n"
-                        "obstacles. L'indicateur circulaire\n"
-                        "affiche le cooldown restant.",
+                        "Active l'écho pour révéler l'environnement.",
                         x, y, w, (155, 145, 200))
-        info_s = self.police_texte.render("Cooldown : 2.5 s  ·  Portée : 150 px",
+        info_s = self.police_texte.render("Radial : 360°, 150 px, cd 2.5 s",
                                           True, (80, 160, 200))
         self.ecran.blit(info_s, (x, y))
-        y += info_s.get_height() + 16
+        y += info_s.get_height() + 4
+        info_dir = self.police_texte.render("Directionnel : ±25°, 300 px, cd 4 s  (débloquable)",
+                                            True, (80, 160, 200))
+        self.ecran.blit(info_dir, (x, y))
+        y += info_dir.get_height() + 14
 
         y = y + _badge(self.ecran, self.police_bouton,
                        "  ÂMES PERDUES", x, y, self.MAUVE, self.MAUVE, 22, 75)
@@ -501,9 +506,10 @@ class Tutoriel:
         y = y + _badge(self.ecran, self.police_bouton,
                        "  CAPACITÉS & PROGRESSION", x, y, self.OR, self.OR, 20, 70)
         y = _texte_wrap(self.ecran, self.police_texte,
-                        "Des orbes flottants débloquent\n"
-                        "Dash ou Double Saut définitivement.\n\n"
-                        "La porte dorée exige la clé.\n"
+                        "Orbe (dans le monde) → Double Saut.\n"
+                        "Shop (pancarte, âmes) → Dash (50 â),\n"
+                        "écho dir. (10 â), PV+ (20 â)...\n\n"
+                        "La porte verrouillée exige la clé.\n"
                         "Checkpoints → sauvegarde auto.",
                         x, y, w, (155, 145, 200))
 
