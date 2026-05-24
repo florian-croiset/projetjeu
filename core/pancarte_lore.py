@@ -85,7 +85,7 @@ TEXTE_LETTRE_JONAS = [
     "                    — Jonas",
 ]
 
-COUT_AMES = 30
+COUT_AMES = 0
 COUT_DASH = 50
 COUT_UPGRADE_DEGATS   = 75
 COUT_UPGRADE_PV       = 20
@@ -228,9 +228,6 @@ class PancarteLore:
             self.est_debloquee = True
             joueur.sons_a_jouer.append('ame_libre')
             return 'debloquee'
-        if joueur.argent < COUT_AMES:
-            return 'pauvre'
-        joueur.argent -= COUT_AMES
         self.est_debloquee = True
         joueur.sons_a_jouer.append('ame_perdue')
         return 'debloquee'
@@ -551,8 +548,10 @@ class PancarteLore:
             label = f"[{tk}]  Améliorations"
             coul  = (80, 220, 120)
         elif not self.est_debloquee:
-            cout  = COUT_DASH if type_p == 'shop_dash' else COUT_AMES
-            label = f"[{tk}]  {cout} âmes"
+            if type_p == 'shop_dash':
+                label = f"[{tk}]  {COUT_DASH} âmes"
+            else:
+                label = f"[{tk}]  Lire"
             coul  = (80, 210, 230) if type_p == 'shop_dash' else (160, 100, 255)
         else:
             label = f"[{tk}]  Lire"

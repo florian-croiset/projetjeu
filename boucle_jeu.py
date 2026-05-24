@@ -173,6 +173,10 @@ class BoucleJeuMixin:
         _fade_vers_noir(FADE_LONG_MS, snapshot=snapshot_jeu)
         pygame.time.wait(200)
 
+        # Musique de fond pour le ending et le teaser
+        from utils import music
+        music.demarrer()
+
         # 2. Écran de fin
         img1, x1, y1 = _charger_image(self.FIN_ENDING_IMAGE)
         _afficher_ecran(img1, x1, y1)
@@ -189,6 +193,9 @@ class BoucleJeuMixin:
         # 5. Fade final + retour menu
         snapshot_teaser = self.ecran.copy()
         _fade_vers_noir(FADE_COURT_MS, snapshot=snapshot_teaser)
+
+        # Arrêt musique
+        music.arreter()
 
         # ── Nettoyage et retour au menu ─────────────────────────────
         self.etat_jeu = "MENU_PRINCIPAL"
@@ -436,15 +443,14 @@ class BoucleJeuMixin:
                                 if type_p == 'shop_dash':
                                     self.popup_paiement._titre_popup = "Fragment de Mémoire"
                                     self.popup_paiement._message_popup = f"Absorber ce souvenir — {COUT_DASH} âmes ?"
+                                    self.popup_paiement.ouvrir_confirmation(
+                                        mon_joueur.argent,
+                                        _callback_paiement,
+                                        COUT_DASH
+                                    )
                                 else:
-                                    self.popup_paiement._titre_popup = "Pancarte mystérieuse"
-                                    self.popup_paiement._message_popup = f"Payer {COUT_AMES} âmes pour révéler ce secret ?"
-                                cout = COUT_DASH if type_p == 'shop_dash' else COUT_AMES
-                                self.popup_paiement.ouvrir_confirmation(
-                                    mon_joueur.argent,
-                                    _callback_paiement,
-                                    cout
-                                )
+                                    # Lore gratuit : déclenchement direct sans popup
+                                    self._achat_en_attente = i
                         elif (self.mur_payant_local
                               and not self.mur_payant_debloque):
                             mp = self.mur_payant_local
@@ -1060,6 +1066,7 @@ class BoucleJeuMixin:
         passage_serveur = donnees_recues.get('passage_ouvert', False)
         if passage_serveur and not self.passage_ouvert:
             self._ouvrir_passage_local()
+            music.jouer_sfx('grillage_ouverture')
         self.passage_ouvert = passage_serveur
 
         # Mur payant
@@ -1070,12 +1077,14 @@ class BoucleJeuMixin:
             self.mur_payant_local.set_etat(data_mp)
             if data_mp.get('debloque') and not self.mur_payant_debloque:
                 self._detruire_mur_payant_local()
+                music.jouer_sfx('ouverture_grille_boss')
             self.mur_payant_debloque = data_mp.get('debloque', False)
 
         # Mur clé
         mur_cle_serveur = donnees_recues.get('mur_cle_detruit', False)
         if mur_cle_serveur and not self.mur_cle_detruit:
             self._detruire_mur_cle_local()
+            music.jouer_sfx('cassure_grille_boss')
         self.mur_cle_detruit = mur_cle_serveur
 
         # --- Potions ---
