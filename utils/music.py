@@ -169,6 +169,16 @@ def pause():
         _channel_torche.pause()
 
 
+def arreter():
+    """Arrêt complet de la musique (retour au menu, fin de partie)."""
+    global _musique_jouee
+    if _musique_ok:
+        pygame.mixer.music.stop()
+        _musique_jouee = False
+    if _channel_torche:
+        _channel_torche.stop()
+
+
 def reprendre():
     """Reprend le mix de jeu apres une pause temporaire."""
     if _musique_ok and _musique_jouee and _musique_activee:
