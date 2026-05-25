@@ -4,7 +4,7 @@
 #   --clean  supprime les builds précédents avant de compiler
 #   --dev    compile avec MODE_DEV=True (défaut : MODE_DEV=False)
 # Prérequis : Python 3.10+, pip
-# Sortie : dist/Echo (fichier unique)
+# Sortie : dist/Echo/ (dossier avec l'exécutable et ses dépendances)
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR"
@@ -82,7 +82,7 @@ $PIP install --quiet pyinstaller
 echo "[5/5] Compilation en cours (peut prendre 2-4 minutes)..."
 $PYTHON -m PyInstaller \
     --name "Echo" \
-    --onefile \
+    --onedir \
     --add-data "assets:assets" \
     --add-data "demon_slime.json:." \
     --add-data "map.json:." \
@@ -100,5 +100,6 @@ $PYTHON -m PyInstaller \
 
 echo ""
 echo "Compilation terminée !"
-echo "Exécutable : dist/Echo (fichier unique, tout inclus)"
-echo "Pour lancer : ./dist/Echo"
+echo "Exécutable : dist/Echo/Echo (dossier avec dépendances)"
+echo "Pour lancer : ./dist/Echo/Echo"
+echo "Pour distribuer : envoyez l'intégralité du dossier dist/Echo/"
