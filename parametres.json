@@ -6,12 +6,12 @@
     "video": {
         "plein_ecran": true,
         "vsync": false,
-        "musique": true,
+        "musique": false,
         "resolution": [
             1920,
             1080
         ],
-        "luminosite": 0.3,
+        "luminosite": 0.5,
         "display_index": 0
     },
     "controles": {
@@ -32,7 +32,7 @@
         "activer_sfx": true
     },
     "meta": {
-        "tutoriel_vu": true
+        "tutoriel_vu": false
     },
     "profil": {
         "pseudo": "Ravn",

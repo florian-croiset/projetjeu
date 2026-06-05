@@ -325,7 +325,7 @@ class MenusMixin:
             self._police_bas = pygame.font.Font(None, taille_bas)
             self._police_bas_taille = taille_bas
         police_bas = self._police_bas
-        ver = police_bas.render("v1.4 — Beta", True, COULEUR_TEXTE_SOMBRE)
+        ver = police_bas.render("v2.2", True, COULEUR_TEXTE_SOMBRE)
         self.ecran.blit(ver, (self.largeur_ecran - ver.get_width() - 20,
                             self.hauteur_ecran - ver.get_height() - 12))
 
