@@ -81,7 +81,7 @@ REM --- Compilation ---
 echo [5/5] Compilation en cours (peut prendre 2-4 minutes)...
 %PYTHON% -m PyInstaller ^
     --name "Echo" ^
-    --onefile ^
+    --onedir ^
     --noconsole ^
     --add-data "assets;assets" ^
     --add-data "demon_slime.json;." ^
@@ -111,7 +111,7 @@ if errorlevel 1 (
 
 echo.
 echo Compilation terminee !
-echo Executable : dist\Echo.exe (fichier unique, tout inclus)
-echo Pour distribuer : envoyez simplement dist\Echo.exe
+echo Executable : dist\Echo\Echo.exe (dossier avec dependances)
+echo Pour distribuer : envoyez l'integralite du dossier dist\Echo\
 echo.
 pause
