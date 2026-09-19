@@ -6,9 +6,6 @@
 #   - BoucleJeuMixin (boucle_jeu.py)  : boucle réseau, rendu monde, connexion
 
 from parametres import *
-from utils import envoyer_logs
-if MODE_DEV:
-    envoyer_logs.activer_capture()
 
 import pygame
 import sys

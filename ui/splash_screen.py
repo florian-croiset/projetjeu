@@ -29,10 +29,6 @@ def afficher_splash_screen(ecran, duree=3000):
         debut = pygame.time.get_ticks()
         horloge = pygame.time.Clock()
 
-        # Import conditionnel pour MODE_DEV
-        if MODE_DEV:
-            from utils import envoyer_logs
-
         while pygame.time.get_ticks() - debut < duree:
             temps_ecoule = pygame.time.get_ticks() - debut
             if temps_ecoule < duree * 0.3:
@@ -53,8 +49,5 @@ def afficher_splash_screen(ecran, duree=3000):
                     sys.exit()
                 if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
                     return
-                if MODE_DEV and envoyer_logs.get_bouton().verifier_clic(event):
-                    envoyer_logs.envoyer_maintenant()
-                    print("[LOG] Envoi manuel déclenché depuis le bouton HUD")
     except Exception as e:
         print(f"Impossible d'afficher le splash screen: {e}")

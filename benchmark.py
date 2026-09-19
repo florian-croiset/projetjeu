@@ -56,9 +56,6 @@ if not args.visible:
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
-# Empêche le module envoyer_logs de poster pendant le bench (MODE_DEV).
-os.environ["BENCH_MODE"] = "1"
-
 
 # ---------------------------------------------------------------------------
 #  3) Patch des paramètres globaux AVANT l'import du client
@@ -67,20 +64,13 @@ import parametres  # noqa: E402
 
 # On garde MODE_DEV=True pour que les capacités (double-saut, dash, echo_dir)
 # soient auto-unlock côté serveur — sinon le bot ne peut pas les déclencher et
-# le stress test est moins représentatif. La capture HTTP des logs est neutralisée
-# juste en dessous.
+# le stress test est moins représentatif.
 parametres.MODE_DEV = True
 parametres.REVELATION = False
 parametres.ASSOMBRISSEMENT = True
 parametres.DISTORTION_ECHO_ACTIVE = True
 if not args.cap_fps:
     parametres.FPS = 100000             # uncapped
-
-# Neutraliser le hook HTTP de capture de logs AVANT l'import du client
-# (client.py:10-11 appelle envoyer_logs.activer_capture() au top-level si MODE_DEV).
-from utils import envoyer_logs as _envoyer_logs  # noqa: E402
-_envoyer_logs.activer_capture = lambda *a, **kw: None
-_envoyer_logs.envoyer_maintenant = lambda *a, **kw: None
 
 
 # ---------------------------------------------------------------------------

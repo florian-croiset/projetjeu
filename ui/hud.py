@@ -8,7 +8,6 @@ import os
 import sys
 
 from parametres import *
-from utils import envoyer_logs
 from utils.cache import render_text, creer_textes_echo_hud
 
 

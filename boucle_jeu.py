@@ -15,7 +15,7 @@ import copy
 import random
 
 from parametres import *
-from utils import envoyer_logs, music
+from utils import music
 from reseau import serveur
 from reseau.protocole import recv_complet, send_complet, obtenir_ip_locale
 from reseau import udp_protocole as UDP_P
@@ -177,8 +177,6 @@ class BoucleJeuMixin:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            if MODE_DEV and envoyer_logs.get_bouton().verifier_clic(event):
-                envoyer_logs.envoyer_maintenant()
 
             if event.type == pygame.KEYDOWN and event.key == self._codes_touches.get('journal'):
                 if hasattr(self, 'journal_quete') and self.journal_quete:
@@ -636,12 +634,6 @@ class BoucleJeuMixin:
         # Pseudos rendus directement sur l'écran final (post-scale) pour rester nets.
         for joueur in self.joueurs_locaux.values():
             joueur.dessiner_pseudo_ecran(self.ecran, camera_offset, zoom)
-
-        if MODE_DEV:
-            btn = envoyer_logs.get_bouton()
-            btn.rect.topleft = (self.largeur_ecran - 175, 140)
-            btn.verifier_survol(pygame.mouse.get_pos())
-            btn.dessiner(self.ecran)
 
         self.dessiner_hud()
 

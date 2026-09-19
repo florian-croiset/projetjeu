@@ -250,7 +250,6 @@ projetjeu/
 ├── utils/                         # Utilitaires
 │   ├── langue.py                  # i18n FR/EN
 │   ├── music.py                   # Gestion musique
-│   ├── envoyer_logs.py            # Envoi de logs
 │   └── install_package.py         # Installation dépendances runtime
 │
 └── assets/                        # Ressources
