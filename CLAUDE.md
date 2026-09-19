@@ -200,7 +200,7 @@ On death: currency is stored in `AmePerdue` at death location. Retrievable by to
 
 ### Debug Flags (in `parametres.py`)
 
-- `MODE_DEV = True` — enables FPS counter, debug overlay, log capture (HTTP POST via `utils/envoyer_logs.py`), and **auto-unlocks all ability orbs** (disable before exposing the server publicly)
+- `MODE_DEV = True` — enables FPS counter, debug overlay, and **auto-unlocks all ability orbs** (disable before exposing the server publicly)
 - `REVELATION = False` — if True, reveals the entire map (skips echolocation)
 - `ASSOMBRISSEMENT = True` — if False, disables darkness/halo (full visibility)
 - `USE_UDP = True` — set to False to force the legacy pure-TCP transport (useful when debugging UDP-related issues)
@@ -295,8 +295,7 @@ projetjeu/
 ├── utils/
 │   ├── cache.py                     # Caches & ray constants (~250 lines)
 │   ├── langue.py                    # i18n FR/EN (~177 lines)
-│   ├── music.py                     # Audio management (~300 lines)
-│   └── envoyer_logs.py              # Debug HTTP log sender (~424 lines)
+│   └── music.py                     # Audio management (~300 lines)
 │
 ├── assets/                          # Sprites, fonts, audio
 │   └── MapS2.tmx                    # Tiled tilemap (primary)
