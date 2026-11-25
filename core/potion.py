@@ -1,5 +1,5 @@
 # potion.py
-# Gestion des potions droppées par les ennemis.
+# Potions dropped by enemies.
 
 import pygame
 import sys
@@ -8,7 +8,7 @@ import math
 
 
 # ---------------------------------------------------------------------------
-# Chargement des sprites
+# Sprite loading
 # ---------------------------------------------------------------------------
 
 def _get_base_path():
@@ -17,96 +17,95 @@ def _get_base_path():
     return os.path.dirname(os.path.dirname(__file__))
 
 
-def _charger_sprite_potion(nom_fichier, taille):
+def _load_sprite_potion(name_file, size):
     try:
-        path = os.path.join(_get_base_path(), 'assets', nom_fichier)
-        print(f"[POTION] Chargement : {path} — existe : {os.path.exists(path)}")
+        path = os.path.join(_get_base_path(), 'assets', name_file)
         img = pygame.image.load(path).convert_alpha()
-        return pygame.transform.scale(img, taille)
+        return pygame.transform.scale(img, size)
     except Exception as e:
-        print(f"[POTION] ERREUR {nom_fichier}: {e}")
+        print(f"[POTION] cannot load {name_file}: {e}")
         return None
 
 
-# Chargement lazy (après pygame.display init)
+# Lazy loading (after pygame.display init)
 _SPRITES = {}
 
-def _charger_sprites_si_necessaire():
+def _load_sprites_si_needed():
     global _SPRITES
     if _SPRITES:
         return
     _SPRITES = {
-        'small': _charger_sprite_potion('Small_Potion.png', (32, 32)),
-        'large': _charger_sprite_potion('Large_Potion.png', (32, 32)),
+        'small': _load_sprite_potion('Small_Potion.png', (32, 32)),
+        'large': _load_sprite_potion('Large_Potion.png', (32, 32)),
     }
 
 
 # ---------------------------------------------------------------------------
-# Constantes
+# Constants
 # ---------------------------------------------------------------------------
 
-SOIN_SMALL_POTION = 1
-SOIN_LARGE_POTION = 2
+HEAL_SMALL_POTION = 1
+HEAL_LARGE_POTION = 2
 
 
 # ---------------------------------------------------------------------------
-# Classe Potion
+# Potion class
 # ---------------------------------------------------------------------------
 
 class Potion:
     """
-    Potion droppée dans le monde, ramassée automatiquement au contact.
+    Potion dropped in the world, picked up automatically on contact.
 
-    Paramètres
+    Parameters
     ----------
-    x, y    : position de spawn (centre de la potion)
-    type    : 'small' ou 'large'
+    x, y    : spawn position (center of the potion)
+    type    : 'small' or 'large'
     """
 
     def __init__(self, x, y, type_potion='small'):
-        _charger_sprites_si_necessaire()
+        _load_sprites_si_needed()
 
         self.type = type_potion
-        self.soin = SOIN_SMALL_POTION if type_potion == 'small' else SOIN_LARGE_POTION
+        self.heal = HEAL_SMALL_POTION if type_potion == 'small' else HEAL_LARGE_POTION
         self.sprite = _SPRITES.get(type_potion)
 
-        taille = 32
-        self.rect = pygame.Rect(0, 0, taille, taille)
+        size = 32
+        self.rect = pygame.Rect(0, 0, size, size)
         self.rect.center = (x, y)
 
-        self.active = True  # False = à supprimer de la liste
+        self.active = True  # False = to be removed from the list
 
-        # Petite animation de flottement
+        # Small floating animation
         self._offset_y = 0.0
-        self._temps = 0.0
+        self._time = 0.0
 
-    def mettre_a_jour(self, dt_ms, joueurs):
+    def update(self, dt_ms, players):
         """
-        Vérifie la collision avec chaque joueur et soigne si contact.
-        dt_ms  : millisecondes écoulées depuis le dernier tick
-        joueurs: liste d'objets Joueur (avec .rect et .pv et .pv_max)
-        Retourne la liste des (joueur, soin_appliqué) ce tick.
+        Check the collision with each player and heal on contact.
+        dt_ms   : milliseconds elapsed since the last tick
+        players : list of Player objects (with .rect, .hp and .max_hp)
+        Returns the list of (player, healing_applied) for this tick.
         """
         if not self.active:
             return []
 
-        # Animation flottement
-        self._temps += dt_ms * 0.003  # vitesse
-        self._offset_y = 3.0 * math.cos(self._temps)
+        # Floating animation
+        self._time += dt_ms * 0.003  # speed
+        self._offset_y = 3.0 * math.cos(self._time)
 
-        soins = []
-        for joueur in joueurs:
-            if self.rect.colliderect(joueur.rect):
-                # Ne soigne que si le joueur n'est pas au max
-                if joueur.pv < joueur.pv_max:
-                    soin_reel = min(self.soin, joueur.pv_max - joueur.pv)
-                    joueur.pv += soin_reel
-                    soins.append((joueur, soin_reel))
+        heals = []
+        for player in players:
+            if self.rect.colliderect(player.rect):
+                # Only heal if the player is not at max
+                if player.hp < player.max_hp:
+                    heal_real = min(self.heal, player.max_hp - player.hp)
+                    player.hp += heal_real
+                    heals.append((player, heal_real))
                     self.active = False
                     break
-        return soins
+        return heals
 
-    def dessiner(self, surface, camera_offset=(0, 0)):
+    def draw(self, surface, camera_offset=(0, 0)):
         if not self.active:
             return
         off_x, off_y = camera_offset
@@ -117,52 +116,52 @@ class Potion:
         if self.sprite:
             surface.blit(self.sprite, pos)
         else:
-            # Fallback : cercle coloré
-            couleur = (255, 80, 80) if self.type == 'small' else (200, 0, 255)
-            pygame.draw.circle(surface, couleur,
+            # Fallback: colored circle
+            color = (255, 80, 80) if self.type == 'small' else (200, 0, 255)
+            pygame.draw.circle(surface, color,
                                (pos[0] + self.rect.width // 2,
                                 pos[1] + self.rect.height // 2),
                                self.rect.width // 2)
 
 
 # ---------------------------------------------------------------------------
-# Gestionnaire de potions (à utiliser côté serveur)
+# Potion manager (used server side)
 # ---------------------------------------------------------------------------
 
-class GestionnairePotions:
+class PotionManager:
     """
-    Garde la liste des potions actives et expose les méthodes
-    pour les faire dropper, mettre à jour et dessiner.
+    Keeps the list of active potions and exposes the methods
+    to drop, update and draw them.
 
-    Utilisation typique côté serveur
-    ---------------------------------
-        # Dans la boucle de jeu :
-        self.potions.mettre_a_jour(dt, joueurs)
+    Typical server-side usage
+    -------------------------
+    # In the game loop:
+    self.potions.update(dt, players)
 
-        # Quand un ennemi meurt :
-        self.potions.dropper(ennemi.rect.centerx, ennemi.rect.centery,
-                             type_potion='small')   # ou 'large'
+    # When an enemy dies:
+    self.potions.drop(enemy.rect.centerx, enemy.rect.centery,
+                      type_potion='small')   # or 'large'
     """
 
     def __init__(self):
         self.potions: list[Potion] = []
 
-    def dropper(self, x, y, type_potion='small'):
-        """Crée une nouvelle potion à la position donnée."""
+    def drop(self, x, y, type_potion='small'):
+        """Create a new potion at the given position."""
         self.potions.append(Potion(x, y, type_potion))
 
-    def mettre_a_jour(self, dt_ms, joueurs):
-        """Met à jour toutes les potions et supprime celles ramassées."""
+    def update(self, dt_ms, players):
+        """Update every potion and remove the picked-up ones."""
         for potion in self.potions:
-            potion.mettre_a_jour(dt_ms, joueurs)
+            potion.update(dt_ms, players)
         self.potions = [p for p in self.potions if p.active]
 
-    def dessiner(self, surface, camera_offset=(0, 0)):
+    def draw(self, surface, camera_offset=(0, 0)):
         for potion in self.potions:
-            potion.dessiner(surface, camera_offset)
+            potion.draw(surface, camera_offset)
 
-    def get_etat(self):
-        """Sérialise les potions pour l'envoi réseau."""
+    def get_state(self):
+        """Serialise the potions for network sending."""
         return [
             {
                 'x': p.rect.centerx,
@@ -172,10 +171,10 @@ class GestionnairePotions:
             for p in self.potions if p.active
         ]
 
-    def set_etat(self, data):
+    def set_state(self, data):
         """
-        Reconstruit la liste côté client depuis les données réseau.
-        Simple resync : on recrée les potions depuis zéro chaque tick.
+        Rebuild the list client side from the network data.
+        Simple resync: the potions are recreated from scratch each time.
         """
-        _charger_sprites_si_necessaire()
+        _load_sprites_si_needed()
         self.potions = [Potion(d['x'], d['y'], d['type']) for d in data]

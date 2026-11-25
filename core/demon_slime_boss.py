@@ -1,34 +1,34 @@
 import pygame
 import json
 from enum import Enum, auto
-from parametres import MODE_DEV
+from settings import DEV_MODE
 from utils.cache import flip_h
 
 
 # ─────────────────────────────────────────────
-#  1. ÉTATS DE LA MACHINE À ÉTATS (FSM)
+# 1. STATE MACHINE (FSM) STATES
 # ─────────────────────────────────────────────
 
 class BossState(Enum):
     """
-    Chaque valeur = un état possible du boss.
-    La FSM ne peut être que dans UN seul état à la fois.
+    Each value = one possible boss state.
+    The FSM can only be in ONE state at a time.
     """
-    IDLE      = auto()   # Le boss attend, ne fait rien
-    WALK      = auto()   # Le boss marche vers le joueur
-    CLEAVE    = auto()   # Le boss attaque avec sa machette
-    TAKE_HIT  = auto()   # Le boss reçoit des dégâts
-    DEATH     = auto()   # Le boss est mort (état terminal)
+    IDLE      = auto()   # The boss waits, does nothing
+    WALK      = auto()   # The boss walks towards the player
+    CLEAVE    = auto()   # The boss attacks with its machete
+    TAKE_HIT  = auto()   # The boss takes damage
+    DEATH     = auto()   # The boss is dead (terminal state)
 
 
 # ─────────────────────────────────────────────
-#  2. CHARGEUR D'ANIMATIONS (ASEPRITE JSON)
+# 2. ANIMATION LOADER (ASEPRITE JSON)
 # ─────────────────────────────────────────────
 
 class BossAnimator:
     """
-    Compatible avec le format JSON Aseprite "Hash" (frames = dictionnaire)
-    ET "Array" (frames = liste). Détecte automatiquement le format.
+    Compatible with both the Aseprite JSON "Hash" format (frames = dictionary)
+    and "Array" (frames = list). The format is detected automatically.
     """
 
     def __init__(self, json_path: str, png_path: str):
@@ -37,38 +37,38 @@ class BossAnimator:
 
         spritesheet = pygame.image.load(png_path).convert_alpha()
 
-        # ── Normalise les frames en liste ordonnée ───────────────
-        # Format Hash  → data["frames"] est un dict  {"d_idle 0.png": {...}, ...}
-        # Format Array → data["frames"] est une list [{...}, {...}, ...]
+        # -- Normalise the frames into an ordered list -------------------
+        # Hash format  -> data["frames"] is a dict  {"d_idle 0.png": {...}, ...}
+        # Array format -> data["frames"] is a list [{...}, {...}, ...]
         raw_frames = data["frames"]
 
         if isinstance(raw_frames, dict):
-            # Hash : on trie par le numéro à la fin du nom de fichier
-            # "d_idle 0.png" → 0,  "d_walk 3.png" → 3, etc.
+            # Hash: sort by the number at the end of the file name
+            # "d_idle 0.png" -> 0,  "d_walk 3.png" -> 3, etc.
             def sort_key(item):
-                filename = item[0]  # ex: "d_idle 0.png"
-                # Extrait le dernier entier trouvé dans le nom
+                filename = item[0]  # e.g. "d_idle 0.png"
+                # Extract the last integer found in the name
                 import re
                 numbers = re.findall(r'\d+', filename)
                 return int(numbers[-1]) if numbers else 0
 
             sorted_items = sorted(raw_frames.items(), key=sort_key)
-            # Convertit en liste de dicts avec le champ "filename" ajouté
+            # Convert to a list of dicts with the "filename" field added
             self.frames_list = []
             for filename, info in sorted_items:
-                entry = dict(info)          # copie du dict de frame
+                entry = dict(info)          # copy of the frame dict
                 entry["filename"] = filename
                 self.frames_list.append(entry)
 
         else:
-            # Array : déjà une liste, on l'utilise directement
+            # Array: already a list, use it directly
             self.frames_list = raw_frames
 
-        # ── Découpe les frames par tag ───────────────────────────
+        # -- Split the frames by tag -------------------------------------
         self.animations = {}
 
         for tag in data["meta"]["frameTags"]:
-            name      = tag["name"]   # ex: "d_idle"
+            name      = tag["name"]   # e.g. "d_idle"
             idx_start = tag["from"]
             idx_end   = tag["to"]
 
@@ -90,122 +90,125 @@ class BossAnimator:
     def get_animation(self, name: str):
         if name not in self.animations:
             raise KeyError(
-                f"Animation '{name}' introuvable. "
-                f"Disponibles : {list(self.animations.keys())}"
+                f"Animation '{name}' not found. "
+                f"Available: {list(self.animations.keys())}"
             )
         return self.animations[name]
 
 
 # ─────────────────────────────────────────────
-#  3. CLASSE PRINCIPALE DU BOSS
+# 3. MAIN BOSS CLASS
 # ─────────────────────────────────────────────
 
 class DemonSlimeBoss:
     """
-    Le boss Demon Slime avec FSM complète.
+    The Demon Slime boss with a complete FSM.
 
-    Utilisation minimale :
-        boss = DemonSlimeBoss(400, 300, "demon_slime.json", "assets/demon_slime.png")
+    Minimal usage:
+        boss = DemonSlimeBoss(400, 300, "assets/demon_slime.json", "assets/demon_slime.png")
 
-        # Dans la boucle de jeu :
+        # In the game loop:
         dt = clock.tick(60)
         boss.update(dt, player.rect)
         boss.draw(screen)
 
-        # Quand le joueur attaque :
+        # When the player attacks:
         if player_sword_rect.colliderect(boss.body_rect):
             boss.take_damage(25)
 
-        # Quand le boss attaque le joueur :
+        # When the boss attacks the player:
         if boss.attack_hitbox and boss.attack_hitbox.colliderect(player.rect):
-            player.take_damage(30)
+            player.take_damage(30, now)
     """
 
-    # ── Paramètres de comportement (modifie-les librement) ──────
-    DETECT_RADIUS   = 300   # Distance (px) de détection du joueur
-    ATTACK_RADIUS   = 80    # Distance (px) pour déclencher le cleave
-    MOVE_SPEED      = 90    # Vitesse de déplacement (px/seconde)
-    MAX_HP          = 300   # Points de vie maximum
-    ATTACK_COOLDOWN      = 1200  # Délai minimum entre deux cleave (ms)
-    INVINCIBILITY_DURATION = 800  # Iframes après un TAKE_HIT (ms)
+    # -- Behaviour parameters (feel free to tweak) --------------------
+    DETECT_RADIUS   = 300   # Distance (px) at which the player is detected
+    ATTACK_RADIUS   = 80    # Distance (px) at which the cleave is triggered
+    # Movement speed (px/second). The position used to be advanced twice per update, so the
+    # boss really walked at 2 x 90 px/s; the duplicate was removed and the constant doubled to
+    # keep exactly the same in-game speed.
+    MOVE_SPEED      = 180
+    MAX_HP          = 300   # Maximum hit points
+    ATTACK_COOLDOWN      = 1200  # Minimum delay between two cleaves (ms)
+    INVINCIBILITY_DURATION = 800  # Invincibility frames after a TAKE_HIT (ms)
 
-    # Indices des frames pendant lesquelles la hitbox d'attaque est ACTIVE.
-    # Ajuste selon ton animation (ouvre-la dans Aseprite pour compter les frames).
+    # Indices of the frames during which the attack hitbox is ACTIVE.
+    # Adjust to the animation (open it in Aseprite to count the frames).
     CLEAVE_ACTIVE_FRAME_START = 9
     CLEAVE_ACTIVE_FRAME_END   = 12
 
     def __init__(self, x: int, y: int, json_path: str, png_path: str):
-        # Position en float pour un mouvement fluide
+        # Float position for smooth movement
         self.pos      = pygame.Vector2(x, y)
         self.velocity = pygame.Vector2(0, 0)
-        self.sur_le_sol = False 
+        self.on_ground = False 
 
-        # Points de vie
+        # Hit points
         self.hp = self.MAX_HP
 
-        # True = sprite affiché normalement (vers la droite)
-        # False = sprite retourné horizontalement (vers la gauche)
+        # True = sprite drawn as is (facing right)
+        # False = sprite flipped horizontally (facing left)
         self.facing_right = True
 
-        # Charge toutes les animations depuis le JSON + PNG
+        # Load every animation from the JSON + PNG
         self.animator = BossAnimator(json_path, png_path)
 
-        # Noms des animations — doivent correspondre aux "name" dans le JSON
+        # Animation names - must match the "name" entries in the JSON
         self.ANIM_IDLE     = "d_idle"
         self.ANIM_WALK     = "d_walk"
         self.ANIM_CLEAVE   = "d_cleave"
         self.ANIM_TAKE_HIT = "d_take_hit"
         self.ANIM_DEATH    = "death"
 
-        # État de l'animation courante
+        # Current animation state
         self.current_anim_frames = self.animator.get_animation(self.ANIM_IDLE)
-        self.current_frame_index = 0      # Quelle frame afficher maintenant
-        self.frame_timer_ms      = 0.0    # Temps accumulé depuis le début de cette frame
+        self.current_frame_index = 0      # Which frame to display right now
+        self.frame_timer_ms      = 0.0    # Time accumulated since the start of this frame
 
-        # État de la FSM
+        # FSM state
         self.state = BossState.IDLE
 
-        # Temps restant avant de pouvoir relancer un cleave (en ms)
+        # Time left before another cleave may start (ms)
         self.attack_cooldown_timer = 0
 
-        # Iframes après un TAKE_HIT — pendant ce temps le boss ne peut plus
-        # être interrompu, pour éviter qu'un spam de coups bloque toute attaque.
-        self.invincibility_timer = 0   # en ms
+        # Invincibility frames after a TAKE_HIT - during this time the boss can no longer
+        # be interrupted, so that spamming hits cannot lock out every attack.
+        self.invincibility_timer = 0   # in ms
 
-        # Hitbox d'attaque — None quand le cleave n'est pas en phase active
+        # Attack hitbox - None while the cleave is not in its active phase
         self.attack_hitbox = None  # type: pygame.Rect | None
 
-        # Taille du sprite (récupérée depuis la première frame d'idle)
+        # Sprite size (taken from the first idle frame)
         first_surf, _ = self.current_anim_frames[0]
         self.sprite_w = first_surf.get_width()
         self.sprite_h = first_surf.get_height()
 
-        # Hitbox du corps (mise à jour chaque frame dans update())
+        # Body hitbox (updated every frame in update())
         self.body_rect = pygame.Rect(x, y, self.sprite_w, self.sprite_h)
 
     # ────────────────────────────────────────────────────────────
-    #  UPDATE — appelée chaque frame depuis la boucle de jeu
+    # UPDATE - called every frame from the game loop
     # ────────────────────────────────────────────────────────────
 
     def update(self, dt_ms: float, player_rect: pygame.Rect):
         """
-        dt_ms      : temps écoulé en millisecondes (= clock.tick())
-        player_rect: le pygame.Rect du joueur
+        dt_ms      : elapsed time in milliseconds
+        player_rect: the player's pygame.Rect
         """
 
-        # ── DEATH : on avance l'animation puis on sort ──────────
+        # -- DEATH: advance the animation, then leave ---------------------
         if self.state == BossState.DEATH:
             self._update_animation(dt_ms)
             return
 
-        # ── Décrément du cooldown d'attaque ─────────────────────
+        # -- Attack cooldown countdown -------------------------------------
         if self.attack_cooldown_timer > 0:
             self.attack_cooldown_timer -= dt_ms
 
         if self.invincibility_timer > 0:
             self.invincibility_timer -= dt_ms
 
-        # ── Calcul de la distance et direction vers le joueur ───
+        # -- Distance and direction to the player ---------------------------
         player_center = pygame.Vector2(player_rect.centerx, player_rect.centery)
         boss_center   = pygame.Vector2(
             self.pos.x + self.sprite_w / 2,
@@ -213,95 +216,93 @@ class DemonSlimeBoss:
         )
         distance_to_player = boss_center.distance_to(player_center)
 
-        # Le boss se retourne uniquement hors attaque — pendant un CLEAVE la
-        # direction est verrouillée pour que le joueur puisse esquiver en dashant.
+        # The boss only turns around outside of attacks - during a CLEAVE the
+        # direction is locked so that the player can dodge by dashing.
         if self.state in (BossState.IDLE, BossState.WALK):
             self.facing_right = player_center.x >= boss_center.x
 
-        # ── TRANSITIONS D'ÉTAT ──────────────────────────────────
-        # CLEAVE et TAKE_HIT sont "verrouillants" : le boss reste dans
-        # cet état jusqu'à la fin de l'animation (gérée dans _on_animation_end)
+        # -- STATE TRANSITIONS --------------------------------------------
+        # CLEAVE and TAKE_HIT are "locking": the boss stays in
+        # that state until the animation ends (handled in _on_animation_end)
         if self.state in (BossState.IDLE, BossState.WALK):
             self._decide_next_state(distance_to_player)
 
-        # ── MOUVEMENT ───────────────────────────────────────────────
+        # -- MOVEMENT -----------------------------------------------------
         if self.state == BossState.WALK:
             self._move_toward_player(player_center, boss_center)
         else:
             self.velocity.x = 0
 
-        # ── GRAVITÉ ─────────────────────────────────────────────────
-        # Le boss tombe comme le joueur si il n'est pas sur le sol
-        GRAVITE = 0.6
-        MAX_CHUTE = 10
+        # -- GRAVITY ------------------------------------------------------
+        # The boss falls like the player when it is not on the ground
+        GRAVITY = 0.6
+        MAX_FALL = 10
 
-        if not self.sur_le_sol:
-            self.velocity.y += GRAVITE
-            if self.velocity.y > MAX_CHUTE:
-                self.velocity.y = MAX_CHUTE
+        if not self.on_ground:
+            self.velocity.y += GRAVITY
+            if self.velocity.y > MAX_FALL:
+                self.velocity.y = MAX_FALL
         else:
             self.velocity.y = 0
 
-        # Applique la vélocité
+        # Apply the velocity: x in px/second (scaled by dt), y in px per update like the player
         self.pos.x += self.velocity.x * (dt_ms / 1000.0)
-        self.pos.y += self.velocity.y  # Y en px/frame comme ton joueur, pas px/seconde
+        self.pos.y += self.velocity.y
 
-        # Applique la vélocité (convertit px/s en px/frame avec dt en secondes)
-        self.pos += self.velocity * (dt_ms / 1000.0)
 
-        # ── MISE À JOUR DES HITBOXES ────────────────────────────
-        hitbox_w = self.sprite_w * 0.15      # 15% de la largeur du sprite
-        hitbox_h = int(self.sprite_h * 0.5)  # la moitié de la hauteur du sprite
-        hitbox_x = int(self.pos.x) + (self.sprite_w - hitbox_w) // 2  # centré horizontalement
-        hitbox_y = int(self.pos.y) + (self.sprite_h - hitbox_h)        # collé en bas du sprite
+        # -- HITBOX UPDATE -----------------------------------------------
+        hitbox_w = self.sprite_w * 0.15      # 15% of the sprite width
+        hitbox_h = int(self.sprite_h * 0.5)  # half of the sprite height
+        hitbox_x = int(self.pos.x) + (self.sprite_w - hitbox_w) // 2  # centered horizontally
+        hitbox_y = int(self.pos.y) + (self.sprite_h - hitbox_h)        # stuck to the bottom of the sprite
 
         self.body_rect = pygame.Rect(hitbox_x, hitbox_y, hitbox_w, hitbox_h)
         self._update_attack_hitbox()
 
-        # ── AVANCEMENT DE L'ANIMATION ───────────────────────────
+        # -- ANIMATION ADVANCE -------------------------------------------
         self._update_animation(dt_ms)
 
     # ────────────────────────────────────────────────────────────
-    #  DRAW — appelée chaque frame après update()
+    # DRAW - called every frame after update()
     # ────────────────────────────────────────────────────────────
 
     def draw(self, surface: pygame.Surface):
-        # Ne dessine plus rien après la fin de l'animation de mort
+        # Draw nothing once the death animation has finished
         if self.state == BossState.DEATH and self._is_last_frame():
             return
 
         frame_surf, _ = self.current_anim_frames[self.current_frame_index]
 
-        # Retourne le sprite horizontalement si le boss regarde à gauche
+        # Flip the sprite horizontally when the boss faces left
         if self.facing_right:
             frame_surf = flip_h(frame_surf)
 
         surface.blit(frame_surf, (int(self.pos.x), int(self.pos.y)))
 
-        # ── Hitboxes de debug (MODE_DEV) ────────────────────────
-        # self.pos a été décalé en screen-space par l'appelant ;
-        # body_rect/attack_hitbox sont en world-space, donc on applique
-        # le même delta que celui appliqué à pos.
-        if MODE_DEV:
+        # -- Debug hitboxes (DEV_MODE) -----------------------------------
+        # self.pos was shifted to screen space by the caller;
+        # body_rect/attack_hitbox are in world space, so the same delta
+        # that was applied to pos is applied to them.
+        if DEV_MODE:
             dx = int(self.pos.x) - (self.body_rect.x - (self.sprite_w - self.body_rect.w) // 2)
             dy = int(self.pos.y) - (self.body_rect.y - (self.sprite_h - self.body_rect.h))
-            body_visuel = self.body_rect.move(dx, dy)
-            pygame.draw.rect(surface, (255, 0, 0), body_visuel, 1)
+            body_visual = self.body_rect.move(dx, dy)
+            pygame.draw.rect(surface, (255, 0, 0), body_visual, 1)
             if self.attack_hitbox:
-                atk_visuel = self.attack_hitbox.move(dx, dy)
-                pygame.draw.rect(surface, (255, 140, 0), atk_visuel, 2)
+                atk_visual = self.attack_hitbox.move(dx, dy)
+                pygame.draw.rect(surface, (255, 140, 0), atk_visual, 2)
 
     # ────────────────────────────────────────────────────────────
-    #  API PUBLIQUE
+    # PUBLIC API
     # ────────────────────────────────────────────────────────────
 
     def take_damage(self, amount: int):
         """
-        Inflige des dégâts au boss.
-        Appelle cette méthode quand une attaque du joueur touche body_rect.
+        Damage the boss.
+        Call this when a player attack touches body_rect.
         """
         if self.state == BossState.DEATH:
-            return  # On ne peut plus tuer un boss déjà mort
+            return  # A boss that is already dead cannot be killed again
 
         self.hp -= amount
 
@@ -309,45 +310,45 @@ class DemonSlimeBoss:
             self.hp = 0
             self._change_state(BossState.DEATH)
         elif self.state != BossState.TAKE_HIT and self.invincibility_timer <= 0:
-            # Interrompt l'état courant, sauf si le boss est déjà en TAKE_HIT
-            # ou protégé par ses iframes (évite le spam qui bloquerait les attaques).
+            # Interrupt the current state, unless the boss is already in TAKE_HIT
+            # or protected by its invincibility frames (avoids spam locking its attacks).
             self._change_state(BossState.TAKE_HIT)
 
     @property
     def is_dead(self) -> bool:
-        """True une fois que l'animation de mort est complètement terminée."""
+        """True once the death animation has completely finished."""
         return self.state == BossState.DEATH and self._is_last_frame()
 
     @property
     def is_attacking(self) -> bool:
-        """True pendant les frames actives du cleave — utilise attack_hitbox pour les collisions."""
+        """True during the active frames of the cleave - uses attack_hitbox for collisions."""
         return self.attack_hitbox is not None
 
     # ────────────────────────────────────────────────────────────
-    #  MÉTHODES INTERNES (privées)
+    # INTERNAL (private) METHODS
     # ────────────────────────────────────────────────────────────
 
     def _decide_next_state(self, distance: float):
         """
-        IA autonome du boss
-        Comportement :
-        - Hors DETECT_RADIUS  → IDLE (attend tranquillement)
-        - Dans DETECT_RADIUS  → WALK (poursuite)
-        - Dans ATTACK_RADIUS  → CLEAVE si cooldown écoulé
+        Autonomous boss AI.
+        Behaviour:
+        - Outside DETECT_RADIUS -> IDLE (waits quietly)
+        - Inside DETECT_RADIUS  -> WALK (chase)
+        - Within reach          -> CLEAVE once the cooldown has elapsed
         """
-        portee_reelle = int(self.sprite_w * 0.4)
+        range_real = int(self.sprite_w * 0.4)
 
-        if distance <= portee_reelle and self.attack_cooldown_timer <= 0:
-            # Le joueur est exactement à portée de machette → s'arrête et frappe
+        if distance <= range_real and self.attack_cooldown_timer <= 0:
+            # The player is exactly within machete range -> stop and strike
             self._change_state(BossState.CLEAVE)
 
         elif distance <= self.DETECT_RADIUS:
-            if distance > portee_reelle:
-                # Pas encore à portée → marche vers le joueur
+            if distance > range_real:
+                # Not in range yet -> walk towards the player
                 if self.state != BossState.WALK:
                     self._change_state(BossState.WALK)
             else:
-                # À portée mais cooldown pas écoulé → attend sur place
+                # In range but cooldown not elapsed -> wait in place
                 if self.state != BossState.IDLE:
                     self._change_state(BossState.IDLE)
 
@@ -360,7 +361,7 @@ class DemonSlimeBoss:
         direction = player_center - boss_center
         if direction.length() > 1:
             direction = direction.normalize()
-            # Mouvement uniquement sur X — le boss reste au sol
+            # Movement on X only - the boss stays on the ground
             self.velocity = pygame.Vector2(direction.x * self.MOVE_SPEED, 0)
         else:
             self.velocity = pygame.Vector2(0, 0)
@@ -380,10 +381,10 @@ class DemonSlimeBoss:
             hy = int(self.pos.y) + (self.sprite_h - hh)
 
             if self.facing_right:
-                # Flippé vers droite → machette sur la moitié droite du sprite
+                # Flipped to the right -> machete on the right half of the sprite
                 hx = int(self.pos.x) + self.sprite_w - hw
             else:
-                # Par défaut vers gauche → machette sur la moitié gauche du sprite
+                # Facing left by default -> machete on the left half of the sprite
                 hx = int(self.pos.x)
 
             self.attack_hitbox = pygame.Rect(hx, hy, hw, hh)
@@ -392,8 +393,8 @@ class DemonSlimeBoss:
 
     def _update_animation(self, dt_ms: float):
         """
-        Fait avancer l'animation en se basant sur les durées du JSON Aseprite.
-        Chaque frame a sa propre durée, ce qui permet des animations non-uniformes.
+        Advance the animation using the durations of the Aseprite JSON.
+        Each frame has its own duration, which allows non-uniform animations.
         """
         if not self.current_anim_frames:
             return
@@ -401,53 +402,53 @@ class DemonSlimeBoss:
         _, frame_duration = self.current_anim_frames[self.current_frame_index]
         self.frame_timer_ms += dt_ms
 
-        # Dès que le temps accumulé dépasse la durée de la frame courante…
+        # As soon as the accumulated time exceeds the current frame's duration...
         if self.frame_timer_ms >= frame_duration:
-            self.frame_timer_ms -= frame_duration  # reporte le surplus sur la frame suivante
+            self.frame_timer_ms -= frame_duration  # carry the surplus over to the next frame
             next_idx = self.current_frame_index + 1
 
             if next_idx >= len(self.current_anim_frames):
-                # Fin de l'animation → logique selon l'état
+                # End of the animation -> logic depends on the state
                 self._on_animation_end()
             else:
                 self.current_frame_index = next_idx
 
     def _on_animation_end(self):
         """
-        Appelée automatiquement à la fin de chaque animation.
-        C'est ici que les états "verrouillants" (CLEAVE, TAKE_HIT) se déverrouillent.
+        Called automatically at the end of every animation.
+        This is where the "locking" states (CLEAVE, TAKE_HIT) get unlocked.
         """
         if self.state == BossState.CLEAVE:
-            # Attaque terminée → démarre le cooldown et repose le boss
+            # Attack finished -> start the cooldown and rest the boss
             self.attack_cooldown_timer = self.ATTACK_COOLDOWN
             self._change_state(BossState.IDLE)
 
         elif self.state == BossState.TAKE_HIT:
-            # Réaction au coup terminée → iframes puis logique normale
+            # Hit reaction finished -> invincibility frames, then normal logic
             self.invincibility_timer = self.INVINCIBILITY_DURATION
             self._change_state(BossState.IDLE)
 
         elif self.state == BossState.DEATH:
-            # Reste bloqué sur la toute dernière frame (freeze on death)
+            # Stay frozen on the very last frame (freeze on death)
             self.current_frame_index = len(self.current_anim_frames) - 1
 
         else:
-            # IDLE et WALK : animation en boucle, on repart à la frame 0
+            # IDLE and WALK: looping animation, restart at frame 0
             self.current_frame_index = 0
 
     def _change_state(self, new_state: BossState):
         """
-        Effectue la transition vers un nouvel état :
-          1. Met à jour self.state
-          2. Charge les frames de la nouvelle animation
-          3. Remet les timers à zéro
+        Switch to a new state:
+          1. Update self.state
+          2. Load the frames of the new animation
+          3. Reset the timers
         """
         if new_state == self.state:
             return
 
         self.state = new_state
 
-        # Table de correspondance état → nom d'animation dans le JSON
+        # Mapping state -> animation name in the JSON
         anim_map = {
             BossState.IDLE:     self.ANIM_IDLE,
             BossState.WALK:     self.ANIM_WALK,
@@ -461,12 +462,12 @@ class DemonSlimeBoss:
         self.frame_timer_ms      = 0.0
 
     def _is_last_frame(self) -> bool:
-        """True quand on est sur la dernière frame (état final de DEATH)."""
+        """True when on the last frame (final state of DEATH)."""
         return self.current_frame_index >= len(self.current_anim_frames) - 1
     
 
-    def get_etat(self):
-        """Sérialise l'état du boss pour l'envoyer au client via le réseau."""
+    def get_state(self):
+        """Serialise the boss state to send it to the client over the network."""
         return {
             'x':             int(self.pos.x),
             'y':             int(self.pos.y),
@@ -487,15 +488,15 @@ class DemonSlimeBoss:
             ),
         }
 
-    def set_etat(self, data):
-        """Applique un état reçu du serveur (côté client, lecture seule)."""
+    def set_state(self, data):
+        """Apply a state received from the server (client side, read-only)."""
         self.pos.x       = data['x']
         self.pos.y       = data['y']
         self.hp          = data['hp']
         self.facing_right = data['facing_right']
         self.current_frame_index = data['frame_index']
 
-        # Synchronise l'animation selon l'état reçu
+        # Synchronise the animation with the received state
         state_name = data['state']
         new_state   = BossState[state_name]
         if new_state != self.state:

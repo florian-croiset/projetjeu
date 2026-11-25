@@ -1,135 +1,136 @@
 # core/astar.py
-# Pathfinding A* adapté au platformer 2D d'Écho.
+# A* pathfinding adapted to Echo's 2D platformer.
 #
-# Nœuds = tuiles (tx, ty). Le graphe est implicite : pour chaque nœud on
-# génère ses voisins à partir de carte.est_solide(). Contraintes :
-#   - Gauche / Droite vers une tuile air        → coût 1.0
-#   - Bas vers une tuile air (chute libre)      → coût 0.8
-#   - Haut vers une tuile air                   → coût 1.6 × step, seulement
-#     si la tuile sous le nœud courant est solide (saut depuis le sol).
-#     Multi-tuiles jusqu'à `hauteur_saut` ; toutes les tuiles intermédiaires
-#     doivent être air.
+# Nodes = tiles (tx, ty). The graph is implicit: for each node, neighbours
+# are generated from game_map.is_solid(). Constraints:
+# - Left / Right to an air tile        -> cost 1.0
+# - Down to an air tile (free fall)    -> cost 0.8
+# - Up to an air tile                  -> cost 1.6 x step, only
+# if the tile under the current node is solid (jump from the ground).
+# Multi-tile up to `jump_height`; all intermediate tiles
+# must be air.
 #
-# Heuristique : Manhattan (admissible — plus petite arête = 0.8).
+# Heuristic: Manhattan (admissible - smallest edge = 0.8).
 #
-# Si l'arrivée n'est pas atteinte dans `max_iter` expansions, on renvoie
-# le « meilleur effort » : chemin reconstruit vers le nœud visité dont
-# l'heuristique vers l'arrivée est minimale. Évite que les ennemis restent
-# figés quand le joueur est hors de portée.
+# If the goal is not reached within `max_iter` expansions, the "best effort"
+# is returned: the path rebuilt towards the visited node whose heuristic
+# to the goal is smallest. This keeps enemies from freezing when the
+# player is out of reach.
 
 import heapq
 
 
-def heuristique(a, b):
+def heuristic(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
-def _est_air(carte, x, y):
-    if 0 <= x < carte.largeur_map and 0 <= y < carte.hauteur_map:
-        return not carte.est_solide(x, y)
+def _is_air(game_map, x, y):
+    if 0 <= x < game_map.width_map and 0 <= y < game_map.height_map:
+        return not game_map.is_solid(x, y)
     return False
 
 
-def _depart_valide(carte, depart):
-    """Si la tuile de départ est solide (cas pathologique), on essaie une
-    tuile air adjacente. Renvoie None si rien d'utilisable."""
-    sx, sy = depart
-    if _est_air(carte, sx, sy):
-        return depart
+def _start_valid(game_map, start):
+    """If the start tile is solid (pathological case), try an adjacent air
+    tile. Returns None if nothing is usable.
+    """
+    sx, sy = start
+    if _is_air(game_map, sx, sy):
+        return start
     for dx, dy in ((0, -1), (-1, 0), (1, 0), (0, 1), (-1, -1), (1, -1)):
         nx, ny = sx + dx, sy + dy
-        if _est_air(carte, nx, ny):
+        if _is_air(game_map, nx, ny):
             return (nx, ny)
     return None
 
 
-def trouver_chemin(carte, depart, arrivee, max_iter=1500, hauteur_saut=2):
-    """A* sur la tilemap. Renvoie une liste [(tx, ty), ...] (chemin complet
-    depuis le départ jusqu'à l'arrivée) ou [] si rien d'exploitable.
+def find_path(game_map, start, goal, max_iter=1500, height_jump=2):
+    """A* on the tilemap. Returns a list [(tx, ty), ...] (full path from the
+    start to the goal) or [] if nothing is usable.
 
-    Si l'arrivée est inatteignable mais que des nœuds ont été visités, on
-    renvoie le chemin partiel vers le plus proche du but (meilleur effort).
+    If the goal is unreachable but some nodes were visited, the partial path
+    to the node closest to the goal is returned (best effort).
     """
-    depart = _depart_valide(carte, depart)
-    if depart is None:
+    start = _start_valid(game_map, start)
+    if start is None:
         return []
-    if depart == arrivee:
-        return [depart]
+    if start == goal:
+        return [start]
 
-    largeur = carte.largeur_map
-    hauteur = carte.hauteur_map
-    est_solide = carte.est_solide
+    width = game_map.width_map
+    height = game_map.height_map
+    is_solid = game_map.is_solid
 
-    h0 = heuristique(depart, arrivee)
-    compteur = 0
-    open_heap = [(h0, compteur, depart)]
-    g_score = {depart: 0.0}
-    parents = {depart: None}
-    visites = set()
+    h0 = heuristic(start, goal)
+    counter = 0
+    open_heap = [(h0, counter, start)]
+    g_score = {start: 0.0}
+    parents = {start: None}
+    visited = set()
 
-    meilleur_noeud = depart
-    meilleur_h = h0
+    best_node = start
+    best_h = h0
 
-    def pousser(noeud, new_g, parent):
-        nonlocal compteur
-        if noeud in visites:
+    def push(node, new_g, parent):
+        nonlocal counter
+        if node in visited:
             return
-        if new_g < g_score.get(noeud, float('inf')):
-            g_score[noeud] = new_g
-            parents[noeud] = parent
-            compteur += 1
+        if new_g < g_score.get(node, float('inf')):
+            g_score[node] = new_g
+            parents[node] = parent
+            counter += 1
             heapq.heappush(
                 open_heap,
-                (new_g + heuristique(noeud, arrivee), compteur, noeud),
+                (new_g + heuristic(node, goal), counter, node),
             )
 
-    while open_heap and len(visites) < max_iter:
-        _, _, courant = heapq.heappop(open_heap)
-        if courant in visites:
+    while open_heap and len(visited) < max_iter:
+        _, _, current = heapq.heappop(open_heap)
+        if current in visited:
             continue
-        visites.add(courant)
+        visited.add(current)
 
-        if courant == arrivee:
-            return _reconstruire(parents, courant)
+        if current == goal:
+            return _rebuild(parents, current)
 
-        cx, cy = courant
-        g = g_score[courant]
-        sur_sol = (cy + 1 < hauteur and est_solide(cx, cy + 1))
+        cx, cy = current
+        g = g_score[current]
+        on_ground = (cy + 1 < height and is_solid(cx, cy + 1))
 
-        # Gauche / Droite
+        # Left / Right
         for ndx in (-1, 1):
             nx = cx + ndx
-            if 0 <= nx < largeur and not est_solide(nx, cy):
-                pousser((nx, cy), g + 1.0, courant)
+            if 0 <= nx < width and not is_solid(nx, cy):
+                push((nx, cy), g + 1.0, current)
 
-        # Bas (chute)
+        # Down (fall)
         ny = cy + 1
-        if ny < hauteur and not est_solide(cx, ny):
-            pousser((cx, ny), g + 0.8, courant)
+        if ny < height and not is_solid(cx, ny):
+            push((cx, ny), g + 0.8, current)
 
-        # Haut (saut) — seulement depuis le sol
-        if sur_sol:
-            for step in range(1, hauteur_saut + 1):
+        # Up (jump) - only from the ground
+        if on_ground:
+            for step in range(1, height_jump + 1):
                 ny = cy - step
-                if ny < 0 or est_solide(cx, ny):
+                if ny < 0 or is_solid(cx, ny):
                     break
-                pousser((cx, ny), g + 1.6 * step, courant)
+                push((cx, ny), g + 1.6 * step, current)
 
-        h_cour = heuristique(courant, arrivee)
-        if h_cour < meilleur_h:
-            meilleur_h = h_cour
-            meilleur_noeud = courant
+        h_current = heuristic(current, goal)
+        if h_current < best_h:
+            best_h = h_current
+            best_node = current
 
-    if meilleur_noeud == depart:
+    if best_node == start:
         return []
-    return _reconstruire(parents, meilleur_noeud)
+    return _rebuild(parents, best_node)
 
 
-def _reconstruire(parents, noeud):
-    chemin = []
-    n = noeud
+def _rebuild(parents, node):
+    path = []
+    n = node
     while n is not None:
-        chemin.append(n)
+        path.append(n)
         n = parents.get(n)
-    chemin.reverse()
-    return chemin
+    path.reverse()
+    return path

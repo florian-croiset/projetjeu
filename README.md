@@ -14,7 +14,6 @@
 - [Contrôles](#contrôles)
 - [Mécaniques de jeu](#mécaniques-de-jeu)
 - [Architecture technique](#architecture-technique)
-- [Structure du projet](#structure-du-projet)
 - [Système de sauvegarde](#système-de-sauvegarde)
 - [Technologies](#technologies)
 
@@ -55,8 +54,8 @@ Site web du projet : [florian-croiset.github.io/jeusite](https://florian-croiset
 
 ### Prérequis
 
-- Python 3.8+
-- Pygame 2.1+, NumPy 2.4+
+- Python 3.10+
+- Pygame 2.1+, NumPy 1.24+
 
 ### Installation
 
@@ -71,28 +70,34 @@ pip install -r requirements.txt
 ```bash
 python3 main.py
 # ou
-make all
+make run
 ```
 
 ### Héberger une partie multijoueur
 
-Depuis le menu principal → **Héberger** → choisir un emplacement de sauvegarde. Le serveur démarre automatiquement dans un thread séparé. L'IP locale s'affiche pour que d'autres joueurs se connectent.
+Depuis le menu principal → **Héberger** → choisir un emplacement de sauvegarde. Le serveur démarre automatiquement dans le même processus. Les adresses IP à communiquer aux autres joueurs (et le code de salle si un relais est configuré) s'affichent dans le **menu pause**.
+
+Pour un serveur sans fenêtre (machine dédiée) :
+
+```bash
+python3 -m net.dedicated --slot 0          # --new pour une nouvelle partie
+```
 
 ### Rejoindre une partie
 
-Deux modes disponibles dans le menu **Rejoindre** :
+Deux modes dans le menu **Rejoindre** :
 
-1. **IP directe** — entrer l'IP de l'hôte (même LAN, ou VPN type Tailscale/Hamachi + port `5555/TCP` ouvert)
-2. **Code de salle** — l'hôte partage un code à 6 caractères via un serveur relais (WAN sans redirection de port)
+1. **IP directe** — entrer l'IP de l'hôte (même réseau local, ou VPN type Tailscale / Hamachi). Ports à ouvrir côté hôte : `5555/TCP` et `5556/UDP`. Si l'UDP est bloqué, le jeu bascule automatiquement sur le TCP.
+2. **Code de salle** — entrer le code à 6 lettres donné par l'hôte (nécessite un serveur relais, voir ci-dessous ; la partie reste en TCP).
 
-### Serveur relais (WAN sans NAT)
+### Serveur relais (WAN sans redirection de port)
 
 ```bash
-python3 -m reseau.relay_server        # port 7777 par défaut
-python3 -m reseau.relay_server 8888   # port personnalisé
+python3 -m net.relay_server          # port 7777 par défaut
+python3 -m net.relay_server 8888     # port personnalisé
 ```
 
-Configurer `RELAY_HOST` / `RELAY_PORT` dans `parametres.py`.
+Renseigner `RELAY_HOST` / `RELAY_PORT` dans `settings.py` (hôte **et** joueurs).
 
 ---
 
@@ -107,7 +112,7 @@ Configurer `RELAY_HOST` / `RELAY_PORT` dans `parametres.py`.
 | Attaque | K |
 | Pause | Échap |
 
-Les touches sont reconfigurables dans `parametres.json` (menu Paramètres en jeu).
+Les touches sont reconfigurables dans le menu Paramètres (fichier `user_settings.json`).
 
 ---
 
@@ -147,174 +152,115 @@ Chaque capacité est obtenue en récupérant une **orbe** (objet interactif sur 
 
 | Objet | Rôle |
 |-------|------|
-| `OrbeCapacite` | Débloque une capacité au contact |
-| `Porte` | Porte interactive (nécessite une clé) |
-| `Cle` | Ramassable, ouvre une porte |
-| `AmePerdue` | Loot de l'argent du joueur à sa mort |
-| `AmeLoot` | Loot des ennemis vaincus |
+| `AbilityOrb` | Débloque une capacité au contact |
+| `Door` | Porte interactive (nécessite une clé) |
+| `KeyItem` | Ramassable, ouvre une porte |
+| `LostSoul` | Loot de l'argent du joueur à sa mort |
+| `LootSoul` | Loot des ennemis vaincus |
 
 ---
 
 ## Architecture technique
 
-L'autorité est séparée : **le serveur possède toute la logique de jeu** (physique, IA, combats, collisions) et **le client possède le rendu, les inputs et l'affichage**.
+Le code (identifiants, commentaires, journaux) est en anglais. Documentation détaillée :
 
-### Serveur (`reseau/serveur.py`)
+- **[CLAUDE.md](CLAUDE.md)** — architecture, modules, commandes, conventions
+- **[docs/NETWORK.md](docs/NETWORK.md)** — protocole réseau (TCP + UDP), prédiction client, sécurité
+- **[docs/BUILD.md](docs/BUILD.md)** — compilation d'un exécutable (PyInstaller)
 
-Tourne dans un thread séparé au moment de l'hébergement.
-
-- Physique joueurs : gravité (0,6 u/frame), AABB, mouvement (5 px/frame), saut (force 13), dash
-- IA ennemis : patrouille, détection du vide, respawn timers
-- Résolution de combats : mêlée, boss
-- Objets : portes, orbes, clés, âmes, torches
-- Détection des checkpoints et sauvegarde automatique
-- Diffusion de l'état à tous les clients à **60 Hz**
-
-### Client (`main.py` → `client.py`)
-
-`Client` est composé de trois mixins :
-
-| Mixin | Fichier | Rôle |
-|-------|---------|------|
-| `BoucleJeuMixin` | `boucle_jeu.py` | Boucle de jeu, envoi inputs, réception état serveur, rendu |
-| `MenusMixin` | `ui/menus.py` | Tous les écrans de menu |
-| `HudMixin` | `ui/hud.py` | HUD en jeu (barre de vie, mort/respawn, boss) |
-
-### Protocole réseau
-
-- **Transport** : TCP sur port `5555`
-- **Encodage** : préfixe 4 octets (big-endian, longueur) + objet Python sérialisé avec `pickle` — voir `reseau/protocole.py` (`send_complet` / `recv_complet`)
-- **Client → Serveur** : dict d'inputs (touches pressées, actions)
-- **Serveur → Client** : état complet du monde (joueurs, ennemis, âmes, boss, clés, portes, orbes, cartes de visibilité)
-
-### Système d'écholocalisation (`core/carte.py`)
-
-```python
-for i in range(NB_RAYONS_ECHO):          # 360 rayons
-    angle = (i / NB_RAYONS_ECHO) * 2 * pi
-    for dist in range(1, PORTEE_ECHO):   # 150 px
-        x = cx + dist * cos(angle)
-        y = cy + dist * sin(angle)
-        # → révèle la tuile, arrêt sur mur
-```
-
-La surface de carte pré-baked (`_carte_prebake`) n'est reconstruite que lorsque `vis_map` change. La caméra applique un masque halo (`ui/camera.py` → `creer_masque_halo`) pour l'obscurité ambiante.
-
----
-
-## Structure du projet
+En résumé :
 
 ```
-projetjeu/
-├── main.py                        # Point d'entrée
-├── client.py                      # Classe Client (mixins)
-├── boucle_jeu.py                  # BoucleJeuMixin
-├── parametres.py                  # Toutes les constantes du jeu
-├── parametres.json                # Configuration utilisateur (langue, touches, vidéo)
-│
-├── core/                          # Logique de jeu
-│   ├── carte.py                   # Tilemap + raycasting écholocalisation
-│   ├── joueur.py                  # Physique, combat, capacités
-│   ├── ennemi.py                  # IA ennemis
-│   ├── demon_slime_boss.py        # Boss principal
-│   ├── boss_room.py               # Gestion de la salle boss
-│   ├── ame_perdue.py              # Âme du joueur à la mort
-│   ├── ame_libre.py / ame_loot.py # Âmes loot ennemis
-│   ├── orbe_capacite.py           # Objets débloquant des capacités
-│   ├── porte.py                   # Portes interactives
-│   ├── cle.py                     # Clés
-│   ├── torche.py                  # Torches (halo passif)
-│   ├── map.py                     # Chargement carte JSON
-│   └── astar.py                   # Pathfinding A*
-│
-├── reseau/                        # Réseau
-│   ├── serveur.py                 # Serveur autoritaire (TCP, threadé)
-│   ├── protocole.py               # send_complet / recv_complet
-│   ├── relay_server.py            # Serveur relais WAN (code de salle)
-│   └── relay_client.py            # Helpers côté client pour le relais
-│
-├── ui/                            # Interface
-│   ├── menus.py                   # MenusMixin — tous les menus
-│   ├── hud.py                     # HudMixin — HUD en jeu
-│   ├── camera.py                  # Caméra + masque halo
-│   ├── bouton.py                  # Composant bouton réutilisable
-│   ├── effets_visuels.py          # Effets visuels
-│   ├── splash_screen.py           # Écran de démarrage
-│   └── tutoriel.py                # Tutoriel
-│
-├── sauvegarde/                    # Persistance
-│   ├── gestion_sauvegarde.py      # Lecture/écriture slots JSON
-│   ├── gestion_parametres.py      # Lecture/écriture parametres.json
-│   └── points_sauvegarde.py       # ID checkpoint ↔ coordonnées
-│
-├── utils/                         # Utilitaires
-│   ├── langue.py                  # i18n FR/EN
-│   ├── music.py                   # Gestion musique
-│   └── install_package.py         # Installation dépendances runtime
-│
-└── assets/                        # Ressources
-    ├── MapS2.tmx                  # Carte Tiled (XML, couches Wall.* / Sol.*)
-    ├── tileset.png                # Tileset
-    ├── sprite_perso*.png          # Sprites joueurs
-    ├── demon_slime.png            # Sprite boss
-    ├── Torche.png                 # Sprite torche
-    └── musique.mp3                # Musique d'ambiance
+main.py → Client (client/app.py)
+            ├─ MenusMixin / HudMixin        ui/
+            ├─ GameLoopMixin                client/game_loop.py  entrées, ticks de prédiction, rendu
+            ├─ ClientStateMixin             client/state.py      applique les données serveur
+            └─ ClientConnectionMixin        client/connection.py rejoindre / héberger
+
+net/server.py  → Server : sockets + boucle 60 Hz        (thread de jeu unique)
+core/world.py  → World  : toute la simulation (sans réseau, testable)
 ```
+
+- Le **serveur est autoritaire** ; le client prédit ses propres déplacements (même code physique) et se corrige à la réception des snapshots.
+- Réseau : TCP (poignée de main, repli) + UDP (jeu en temps réel). Aucun `pickle` n'est utilisé sur le réseau.
+- Tests : `make test` (pytest). Benchmark serveur : `make bench`.
+
+### Système d'écholocalisation (`core/game_map.py`)
+
+Les rayons sont lancés par DDA depuis la position du joueur ; les tuiles touchées sont stockées dans la `vis_map` (sauvegardée, compressée). La surface de carte pré-calculée n'est reconstruite que lorsque la `vis_map` change, et la caméra applique un masque de halo (`ui/camera.py` → `create_mask_halo`).
 
 ### Format de carte
 
-Fichier TMX (`assets/MapS2.tmx`) parsé en XML par `core/carte.py`. Les couches nommées `Wall.*` et `Sol.*` génèrent des tuiles solides (type 1) ; le reste est vide (type 0). Fallback : `map.json` (grille plate). Taille de tuile : **32×32 px**.
+Fichier TMX (`assets/MapS2.tmx`) lu par `core/game_map.py`. Les couches `Wall.1` et `Sol.1` génèrent des tuiles solides ; le reste est vide. Taille de tuile : **32×32 px**, carte de 100×70 tuiles. L'éditeur de niveaux : `python3 tools/level_editor.py`.
 
----
+## Optimisations par rapport à l'ancienne version
+
+Comparaison avec le code d'avant la refonte (sauvegardé à part). **Mesuré** = relevé sur la même machine avec le même scénario ; **calculé** = déduit du format ou du fonctionnement, sans mesure réelle (le réseau réel n'a pas été simulé).
+
+| Domaine | Avant | Après | Gain | Statut |
+|---------|-------|-------|------|--------|
+| FPS moyen (client + serveur, 44 ennemis, bot qui joue, sans limite de FPS, sans fenêtre) | 19 à 21 FPS | 111 à 113 FPS | ≈ **×5,5** | mesuré (2 essais chacun) |
+| FPS « 1 % bas » (pires images) | 2,6 à 3,0 FPS | 26 FPS | ≈ **×9** | mesuré |
+| Temps moyen d'une image | 48 à 52 ms | 9 ms | **−82 %** | mesuré |
+| Coût d'un tick serveur (simulation + sérialisation, 2 joueurs, 59 ennemis) | non mesurable séparément | 0,5 à 0,9 ms sur 16,7 ms disponibles (3 à 6 %) | — | mesuré (`tools/benchmark.py`) |
+| Taille d'un snapshot (2 joueurs, 44 ennemis) | 547 octets | 286 octets | **−48 %** (et il contient en plus l'état de physique du joueur pour la correction) | calculé / mesuré |
+| Débit descendant par joueur (snapshots à 60 Hz) | ≈ 33 Ko/s | ≈ 17 Ko/s | ≈ **−48 %** | calculé |
+| États du monde (âmes, portes, ennemis…) | renvoyés en entier à 10 Hz | envoyés seulement quand ils changent | proche de 0 quand rien ne bouge | conception |
+| Ennemis envoyés | tous | seulement ceux à moins de 900 px | selon la position | conception |
+| Délai entre l'appui sur une touche et le mouvement du joueur local | durée d'un aller-retour réseau (≈ 50 ms pour 40 ms de ping, ≈ 110 ms pour 100 ms) + attente du tick serveur | une image (≤ 16 ms), quel que soit le ping | de ≈ 50-110 ms à ≈ 0 ms | calculé |
+| Délai d'affichage des joueurs et ennemis distants | 100 ms fixes | 60 ms, augmenté automatiquement si la connexion est instable (max 200 ms) | jusqu'à −40 ms | conception |
+| Fichier de sauvegarde (votre ancienne sauvegarde 1) | 140 943 octets | 1 329 octets | **−99 %** (÷ 106) | mesuré |
+| Écriture de la sauvegarde | écriture directe dans le fichier (fichier corrompu si le jeu plante pendant l'écriture) ; la partie bloque le jeu | fichier temporaire puis remplacement atomique, dans un thread séparé | plus de corruption, plus d'à-coups | conception |
+| Sécurité | exécution de code à distance possible (`pickle`) | format borné, testé avec des données aléatoires | — | testé |
+| Jeu via VPN (Hamachi, Tailscale) | impossible (le serveur n'écoutait que l'IP du réseau local) | le serveur écoute sur toutes les interfaces | — | corrigé |
+| Tests automatiques | 0 | 82 | — | mesuré |
+| Code | 58 fichiers, ≈ 17 000 lignes ; boucle de jeu 1 521 lignes, serveur 1 277 lignes | 84 fichiers, ≈ 18 600 lignes (dont ≈ 1 200 de tests et d'outils) ; boucle de jeu 720 lignes, serveur 521 lignes + simulation 811 lignes | découpage et lisibilité, pas de réduction du volume | mesuré |
+
+Notes sur les mesures :
+
+- Scénario identique des deux côtés : session locale (serveur et client dans le même processus), pilote automatique (marche, saut, attaque, dash, écho), 25 ennemis ajoutés autour du point d'apparition, images non limitées, pilote vidéo « dummy » (pas d'affichage réel).
+- Les FPS réels dans une fenêtre dépendent de la carte graphique et de l'écran ; le gain relatif devrait rester du même ordre, mais seule la mesure `--visible` sur votre machine le confirmerait.
+- Les pires images restent à ≈ 30 ms (rayons de l'écho) : c'est le prochain point à optimiser.
+- Reproduire : `python tools/fps_benchmark.py` (client complet) et `python tools/benchmark.py` (simulation serveur seule).
 
 ## Système de sauvegarde
 
-3 emplacements → `slot_1.json`, `slot_2.json`, `slot_3.json`. Sauvegarde automatique au contact d'un checkpoint (tuile type 3), uniquement pour l'hôte.
-
-### Format JSON
+Trois emplacements `slot_1.json` … `slot_3.json` (dossier du projet, ou `%LOCALAPPDATA%\Echo` / `~/.local/share/Echo` pour un exécutable). Écriture atomique ; les anciens fichiers (clés françaises, `vis_map` en liste) sont migrés automatiquement à la lecture.
 
 ```json
 {
-    "id_dernier_checkpoint": "3_21",
-    "vis_map": [[true, false, ...], ...],
-    "items": [],
-    "ameliorations": {
-        "double_saut": true,
-        "dash": false,
-        "echo_dir": false
-    },
-    "argent": 150
+  "version": 2,
+  "id_last_checkpoint": "42_22",
+  "vis_map": {"w": 100, "h": 70, "bits": "<base64>"},
+  "items": [],
+  "money": 18,
+  "upgrades": {"double_jump": true, "dash": false, "echo_dir": false}
 }
 ```
 
-| Champ | Description |
-|-------|-------------|
-| `id_dernier_checkpoint` | Coordonnées "x_y" de la tuile checkpoint |
-| `vis_map` | Grille booléenne de visibilité (même taille que la carte) |
-| `ameliorations` | Capacités débloquées |
-| `argent` | Âmes/argent au moment de la sauvegarde |
-
----
+Les réglages utilisateur sont dans `user_settings.json` (l'ancien `parametres.json` est migré au premier lancement).
 
 ## Technologies
 
 | Technologie | Usage |
 |-------------|-------|
-| **Python 3.8+** | Langage principal |
+| **Python 3.10+** | Langage principal |
 | **Pygame 2.1+** | Rendu 2D, événements, boucle de jeu |
-| **NumPy 2.4+** | Génération du masque halo (caméra) |
-| **socket / pickle / struct** | Réseau TCP (stdlib) |
+| **NumPy** | Génération du masque halo (caméra) |
+| **socket / struct / zlib** | Réseau TCP + UDP (bibliothèque standard) |
 | **json** | Sauvegardes et configuration |
-| **threading** | Serveur et relais dans des threads séparés |
+| **threading** | Serveur, relais, pathfinding |
+| **pytest / ruff** | Tests et analyse statique (développement) |
 | **Tiled Map Editor** | Création de la carte (`assets/MapS2.tmx`) |
 
-### Flags de debug (`parametres.py`)
+### Flags de debug (`settings.py`)
 
 | Flag | Effet |
 |------|-------|
-| `MODE_DEV = True` | Compteur FPS, overlay debug, capture logs |
-| `REVELATION = True` | Révèle toute la carte (bypass écholocalisation) |
-| `ASSOMBRISSEMENT = False` | Désactive l'obscurité / le halo |
+| `DEV_MODE = True` | Compteur FPS, overlay debug, toutes les capacités débloquées |
+| `REVEAL_ALL = True` | Révèle toute la carte (bypass écholocalisation) |
+| `DARKNESS_ENABLED = False` | Désactive l'obscurité / le halo |
+| `USE_UDP = False` | Force le transport TCP |
 
 ---
 

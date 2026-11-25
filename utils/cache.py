@@ -1,45 +1,47 @@
 # utils/cache.py
-# Caches et pré-calculs centralisés pour optimiser le jeu.
+# Centralised caches and precomputations used to optimise the game.
 #
-# Contenu :
-#   ┌─ Caches pygame ─────────────────────────────────────────────────────┐
-#   │  flip_h(surface)               → surface flippée horizontalement    │
-#   │  render_text(font, txt, coul)  → font.render() mémoïsé              │
-#   │  get_font_defaut(taille_px)    → pygame.font.Font(None, taille)     │
-#   │  get_font_pseudo(taille_px)    → alias de get_font_defaut           │
-#   │  creer_textes_echo_hud(fonts)  → surfaces statiques du widget Echo  │
-#   │  label_bg(w, h, alpha=120)     → surface de fond semi-transparent   │
-#   └─────────────────────────────────────────────────────────────────────┘
-#   ┌─ Constantes pré-calculées ─────────────────────────────────────────┐
-#   │  DIRECTIONS_ECHO_RADIAL        → vecteurs des rayons radiaux       │
-#   │  DIRECTIONS_ECHO_DROITE/GAUCHE → vecteurs des cônes directionnels  │
-#   │  RAYON_AUDITION_TRAQUEUR_SQ    → rayon² pour comparaisons rapides  │
-#   └────────────────────────────────────────────────────────────────────┘
+# Contents:
+# +- pygame caches ----------------------------------------------------+
+# |  flip_h(surface)               -> horizontally flipped surface      |
+# |  render_text(font, txt, color) -> memoised font.render()            |
+# |  get_font_default(size_px)     -> pygame.font.Font(None, size)      |
+# |  get_font_nickname(size_px)    -> alias of get_font_default         |
+# |  create_texts_echo_hud(fonts)  -> static surfaces of the Echo widget|
+# |  label_bg(w, h, alpha=120)     -> semi-transparent background       |
+# +--------------------------------------------------------------------+
+# +- Precomputed constants --------------------------------------------+
+# |  DIRECTIONS_ECHO_RADIAL        -> radial ray vectors                |
+# |  DIRECTIONS_ECHO_RIGHT/LEFT    -> directional cone vectors          |
+# |  TRACKER_HEARING_RADIUS_SQ     -> squared radius for fast compares  |
+# +--------------------------------------------------------------------+
 
 import math
 import pygame
 
-from parametres import (
-    COULEUR_CYAN,
-    ECHO_DIR_DEMI_ANGLE,
-    NB_RAYONS_ECHO,
-    RAYON_AUDITION_TRAQUEUR,
+from utils.i18n import get_text
+
+from settings import (
+    COLOR_CYAN,
+    ECHO_DIR_HALF_ANGLE,
+    ECHO_RAY_COUNT,
+    TRACKER_HEARING_RADIUS,
 )
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  CACHE — SURFACES FLIPPÉES HORIZONTALEMENT
-# ══════════════════════════════════════════════════════════════════════
-# Clé : id(surface_source). Tant que la surface source reste référencée
-# ailleurs (par l'animator), id() ne sera pas réutilisé.
-# Si jamais le cache devient trop gros, on le purge entièrement.
+# ======================================================================
+# CACHE - HORIZONTALLY FLIPPED SURFACES
+# ======================================================================
+# Key: id(source_surface). As long as the source surface stays referenced
+# elsewhere (by the animator), the id() will not be reused.
+# If the cache ever grows too large, it is purged entirely.
 
 _FLIP_H_CACHE: dict = {}
 _FLIP_H_MAX = 512
 
 
 def flip_h(surface: pygame.Surface) -> pygame.Surface:
-    """Retourne la version flippée horizontalement de `surface`, mémoïsée."""
+    """Return the horizontally flipped version of `surface`, memoised."""
     key = id(surface)
     cached = _FLIP_H_CACHE.get(key)
     if cached is not None:
@@ -51,151 +53,151 @@ def flip_h(surface: pygame.Surface) -> pygame.Surface:
     return flipped
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  CACHE — RENDUS DE TEXTE
-# ══════════════════════════════════════════════════════════════════════
-# Clé : (id(font), texte, couleur). Évite font.render() pour des textes
-# statiques re-rendus à chaque frame (HUD, labels menu).
+# ======================================================================
+# CACHE - TEXT RENDERS
+# ======================================================================
+# Key: (id(font), text, color). Avoids font.render() for static texts
+# re-rendered on every frame (HUD, menu labels).
 
 _TEXT_CACHE: dict = {}
 _TEXT_CACHE_MAX = 256
 
 
-def render_text(font: pygame.font.Font, texte: str, couleur) -> pygame.Surface:
-    """font.render mémoïsé. À utiliser pour des textes statiques répétés."""
-    coul_key = tuple(couleur) if not isinstance(couleur, tuple) else couleur
-    key = (id(font), texte, coul_key)
+def render_text(font: pygame.font.Font, text: str, color) -> pygame.Surface:
+    """Memoised font.render. Use it for repeated static texts."""
+    color_key = tuple(color) if not isinstance(color, tuple) else color
+    key = (id(font), text, color_key)
     cached = _TEXT_CACHE.get(key)
     if cached is not None:
         return cached
     if len(_TEXT_CACHE) >= _TEXT_CACHE_MAX:
         _TEXT_CACHE.clear()
-    surf = font.render(texte, True, couleur)
+    surf = font.render(text, True, color)
     _TEXT_CACHE[key] = surf
     return surf
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  CACHE — FONT PYGAME PAR DÉFAUT (par taille en pixels)
-# ══════════════════════════════════════════════════════════════════════
-# Utilisé par les pseudos joueurs ET par tous les rendus qui faisaient
-# auparavant `pygame.font.Font(None, taille)` à chaque frame (orbes,
-# portes, etc.). La construction d'une font Pygame est lente —
-# l'instance est partagée par tous les appelants à taille égale.
+# ======================================================================
+# CACHE - DEFAULT PYGAME FONT (by pixel size)
+# ======================================================================
+# Used by the player nicknames AND by every renderer that used to call
+# `pygame.font.Font(None, size)` on every frame (orbs, doors, etc.).
+# Building a Pygame font is slow - the instance is shared by all callers
+# that use the same size.
 
-_FONT_DEFAUT_CACHE: dict = {}
+_FONT_DEFAULT_CACHE: dict = {}
 
 
-def get_font_defaut(taille_px: int) -> pygame.font.Font:
-    """Retourne `pygame.font.Font(None, taille_px)` mémoïsée par taille."""
-    font = _FONT_DEFAUT_CACHE.get(taille_px)
+def get_font_default(size_px: int) -> pygame.font.Font:
+    """Return `pygame.font.Font(None, size_px)` memoised by size."""
+    font = _FONT_DEFAULT_CACHE.get(size_px)
     if font is None:
-        font = pygame.font.Font(None, taille_px)
-        _FONT_DEFAUT_CACHE[taille_px] = font
+        font = pygame.font.Font(None, size_px)
+        _FONT_DEFAULT_CACHE[size_px] = font
     return font
 
 
-# Alias conservé pour la compatibilité : le pseudo joueur utilisait
-# historiquement un cache dédié.
-get_font_pseudo = get_font_defaut
+# Alias kept for compatibility: the player nickname historically used
+# a dedicated cache.
+get_font_nickname = get_font_default
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  CACHE — SURFACES DE FOND SEMI-TRANSPARENT (« label bg »)
-# ══════════════════════════════════════════════════════════════════════
-# Petit rectangle SRCALPHA rempli d'une seule couleur uniforme — utilisé
-# comme arrière-plan des étiquettes flottantes (orbe, pseudo, etc.).
-# La clé inclut la taille ET l'alpha (la couleur de remplissage est
-# toujours du noir, c'est le cas réel utilisé partout dans le jeu).
+# ======================================================================
+# CACHE - SEMI-TRANSPARENT BACKGROUND SURFACES ("label bg")
+# ======================================================================
+# Small SRCALPHA rectangle filled with one uniform color - used as the
+# background of floating labels (orb, nickname, etc.).
+# The key includes the size AND the alpha (the fill color is always
+# black, which is the real case used everywhere in the game).
 
 _LABEL_BG_CACHE: dict = {}
 _LABEL_BG_MAX = 128
 
 
-def label_bg(largeur: int, hauteur: int, alpha: int = 120) -> pygame.Surface:
-    """Surface noire SRCALPHA (`(0,0,0,alpha)`) mémoïsée par dimensions.
+def label_bg(width: int, height: int, alpha: int = 120) -> pygame.Surface:
+    """Black SRCALPHA surface (`(0,0,0,alpha)`) memoised by dimensions.
 
-    Réutilisable pour les arrière-plans d'étiquettes — la même
-    instance est renvoyée à chaque appel, ne pas la modifier.
+    Reusable for label backgrounds - the same instance is returned on every
+    call, do not modify it.
     """
-    key = (largeur, hauteur, alpha)
+    key = (width, height, alpha)
     cached = _LABEL_BG_CACHE.get(key)
     if cached is not None:
         return cached
     if len(_LABEL_BG_CACHE) >= _LABEL_BG_MAX:
         _LABEL_BG_CACHE.clear()
-    surf = pygame.Surface((largeur, hauteur), pygame.SRCALPHA)
+    surf = pygame.Surface((width, height), pygame.SRCALPHA)
     surf.fill((0, 0, 0, alpha))
     _LABEL_BG_CACHE[key] = surf
     return surf
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  CACHE — SURFACES STATIQUES DU WIDGET ECHO (HUD)
-# ══════════════════════════════════════════════════════════════════════
-# Les labels « ECHO », « PRÊT » et l'icône « E » (cyan + grisé) sont
-# pré-rendus une fois lors de l'initialisation du HUD (et à chaque
-# changement de résolution puisque les fonts changent).
+# ======================================================================
+# CACHE - STATIC SURFACES OF THE ECHO WIDGET (HUD)
+# ======================================================================
+# The "ECHO" and "READY" labels and the "E" icon (cyan + grayed) are
+# pre-rendered once when the HUD is initialised (and on every
+# resolution change since the fonts change).
 
-def creer_textes_echo_hud(font_label_small: pygame.font.Font,
+def create_texts_echo_hud(font_label_small: pygame.font.Font,
                           font_label_medium: pygame.font.Font,
                           font_echo_icon: pygame.font.Font) -> dict:
-    """Renvoie un dict contenant les surfaces statiques du widget Echo.
+    """Return a dict with the static surfaces of the Echo widget.
 
-    Clés du dict retourné :
-      - 'echo_label'  : « ECHO » (petit, gris)
-      - 'echo_pret'   : « PRÊT » (moyen, cyan)
+    Keys of the returned dict:
+    - 'echo_label' : "ECHO" (small, gray)
+    - 'echo_ready' : "READY" (medium, cyan)
 
-    Les icônes de touche (e_pret / e_attente) sont rendues dynamiquement
-    via render_text() dans le HUD pour refléter les liaisons de touches.
+    The key icons (e_ready / e_waiting) are rendered dynamically through
+    render_text() in the HUD to reflect the key bindings.
     """
     return {
         'echo_label': font_label_small.render("ECHO", True, (100, 85, 130)),
-        'echo_pret':  font_label_medium.render("PRÊT", True, COULEUR_CYAN),
+        'echo_ready':  font_label_medium.render(get_text("hud_ready"), True, COLOR_CYAN),
     }
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  CONSTANTES — VECTEURS DE DIRECTION D'ÉCHO
-# ══════════════════════════════════════════════════════════════════════
-# Pré-calculés une seule fois au chargement du module ; partagés par
-# toutes les instances de Carte.
+# ======================================================================
+# CONSTANTS - ECHO DIRECTION VECTORS
+# ======================================================================
+# Precomputed once when the module is loaded; shared by
+# every GameMap instance.
 
 DIRECTIONS_ECHO_RADIAL = tuple(
-    (math.cos(i / NB_RAYONS_ECHO * 2 * math.pi),
-     math.sin(i / NB_RAYONS_ECHO * 2 * math.pi))
-    for i in range(NB_RAYONS_ECHO)
+    (math.cos(i / ECHO_RAY_COUNT * 2 * math.pi),
+     math.sin(i / ECHO_RAY_COUNT * 2 * math.pi))
+    for i in range(ECHO_RAY_COUNT)
 )
 
-_DEMI_RAD_ECHO = ECHO_DIR_DEMI_ANGLE * math.pi / 180
+_HALF_RAD_ECHO = ECHO_DIR_HALF_ANGLE * math.pi / 180
 
-DIRECTIONS_ECHO_DROITE = tuple(
-    (math.cos(-_DEMI_RAD_ECHO + i / (NB_RAYONS_ECHO - 1) * 2 * _DEMI_RAD_ECHO),
-     math.sin(-_DEMI_RAD_ECHO + i / (NB_RAYONS_ECHO - 1) * 2 * _DEMI_RAD_ECHO))
-    for i in range(NB_RAYONS_ECHO)
+DIRECTIONS_ECHO_RIGHT = tuple(
+    (math.cos(-_HALF_RAD_ECHO + i / (ECHO_RAY_COUNT - 1) * 2 * _HALF_RAD_ECHO),
+     math.sin(-_HALF_RAD_ECHO + i / (ECHO_RAY_COUNT - 1) * 2 * _HALF_RAD_ECHO))
+    for i in range(ECHO_RAY_COUNT)
 )
 
-DIRECTIONS_ECHO_GAUCHE = tuple(
-    (math.cos(math.pi - _DEMI_RAD_ECHO + i / (NB_RAYONS_ECHO - 1) * 2 * _DEMI_RAD_ECHO),
-     math.sin(math.pi - _DEMI_RAD_ECHO + i / (NB_RAYONS_ECHO - 1) * 2 * _DEMI_RAD_ECHO))
-    for i in range(NB_RAYONS_ECHO)
+DIRECTIONS_ECHO_LEFT = tuple(
+    (math.cos(math.pi - _HALF_RAD_ECHO + i / (ECHO_RAY_COUNT - 1) * 2 * _HALF_RAD_ECHO),
+     math.sin(math.pi - _HALF_RAD_ECHO + i / (ECHO_RAY_COUNT - 1) * 2 * _HALF_RAD_ECHO))
+    for i in range(ECHO_RAY_COUNT)
 )
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  CONSTANTES — DISTANCES AU CARRÉ (pour éviter math.sqrt)
-# ══════════════════════════════════════════════════════════════════════
+# ======================================================================
+# CONSTANTS - SQUARED DISTANCES (to avoid math.sqrt)
+# ======================================================================
 
-RAYON_AUDITION_TRAQUEUR_SQ = RAYON_AUDITION_TRAQUEUR * RAYON_AUDITION_TRAQUEUR
+TRACKER_HEARING_RADIUS_SQ = TRACKER_HEARING_RADIUS * TRACKER_HEARING_RADIUS
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  UTILITAIRE — PURGE
-# ══════════════════════════════════════════════════════════════════════
+# ======================================================================
+# UTILITY - PURGE
+# ======================================================================
 
-def vider_caches() -> None:
-    """Purge tous les caches dynamiques (à appeler si les fonts sont recréées)."""
+def clear_caches() -> None:
+    """Purge every dynamic cache (call it if the fonts are recreated)."""
     _FLIP_H_CACHE.clear()
     _TEXT_CACHE.clear()
-    _FONT_DEFAUT_CACHE.clear()
+    _FONT_DEFAULT_CACHE.clear()
     _LABEL_BG_CACHE.clear()

@@ -1,0 +1,15 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore:pkg_resources is deprecated:UserWarning"]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["build", "dist"]
+
+[tool.ruff.lint]
+# Pyflakes (undefined names, unused imports/variables), syntax errors, bugbear subset
+select = ["F", "E9", "B006", "B008", "B015", "B018"]
+ignore = [
+    "F403",   # `from settings import *` is the project's way of sharing constants
+    "F405",   # ... so names coming from it cannot be resolved statically
+]
