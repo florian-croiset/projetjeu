@@ -1,314 +1,132 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) when working in this repository.
 
-## Project Overview
+## Project overview
 
-**Écho** is a cooperative multiplayer 2D action-platformer in Python/Pygame where players perceive their environment exclusively through echolocation (raycasting). Metroidvania-style progression with unlockable abilities and a Dark Souls-inspired death mechanic. Student project (Cycle Préparatoire S1 & S2, Team Nightberry, 5 developers).
+**Écho** is a cooperative multiplayer 2D action-platformer in Python/Pygame. Players perceive the level only through echolocation (raycasting). Metroidvania progression (unlockable abilities), Dark Souls-style death mechanic (lost souls). Student project (Team Nightberry).
+
+## Conventions
+
+* **Code, identifiers, comments, docstrings, log messages: English.** No French identifiers.
+* **Player-facing text**: French is the default language; UI strings that exist in both languages live in `utils/i18n.py` (`FR` / `EN` dictionaries). Lore, tutorial, quest, HUD, notification, menu and end-of-game texts are all in `utils/i18n.py` (`lore_*`, `tuto_*`, `quest_*`, `hud_*`, `notif_*`, `menu_*` keys). `tests/test_i18n.py` checks that FR and EN have the same keys and that every key used in code exists. Remaining French literals are intentional: default nicknames (saved as player data) and the level editor.
+* Simulation code must be deterministic and never read the wall clock: it takes the simulation time (`now` / `World.time_ms`) as a parameter. The server and the client prediction run the *same* `Player.apply_physics`.
+* Network messages never use `pickle`; use `net/codec.py`.
+* Shared level layout (torch, orbs, doors, levers, signs, boss room) is in `core/level.py`.
 
 ## Commands
 
 ```bash
-# Run the game
-python3 main.py
-make all
+pip install -r requirements.txt          # runtime: pygame, numpy
+pip install -r requirements-dev.txt      # + pytest, ruff
 
-# Install dependencies
-pip install -r requirements.txt
+python3 main.py                          # run the game (make run)
+python -m pytest tests -q                # test suite, headless (make test)
+python -m ruff check .                   # lint (make lint)
+python tools/benchmark.py                # headless server-tick benchmark (make bench)
+python tools/fps_benchmark.py            # whole-client FPS benchmark with a scripted bot (make fps)
 
-# Run the TCP relay server (for WAN play without port forwarding)
-python3 -m reseau.relay_server [port]   # default port: 7777
+python -m net.dedicated --slot 0 [--new] # headless dedicated server
+python -m net.relay_server [port]        # room-code relay, default 7777
+python3 tools/level_editor.py          # map editor
 ```
 
-No build step, no test suite — this is a pure Python/Pygame project.
+Tests run without a display (`tests/conftest.py` sets the SDL dummy drivers).
 
-## Companion docs
+## Docs
 
-- **`RESEAU.md`** — authoritative reference for the hybrid TCP+UDP netcode. Read it before touching anything in `reseau/` or the snapshot/interp logic in `core/joueur.py` & `core/ennemi.py`. It documents the binary header, ack-bitfield, handshake, security model, and diagnostic checklists.
-- **`README.md`** — player-facing docs (gameplay mechanics, controls, team).
+* **`docs/NETWORK.md`**: authoritative netcode reference (transports, snapshot layout, prediction, security, diagnostics). Read it before touching `net/`, `core/world.py` snapshots/inputs, `core/prediction.py` or `client/state.py`.
+* **`docs/BUILD.md`**: building an executable with PyInstaller.
+* **`README.md`**: player-facing documentation (French).
 
 ## Architecture
 
-The client-server architecture splits authority: **the server owns all game logic** (physics, AI, combat, collisions), and **the client owns rendering, input, and display**.
+The **server is authoritative** (physics, AI, combat, saves); clients render, read input, and *predict* their own player.
 
-### Entry Point & Client
+```
+main.py -> Client (client/app.py)
+             |- MenusMixin            ui/menus.py
+             |- HudMixin              ui/hud.py
+             |- GameLoopMixin         client/game_loop.py   input -> prediction ticks -> render
+             |- ClientStateMixin      client/state.py       applies snapshots / state / events
+             \- ClientConnectionMixin client/connection.py  join, host, relay, cleanup
 
-`main.py` → instantiates `Client` (`client.py`, 299 lines) → calls `lancer_application()`.
+net/server.py (Server)  sockets + fixed 60 Hz game thread
+core/world.py (World)   the whole simulation, no sockets, unit-testable
+```
 
-`Client` is composed of three mixins:
-- **`BoucleJeuMixin`** (`boucle_jeu.py`, ~1 278 lines): in-game loop — sends inputs to server via TCP/UDP, receives authoritative state, renders the world. Also handles connection setup and hosting (starts server thread + optional relay thread).
-- **`MenusMixin`** (`ui/menus.py`, ~1 263 lines): all menu screens (main, parameters, save slots, join via IP or room code, pause menu)
-- **`HudMixin`** (`ui/hud.py`, ~466 lines): in-game HUD (health bar, boss indicator, death/respawn screen, echo cooldown indicator, FPS in `MODE_DEV`)
+When hosting, the `Server` runs in-process on a background thread; `python -m net.dedicated` runs the same `Server` with no window.
 
-### Server
+### `core/` (simulation)
 
-`reseau/serveur.py` (~1 157 lines) — runs in a separate thread (started from `BoucleJeuMixin` when hosting). Handles:
-- Player physics (gravity, AABB collisions, movement, dash, jump) at 60 Hz
-- Enemy AI — four types defined in `core/ennemi.py`: `patrouilleur` (1 PV), `garde` (2 PV), `gardien` (3 PV), `traqueur` (2 PV, listens for echoes via `RAYON_AUDITION_TRAQUEUR` 400px, A* pathfinding via `core/astar.py`)
-- Combat resolution (melee attacks, boss fights via `core/demon_slime_boss.py` + `core/boss_room.py`)
-- Game objects: `Porte` (doors), `OrbeCapacite` (ability orbs), `Cle` (keys), `AmePerdue`/`AmeLibre`/`AmeLoot` (souls), `Torche` (interactive lights — passive halo + echo trigger at 600px), `PancarteLore` (lore signs unlocked by spending souls), `Potion` (healing items)
-- Checkpoint detection and save triggers (host only)
-- Broadcasting authoritative state — see Network Protocol below
+| Module | Content |
+|--------|---------|
+| `world.py` | `World`: players, enemies, boss, objects, tick `step()`, snapshots (`snapshot_for`), state streams (`state_players/enemies/world`), events, saves |
+| `player.py` | `Player`: physics (`apply_physics(now)`), combat, abilities, `export_physics`/`import_physics` for reconciliation |
+| `prediction.py` | `Predictor`: client-side prediction + reconciliation |
+| `collisions.py` | `collision_rects_for`: collision rects shared by server and prediction |
+| `enemy.py` | `Enemy` FSM (PATROL / ALERT / CHASE), four types in `assets/enemies.json` |
+| `game_map.py` | `GameMap`: TMX loading, tiles, echo raycasting, `vis_map` |
+| `demon_slime_boss.py`, `boss_room.py` | Boss FSM + `BossAnimator` (Aseprite loader, also used by enemies/players), arena |
+| `astar.py`, `pathfinding.py` | A* on the tilemap + async thread-pool wrapper |
+| `lost_soul.py`, `free_soul.py`, `loot_soul.py` | `LostSoul` (dropped on death), `FreeSoul` (value 5), `LootSoul` (enemy drop) |
+| `ability_orb.py`, `key_item.py`, `door.py`, `lever.py`, `paid_wall.py`, `torch.py`, `lore_sign.py`, `potion.py` | World objects |
+| `level.py` | Shared level layout constants |
+| `save_writer.py` | Background latest-wins save thread |
 
-### Core Game Objects
+### `net/`
 
-| Class | File | Purpose |
-|-------|------|---------|
-| `Joueur` | `core/joueur.py` | Player: physics, combat, abilities, interpolation |
-| `Ennemi` | `core/ennemi.py` | Enemy AI with FSM (PATROUILLE / ALERTE / CHASSE) |
-| `Carte` | `core/carte.py` | Tilemap loading, collision, echolocation vis_map |
-| `DemonSlimeBoss` | `core/demon_slime_boss.py` | Boss FSM + Aseprite animator |
-| `BossRoom` | `core/boss_room.py` | Boss arena manager (collision, damage, target) |
-| `AStar` | `core/astar.py` | A* on tilemap (gravity-aware edge costs) |
-| `PathfindingService` | `core/pathfinding.py` | Async threadpool wrapper for A* |
-| `AmePerdue` | `core/ame_perdue.py` | Soul dropped on player death |
-| `AmeLibre` | `core/ame_libre.py` | Free collectible soul (value 5) |
-| `AmeLoot` | `core/ame_loot.py` | Enemy-dropped soul with burst physics |
-| `OrbeCapacite` | `core/orbe_capacite.py` | Ability unlock orb (double_saut / dash) |
-| `Cle` | `core/cle.py` | Key item — grants `joueur.have_key` |
-| `Porte` | `core/porte.py` | Interactive door — 64×96px, requires key |
-| `Torche` | `core/torche.py` | Light source — toggleable, triggers Traqueur |
-| `PancarteLore` | `core/pancarte_lore.py` | Lore signs — 30 âmes to unlock |
-| `Potion` | `core/potion.py` | Healing items (Small: 1 HP / Large: 5 HP) |
-| `BossAnimator` | `core/demon_slime_boss.py` | Aseprite JSON/PNG loader, shared by boss & enemies |
+| Module | Content |
+|--------|---------|
+| `codec.py` | Safe bounded binary serialisation (replaces pickle), `CodecError` |
+| `framing.py` | TCP frames `[u32 len][u8 flags][body]`, zlib above 512 B, bounded decompression |
+| `udp.py` | `UdpEndpoint` + `UdpConnection`: reliable / unreliable / control channels, keyed latest-state streams, fragmentation, RTT |
+| `protocol.py` | Constants, message types, input bits, snapshot pack/unpack |
+| `server.py` | `Session` (per-client TCP/UDP I/O) and `Server` (handshake, game loop, broadcast) |
+| `client.py` | `NetClient`: connect, UDP handshake, automatic TCP fallback, `poll()` |
+| `sync.py` | `ServerClock`, `PositionBuffer` (interpolation of remote entities) |
+| `relay_server.py`, `relay_client.py` | Room-code relay (TCP only) |
+| `dedicated.py` | Headless server CLI |
 
-### Network Module (`reseau/`)
+Key facts: fixed tick `TICK_MS = 16.667` (60 Hz); `PROTOCOL_VERSION = 2`; TCP `5555`, UDP `5556`; server binds `0.0.0.0` (VPN-friendly); snapshot ~60-300 B with interest management (enemies within 900 px); the snapshot includes an *owner block* with the receiver's physics state for reconciliation.
 
-The netcode is **hybrid TCP+UDP**: TCP for handshake & fallback, UDP for real-time gameplay. Full reference in `RESEAU.md`.
+### Other packages
 
-| File | Role |
-|------|------|
-| `protocole.py` | TCP helpers — `send_complet` / `recv_complet` (4-byte length prefix + zlib-compressed pickle, 10 MB cap), IP detection (`obtenir_ip_locale`, `obtenir_ip_vpn` for Tailscale/Hamachi) |
-| `serveur.py` | Authoritative server. Binds TCP `:5555` and UDP `:5556`. Threaded per TCP client; UDP routed by `(ip, port)`. Methods: `_udp_pomper`, `_udp_diffuser_snapshot`, `_udp_diffuser_etat_discret`, `_udp_tick` |
-| `udp_protocole.py` | Binary header (`!IIHBB` — seq/ack/ack_bits/channel/type), snapshot struct format, channel & type constants |
-| `udp_endpoint.py` | Non-blocking UDP socket wrapper with `pomper()` (drain loop) |
-| `udp_connexion.py` | Per-peer reliability layer — seq/ack with Glenn-Fiedler bitfield, retransmission, RTT EWMA, heartbeat. Also hosts `_UnpicklerSecurise` (restricted unpickler for security) |
-| `relay_server.py` | Standalone TCP relay for room-code WAN play (no UDP — relay sessions stay TCP-only). Default port 7777 |
-| `relay_client.py` | Client helpers for relay rooms |
+* `storage/`: `saves.py` (slots `slot_1..3.json`, atomic writes, bit-packed `vis_map`, legacy migration), `checkpoints.py`, `settings_io.py` (`user_settings.json`, migrates `parametres.json`). Save location: project folder, or `%LOCALAPPDATA%\Echo` / `~/.local/share/Echo` for a frozen executable.
+* `ui/`: menus, HUD, camera (`create_mask_halo`, numpy), button/slider widgets, splash, tutorial, quests, visual effects.
+* `tools/`: `level_editor.py` (TMX level editor, code in `tools/editor/`) and `benchmark.py`.
+* `packaging/`: PyInstaller build scripts. `docs/`: `NETWORK.md`, `BUILD.md`.
+* `utils/paths.py`: `asset_path()`, resolves files in `assets/` in development and in a PyInstaller bundle. Always use it instead of `__file__` / `sys._MEIPASS`.
+* `utils/`: `clipboard.py` (Win32 clipboard, no subprocess), `crash_report.py` (crash.log + message box, installed by `main.py`), `cache.py` (memoised text/flip, precomputed echo rays), `i18n.py`, `music.py`.
+* `client/end_crystal_sequence.py`: end-of-game cutscene. `client/selftest.py`: `Echo --selftest <file>` check used to validate a built executable.
 
-### Network Protocol
+### Echolocation
 
-Two transports run side-by-side, gated by `USE_UDP` in `parametres.py` (set to `False` to force the legacy pure-TCP path).
+Radial echo (`E`): 360 rays, 150 px, 2.5 s cooldown. Directional echo (`Y`, unlockable): ±25°, 300 px, 4 s cooldown. Revealed tiles go to a boolean `vis_map` (saved). The camera masks everything outside the revealed/near area; the pre-baked map surface is rebuilt only when `vis_map` changes. Pathfinding enemies of type "tracker" react to echoes within a hearing radius.
 
-**TCP `:5555`** — handshake, session params (returns `{id, udp_token, udp_port}` to the client), keepalive every 5 s, and full fallback if UDP fails.
+### Map
 
-**UDP `:5556`** — all in-game traffic when active:
-- **Channel 0 UNRELIABLE** — snapshots (server→client, 60 Hz) + continuous inputs (client→server, 60 Hz)
-- **Channel 1 RELIABLE** — `etat_discret` (server→client, 10 Hz, pickup/boss/door state) + one-shot inputs (`echo`, `echo_dir`, `torche`, `interagir`)
-- **Channel 2 CONTROL** — handshake / heartbeat / disconnect
+`assets/MapS2.tmx` (Tiled). Layers `Wall.*` and `Sol.*` produce solid tiles (type 1), tile type 3 is a checkpoint. Tile size 32 px. Start checkpoint `"32_12"`.
 
-**Snapshot binary format** (`!IIHBB` header + body):
-- Per player: id(int8) | x,y(float32×2) | vx,vy(float32×2) | flags(uint8)
-- Flags player: `JFLAG_EN_DASH`(1), `EN_ATTAQUE`(2), `EST_MORT`(4), `DIRECTION_DROITE`(8)
-- Per enemy: id(uint16) | x,y(float32×2) | flags(uint8)
-- Flags enemy: `EFLAG_EST_MORT`(1), `CLIGNOTE`(2)
-
-**Wire formats**: TCP uses pickle behind a 4-byte length prefix + zlib compression. UDP snapshots use a fixed `struct` layout (positions + flags); reliable-channel payloads still use pickle but go through the restricted unpickler. See `RESEAU.md` §3–4 for the full type table.
-
-**Client interpolation**: remote players & enemies are rendered `INTERP_DELAY_MS` (100 ms) in the past via lerp between buffered snapshots. The local player skips interp. Logic lives in `pousser_snapshot_interp` / `mettre_a_jour_interp` (`core/joueur.py`, `core/ennemi.py`).
-
-### WAN Connectivity
-
-Two connection modes available in the "Rejoindre" menu:
-
-1. **Direct IP**: Enter the host's IP. Requires `5555/TCP` and `5556/UDP` open on the host (or both players on LAN / Tailscale-style VPN). If UDP is blocked, the client logs `"UDP handshake échoué"` and falls back to pure TCP automatically.
-2. **Room Code (TCP Relay)**: 6-char code via a public relay (`python3 -m reseau.relay_server`). Configure `RELAY_HOST`/`RELAY_PORT` in `parametres.py`. **Relay sessions are TCP-only** — no UDP path through the relay.
-
-### Echolocation System (`core/carte.py`)
-
-The core visual mechanic. Two modes:
-- **Radial echo** (`E` key): 360 rays, 150px range, 2.5s cooldown
-- **Directional echo** (`Y` key, unlockable): cone ±25°, 300px range, 4s cooldown
-
-Rays are cast pixel-by-pixel from the player position. Revealed tiles are stored in a 2D boolean `vis_map` (persisted in save files). The camera applies a halo mask (`ui/camera.py` → `creer_masque_halo`, numpy-accelerated) so only echoed/nearby areas are visible. Pre-baked map surface (`_carte_prebake`) is rebuilt only when `vis_map` changes. Pre-computed ray direction vectors are cached in `utils/cache.py` (`DIRECTIONS_ECHO_RADIAL`, `DIRECTIONS_ECHO_DROITE`, `DIRECTIONS_GAUCHE`).
-
-**Torche interaction**: `Torche` at (551, 1025) is toggled with `E` at 60px range. It triggers Traqueur hearing at 600px and provides a 220px halo.
-
-### Enemy AI (`core/ennemi.py`)
-
-Four enemy types, each using `BossAnimator` for sprite sheets:
-
-| Type | PV | Speed | Size | Special |
-|------|----|-------|------|---------|
-| Patrouilleur | 1 | 2.0 | 20×24px | Fast, agile |
-| Garde | 2 | 1.5 | 24×28px | Standard |
-| Gardien | 3 | 1.0 | 32×40px | Tanky |
-| Traqueur | 2 | 1.5 | 24×28px | Hears echoes, A* pathfinding |
-
-FSM states: `PATROUILLE` → `ALERTE` (echo heard) → `CHASSE` (10s active chase) → back to `PATROUILLE`.
-Attack: range 48px horiz / 64px vert, cooldown 1500ms, damage 1.
-Respawn after 180s (if enabled).
-
-### Boss Fight (`core/demon_slime_boss.py` + `core/boss_room.py`)
-
-- **DemonSlimeBoss**: FSM states IDLE / WALK / CLEAVE / TAKE_HIT / DEATH. 25 HP default. Targets nearest alive player.
-- **BossRoom**: Confines boss to arena rect, handles collision vs tilemap, damage (1 per swing, no double-hit per swing).
-- **BossAnimator**: Aseprite JSON/PNG loader — supports Hash and Array frame formats, extracts tags and durations. Also used for player skins and all enemy types.
-
-### Map Format
-
-TMX file (`assets/MapS2.tmx`) loaded via `core/carte.py` (XML parsing). Layers named `Wall.*` and `Sol.*` produce solid tiles (type 1); everything else is empty (type 0). Tile type 3 = checkpoint. Fallback: `map.json` flat grid. Map is ~94×35 tiles.
-
-### Save System
-
-3 save slots → `slot_1.json`, `slot_2.json`, `slot_3.json`. JSON format, managed by `sauvegarde/gestion_sauvegarde.py`. Platform-specific path (AppData / ~/.local/share / ~/Library). Saved at checkpoints (tile type 3).
-
-Save fields: `id_dernier_checkpoint`, `vis_map`, `items`, `argent` (soul currency), `ameliorations` (`double_saut`, `dash`, `echo_dir`).
-
-Start checkpoint: `"32_12"` → pixel (1024, 384).
-
-### Soul Economy
-
-| Source | Value |
-|--------|-------|
-| AmeLibre (free soul) | 5 âmes |
-| Enemy kill | ~8–15 âmes (type-dependent) |
-| Ability orb: double jump | costs 30 âmes |
-| Ability orb: dash | costs 50 âmes |
-| PancarteLore unlock | costs 30 âmes |
-
-On death: currency is stored in `AmePerdue` at death location. Retrievable by touching it.
-
-### UI Modules
-
-| File | Purpose |
-|------|---------|
-| `ui/menus.py` | All menus: main, join, settings, save slots, pause, confirmation |
-| `ui/hud.py` | Health bar, boss bar, death screen, echo cooldown, FPS (dev) |
-| `ui/camera.py` | Camera centering + `creer_masque_halo()` (numpy gradient) |
-| `ui/bouton.py` | Styled buttons (normal, danger, confirm, disabled, ghost) with hover glow |
-| `ui/slider.py` | Brightness / resolution slider |
-| `ui/splash_screen.py` | Startup logo fade |
-| `ui/tutoriel.py` | On-screen tutorial, skippable, persisted via `tutoriel_vu` flag |
-| `ui/effets_visuels.py` | Echo distortion effect (radial displacement) |
-
-### Performance Optimizations
-
-- `utils/cache.py`: memoized `flip_h()` (512 entries), `render_text()` (256 entries), font objects; pre-computed echo ray vectors
-- Collision rects pre-baked from tilemap, updated only on map load
-- `_carte_prebake` surface only rebuilt when `vis_map` changes
-- A* runs on a threadpool (`PathfindingService`) — non-blocking for main loop
-- UDP snapshots use binary `struct`, not pickle
-- Remote entity positions lerped between buffered snapshots
-
-### Configuration & i18n
-
-- `parametres.py` — all gameplay constants (gravity, speed, jump force, tile size 32px, screen 1920×1080, zoom 2.5×, colors). Also network: `PORT_SERVEUR=5555`, `PORT_UDP=5556`, `USE_UDP`, `TICK_RATE_SNAPSHOT_UDP=60`, `TICK_RATE_ETAT_DISCRET_UDP=10`, `INTERP_DELAY_MS=100`, `UDP_HANDSHAKE_TIMEOUT_MS=3000`
-- `parametres.json` — user settings (language FR/EN, fullscreen, resolution, brightness `luminosite` 0–1, keybindings, SFX/music volume, `tutoriel_vu`, player skin 0–2). Loaded/saved by `sauvegarde/gestion_parametres.py`
-- `utils/langue.py` — bilingual text dictionaries (`FR` / `EN`, ~80+ keys), used throughout menus and HUD
-- `utils/music.py` — playlist management, fade in/out, volume control
-
-### Debug Flags (in `parametres.py`)
-
-- `MODE_DEV = True` — enables FPS counter, debug overlay, and **auto-unlocks all ability orbs** (disable before exposing the server publicly)
-- `REVELATION = False` — if True, reveals the entire map (skips echolocation)
-- `ASSOMBRISSEMENT = True` — if False, disables darkness/halo (full visibility)
-- `USE_UDP = True` — set to False to force the legacy pure-TCP transport (useful when debugging UDP-related issues)
-- `HALOS_MENU` / `FOND_MENU` — toggle animated menu background effects
-
-## Default Controls
-
-| Action | Key |
-|--------|-----|
-| Move | Q / D |
-| Jump / Double jump | Space |
-| Dash | C |
-| Echo (radial) | E |
-| Echo (directional, unlockable) | Y |
-| Attack | K |
-| Interact (torche, lore) | E (in range) |
-| Pause | Escape |
-
-## Key Constants (parametres.py)
+## Gameplay constants (`settings.py`)
 
 | Constant | Value |
 |----------|-------|
-| Tile size | 32 px |
-| Screen | 1920×1080, zoom 2.5× (virtual 768×432) |
-| Player speed | 5 px/tick |
-| Jump force | 13, gravity 0.6 |
-| Max PV | 5 |
-| Invulnerability | 1000ms post-damage |
-| Attack duration / cooldown | 200ms / 800ms, range 40px, damage 1 |
-| Dash distance / duration / cooldown | 128px / 150ms / 600ms (max 1 air use) |
-| Double jump force | 10 |
-| Echo radial | 360 rays, 150px, 2500ms cooldown |
-| Echo directional | ±25°, 300px, 4000ms cooldown |
-| Traqueur hearing | 400px radius |
-| Chase duration | 10s |
-| Snapshot rate | 60 Hz |
-| Discrete state rate | 10 Hz |
-| Interp delay | 100ms |
+| `TILE_SIZE` | 32 px |
+| Screen / zoom | 1920x1080, zoom 2.5x |
+| `PLAYER_SPEED`, `JUMP_FORCE`, `GRAVITY` | 5, 15, 0.6 |
+| Attack | 200 ms duration, 800 ms cooldown, range 40 |
+| Dash | 128 px, 150 ms |
+| Echo | 150 px radial, 300 px directional |
+| Orb costs | double jump 30 souls, dash 50 souls |
+| Lore sign | 30 souls |
 
-## File Structure
+Debug flags: `DEV_MODE` (FPS overlay, all abilities unlocked; **disable before exposing a server**), `REVEAL_ALL`, `DARKNESS_ENABLED`, `USE_UDP` (False forces TCP). Network: `TCP_PORT`, `UDP_PORT`, `RELAY_HOST`/`RELAY_PORT` (empty host = relay disabled), `INTERP_DELAY_MS`.
 
-```
-projetjeu/
-├── main.py                          # Entry point (18 lines)
-├── client.py                        # Client class (mixins, 299 lines)
-├── boucle_jeu.py                    # Game loop mixin (~1278 lines)
-├── parametres.py                    # Constants & config (~232 lines)
-│
-├── core/
-│   ├── joueur.py                    # Player class (~665 lines)
-│   ├── ennemi.py                    # Enemy AI (~827 lines)
-│   ├── carte.py                     # Tilemap & visibility (~561 lines)
-│   ├── demon_slime_boss.py          # Boss animator & FSM (~507 lines)
-│   ├── boss_room.py                 # Boss arena manager (~145 lines)
-│   ├── astar.py                     # A* pathfinding (~135 lines)
-│   ├── pathfinding.py               # Async A* wrapper (~107 lines)
-│   ├── ame_perdue.py                # Death soul (~95 lines)
-│   ├── ame_libre.py                 # Free collectible soul (~132 lines)
-│   ├── ame_loot.py                  # Enemy-dropped soul (~301 lines)
-│   ├── orbe_capacite.py             # Ability unlock orbs (~183 lines)
-│   ├── cle.py                       # Key object (~87 lines)
-│   ├── porte.py                     # Interactive door (~201 lines)
-│   ├── torche.py                    # Light source (~94 lines)
-│   ├── pancarte_lore.py             # Lore signs (~545 lines)
-│   ├── potion.py                    # Healing items (~180 lines)
-│   └── map.py                       # Legacy map loader
-│
-├── reseau/
-│   ├── protocole.py                 # TCP helpers (~93 lines)
-│   ├── serveur.py                   # Authoritative server (~1157 lines)
-│   ├── udp_protocole.py             # UDP binary format (~150 lines)
-│   ├── udp_connexion.py             # Per-peer reliability (~300+ lines)
-│   ├── udp_endpoint.py              # UDP socket wrapper (~80 lines)
-│   ├── relay_server.py              # WAN room relay (~384 lines)
-│   └── relay_client.py              # Relay helpers (~168 lines)
-│
-├── ui/
-│   ├── menus.py                     # MenusMixin (~1263 lines)
-│   ├── hud.py                       # HudMixin (~466 lines)
-│   ├── camera.py                    # Camera & halo (~70 lines)
-│   ├── bouton.py                    # Button widget (~129 lines)
-│   ├── slider.py                    # Slider widget (~120 lines)
-│   ├── splash_screen.py             # Startup splash (~61 lines)
-│   ├── tutoriel.py                  # Tutorial system (~800 lines)
-│   └── effets_visuels.py            # Visual effects (~200 lines)
-│
-├── sauvegarde/
-│   ├── gestion_sauvegarde.py        # Save/load slots (~105 lines)
-│   ├── gestion_parametres.py        # Config JSON (~104 lines)
-│   └── points_sauvegarde.py         # Checkpoint system (~44 lines)
-│
-├── utils/
-│   ├── cache.py                     # Caches & ray constants (~250 lines)
-│   ├── langue.py                    # i18n FR/EN (~177 lines)
-│   └── music.py                     # Audio management (~300 lines)
-│
-├── assets/                          # Sprites, fonts, audio
-│   └── MapS2.tmx                    # Tiled tilemap (primary)
-├── parametres.json                  # User settings (runtime)
-├── slot_1.json, slot_2.json, slot_3.json  # Save files
-├── map.json                         # Legacy tilemap fallback
-├── demon_slime.json                 # Boss Aseprite animation data
-└── README.md, RESEAU.md, CLAUDE.md  # Documentation
-```
+## Default controls
 
-## Dependencies
+Move Q/D, jump Space, dash C, echo E, directional echo Y, attack K, interact E (in range), pause Escape. Rebindable in the settings menu.
 
-- `pygame>=2.1.0` — game framework
-- `numpy>=2.4.4` — used for halo mask generation (`ui/camera.py`)
+## Tests
 
-All networking uses Python stdlib (`socket`, `pickle`, `struct`, `zlib`). No external networking libraries.
+`tests/`: `test_codec` (round trips, fuzzing), `test_framing`, `test_udp` (loss/duplication/reordering), `test_prediction` (client vs server determinism), `test_net_integration` (real server + clients over loopback), `test_relay`, `test_client_smoke` (whole headless `Client`), `test_storage` (saves, migration). Run them after any change to physics, protocol or storage: prediction tests fail if client and server physics diverge.

@@ -1,48 +1,48 @@
 # ui/camera.py
-# Gestion de la caméra (offset, zoom) et du masque de halo précalculé.
-# Extraits de client.py pour séparation des responsabilités.
+# Camera management (offset, zoom) and the precomputed halo mask.
+# Extracted from client.py to separate responsibilities.
 
 import pygame
-from parametres import *
+from settings import *
 
 
-def calculer_camera(rect_cible, largeur_ecran, hauteur_ecran, zoom,
-                    largeur_monde, hauteur_monde):
-    """Calcule l'offset de la caméra centrée sur rect_cible."""
-    largeur_vue = largeur_ecran / zoom
-    hauteur_vue = hauteur_ecran / zoom
-    offset_x = rect_cible.centerx - (largeur_vue / 2)
-    offset_y = rect_cible.centery - (hauteur_vue / 2)
+def compute_camera(rect_target, width_screen, height_screen, zoom,
+                    width_world, height_world):
+    """Compute the camera offset centered on target_rect."""
+    view_width = width_screen / zoom
+    view_height = height_screen / zoom
+    offset_x = rect_target.centerx - (view_width / 2)
+    offset_y = rect_target.centery - (view_height / 2)
     offset_x = max(0, offset_x)
     offset_y = max(0, offset_y)
-    offset_x = min(offset_x, largeur_monde - largeur_vue)
-    offset_y = min(offset_y, hauteur_monde - hauteur_vue)
+    offset_x = min(offset_x, width_world - view_width)
+    offset_y = min(offset_y, height_world - view_height)
     return int(offset_x), int(offset_y)
 
 
-def creer_masque_halo(rayon, etendue, alpha_max=220):
+def create_mask_halo(radius, extent, alpha_max=220):
     """
-    Précalcule une surface circulaire avec dégradé linéaire d'obscurité.
-    À blitter avec BLEND_RGBA_MIN sur le calque d'obscurité chaque frame.
+    Precompute a circular surface with a linear darkness gradient.
+    To be blitted with BLEND_RGBA_MIN on the darkness layer every frame.
 
-    rayon     : rayon total du halo (pixels)
-    etendue   : largeur de la zone de dégradé depuis le bord vers le centre
-                (etendue == rayon → dégradé sur tout le rayon, centre transparent)
-    alpha_max : niveau maximal d'obscurité (0–255)
+    radius    : total radius of the halo (pixels)
+    extent    : width of the gradient zone from the edge towards the center
+                (extent == radius -> gradient over the whole radius, transparent center)
+    alpha_max : maximum darkness level (0-255)
     """
-    diameter = rayon * 2 + 2
-    centre   = rayon + 1
+    diameter = radius * 2 + 2
+    center   = radius + 1
     surf     = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
-    depart   = max(0, rayon - int(etendue))   # début du dégradé depuis le centre
+    start   = max(0, radius - int(extent))   # start of the gradient from the center
 
-    if HALO_NB_NIVEAUX == 0:
-        # Dégradé parfait pixel par pixel via numpy
+    if HALO_LEVEL_COUNT == 0:
+        # Perfect pixel-by-pixel gradient with numpy
         try:
             import numpy as np
             x_idx, y_idx = np.ogrid[:diameter, :diameter]
-            dist  = np.sqrt((x_idx - centre) ** 2 + (y_idx - centre) ** 2)
+            dist  = np.sqrt((x_idx - center) ** 2 + (y_idx - center) ** 2)
             alpha = np.clip(
-                (dist - depart) / max(1, etendue) * alpha_max,
+                (dist - start) / max(1, extent) * alpha_max,
                 0, alpha_max
             ).astype(np.uint8)
 
@@ -56,14 +56,14 @@ def creer_masque_halo(rayon, etendue, alpha_max=220):
 
             return surf
         except (ImportError, pygame.error):
-            print("[HALO] numpy indisponible — fallback couches discrètes")
+            print("[HALO] numpy unavailable - falling back to discrete layers")
 
-    # Fallback ou mode discret (HALO_NB_NIVEAUX > 0)
-    nb = HALO_NB_NIVEAUX if HALO_NB_NIVEAUX > 0 else max(32, rayon)
-    surf.fill((0, 0, 10, alpha_max))             # tout sombre par défaut
-    for i in range(nb, -1, -1):                  # du plus grand cercle au plus petit
-        r = depart + int(etendue * i / nb)
-        a = int(alpha_max * i / nb)
-        pygame.draw.circle(surf, (0, 0, 10, a), (centre, centre), r)
+    # Fallback or discrete mode (HALO_LEVEL_COUNT > 0)
+    num = HALO_LEVEL_COUNT if HALO_LEVEL_COUNT > 0 else max(32, radius)
+    surf.fill((0, 0, 10, alpha_max))             # everything dark by default
+    for i in range(num, -1, -1):                  # from the largest circle to the smallest
+        r = start + int(extent * i / num)
+        a = int(alpha_max * i / num)
+        pygame.draw.circle(surf, (0, 0, 10, a), (center, center), r)
 
     return surf

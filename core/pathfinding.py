@@ -1,107 +1,107 @@
 # core/pathfinding.py
-# Service de pathfinding A* exécuté dans un thread dédié.
+# A* pathfinding service running in a dedicated thread.
 #
-# Objectif : isoler la recherche A* du tick serveur (60 Hz) pour éviter
-# les pics de latence lorsque plusieurs ennemis demandent un chemin la
-# même frame.
+# Goal: isolate the A* search from the server tick (60 Hz) to avoid
+# latency spikes when several enemies request a path in the same
+# frame.
 #
-# API utilisée par Ennemi :
-#   svc.demander(id_ennemi, depart, arrivee, temps_ms)
-#       Dépose une requête. Si une requête en attente existe déjà pour cet
-#       ennemi, elle est remplacée (coalescing : seul le dernier état
-#       compte). Très peu coûteux côté appelant.
-#   svc.recuperer(id_ennemi) -> (temps_req_ms, [chemin]) | None
-#       Lit le dernier résultat disponible. Le timestamp permet à l'ennemi
-#       de détecter qu'un nouveau chemin est arrivé.
-#   svc.oublier(id_ennemi)
-#       Nettoie les buffers (à appeler quand l'ennemi quitte la chasse).
-#   svc.arreter()
-#       Stoppe proprement le thread (le worker est aussi daemon, donc il
-#       meurt avec le process si on n'appelle pas arreter()).
+# API used by Enemy:
+# svc.request(enemy_id, start, goal, time_ms)
+# Submit a request. If a pending request already exists for this
+# enemy it is replaced (coalescing: only the latest state
+# matters). Very cheap for the caller.
+# svc.fetch(enemy_id) -> (request_time_ms, [path]) | None
+# Read the latest available result. The timestamp lets the enemy
+# detect that a new path arrived.
+# svc.forget(enemy_id)
+# Clear the buffers (call when the enemy stops chasing).
+# svc.stop()
+# Stop the thread cleanly (the worker is also a daemon, so it
+# dies with the process if stop() is not called).
 #
-# Threading model : un unique worker traite les requêtes en série. Toutes
-# les structures partagées sont protégées par un Condition. La carte est
-# accédée en lecture seule (map_data immuable après chargement).
+# Threading model: a single worker processes the requests serially. All
+# shared structures are protected by a Condition. The map is only
+# read (map_data is immutable after loading).
 
 import threading
 
-from core.astar import trouver_chemin
+from core.astar import find_path
 
 
 class PathfindingService:
-    def __init__(self, carte, max_iter=1500, hauteur_saut=2):
-        self.carte = carte
+    def __init__(self, game_map, max_iter=1500, height_jump=2):
+        self.game_map = game_map
         self.max_iter = max_iter
-        self.hauteur_saut = hauteur_saut
+        self.height_jump = height_jump
 
-        # État partagé
-        self._pending = {}   # id_ennemi -> (depart, arrivee, temps_req_ms)
-        self._results = {}   # id_ennemi -> (temps_req_ms, [chemin])
+        # Shared state
+        self._pending = {}   # enemy_id -> (start, goal, request_time_ms)
+        self._results = {}   # enemy_id -> (request_time_ms, [path])
         self._stop = False
 
         self._cond = threading.Condition()
         self._thread = threading.Thread(
-            target=self._boucle_worker,
+            target=self._loop_worker,
             name="Pathfinder",
             daemon=True,
         )
         self._thread.start()
 
     # ------------------------------------------------------------------
-    #  API publique (appelée depuis le thread serveur)
+    # Public API (called from the server thread)
     # ------------------------------------------------------------------
 
-    def demander(self, id_ennemi, depart, arrivee, temps_ms):
+    def request(self, id_enemy, start, goal, time_ms):
         with self._cond:
-            self._pending[id_ennemi] = (depart, arrivee, temps_ms)
+            self._pending[id_enemy] = (start, goal, time_ms)
             self._cond.notify()
 
-    def recuperer(self, id_ennemi):
-        # Lecture sans lock acceptable (dict read en CPython = atomique pour
-        # un single get), mais on prend le lock par prudence — le coût est
-        # négligeable comparé au reste de la frame.
+    def fetch(self, id_enemy):
+        # A lock-free read would be acceptable (a single dict get is atomic in CPython),
+        # but the lock is taken to be safe - its cost is
+        # negligible compared with the rest of the frame.
         with self._cond:
-            return self._results.get(id_ennemi)
+            return self._results.get(id_enemy)
 
-    def oublier(self, id_ennemi):
+    def forget(self, id_enemy):
         with self._cond:
-            self._pending.pop(id_ennemi, None)
-            self._results.pop(id_ennemi, None)
+            self._pending.pop(id_enemy, None)
+            self._results.pop(id_enemy, None)
 
-    def arreter(self):
+    def stop(self):
         with self._cond:
             self._stop = True
             self._cond.notify_all()
 
     # ------------------------------------------------------------------
-    #  Worker thread
+    # Worker thread
     # ------------------------------------------------------------------
 
-    def _boucle_worker(self):
+    def _loop_worker(self):
         while True:
             with self._cond:
                 while not self._pending and not self._stop:
                     self._cond.wait(timeout=1.0)
                 if self._stop:
                     return
-                # Pop d'une requête (dict ordonné → FIFO d'insertion).
-                id_ennemi = next(iter(self._pending))
-                depart, arrivee, temps_req_ms = self._pending.pop(id_ennemi)
+                # Pop one request (ordered dict -> insertion-order FIFO).
+                id_enemy = next(iter(self._pending))
+                start, goal, time_req_ms = self._pending.pop(id_enemy)
 
-            # Calcul A* hors lock — la carte est en lecture seule.
+            # A* computation outside the lock - the map is read-only.
             try:
-                chemin = trouver_chemin(
-                    self.carte, depart, arrivee,
+                path = find_path(
+                    self.game_map, start, goal,
                     max_iter=self.max_iter,
-                    hauteur_saut=self.hauteur_saut,
+                    height_jump=self.height_jump,
                 )
             except Exception as exc:
-                print(f"[PATHFINDING] A* a échoué pour ennemi {id_ennemi}: {exc}")
-                chemin = []
+                print(f"[PATHFINDING] A* failed for enemy {id_enemy}: {exc}")
+                path = []
 
             with self._cond:
-                # On ne remplace que si plus récent qu'un éventuel résultat
-                # déjà déposé (cas où plusieurs requêtes se chevauchent).
-                ancien = self._results.get(id_ennemi)
-                if ancien is None or ancien[0] <= temps_req_ms:
-                    self._results[id_ennemi] = (temps_req_ms, chemin)
+                # Only replace the stored result if the new one is newer than an
+                # already deposited result (when several requests overlap).
+                old = self._results.get(id_enemy)
+                if old is None or old[0] <= time_req_ms:
+                    self._results[id_enemy] = (time_req_ms, path)
